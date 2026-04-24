@@ -1,0 +1,142 @@
+.app-shell {
+  min-height: 100svh;
+  background:
+    radial-gradient(circle at 20% 15%, hsl(255 18% 13%), transparent 34rem),
+    linear-gradient(135deg, hsl(240 12% 5%) 0%, hsl(230 14% 7%) 100%);
+  color: hsl(0 0% 96%);
+}
+
+.sidebar {
+  position: fixed;
+  inset-block: 0;
+  left: 0;
+  width: 88px;
+  display: grid;
+  place-items: center;
+}
+
+.sidebar-nav {
+  display: grid;
+  gap: 12px;
+}
+
+.nav-button {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  color: hsl(240 6% 58%);
+  background: transparent;
+  cursor: pointer;
+  transition:
+    color 180ms ease,
+    background-color 180ms ease,
+    transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.nav-button svg {
+  width: 22px;
+  height: 22px;
+  stroke-width: 2;
+  transition:
+    transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    stroke-width 180ms ease;
+}
+
+.nav-button:hover,
+.nav-button:focus-visible {
+  color: hsl(0 0% 88%);
+  background: hsl(0 0% 100% / 7%);
+}
+
+.nav-button:focus-visible {
+  outline: 2px solid hsl(322 100% 72% / 72%);
+  outline-offset: 3px;
+}
+
+.nav-button[data-active='true'] {
+  color: hsl(0 0% 98%);
+  background: hsl(0 0% 100% / 10%);
+  transform: scale(1.08);
+}
+
+.nav-button[data-active='true'] svg {
+  transform: scale(1.16);
+  stroke-width: 2.35;
+}
+
+.nav-tooltip {
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 50%;
+  z-index: 10;
+  width: max-content;
+  max-width: 180px;
+  padding: 6px 9px;
+  border: 1px solid hsl(0 0% 100% / 10%);
+  border-radius: 7px;
+  color: hsl(0 0% 96%);
+  background: hsl(240 12% 8% / 92%);
+  box-shadow: 0 12px 28px hsl(0 0% 0% / 28%);
+  font-size: 12px;
+  line-height: 1;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate3d(-4px, -50%, 0) scale(0.96);
+  transform-origin: left center;
+  transition:
+    opacity 150ms ease,
+    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.nav-button:hover .nav-tooltip,
+.nav-button:focus-visible .nav-tooltip {
+  opacity: 1;
+  transform: translate3d(0, -50%, 0) scale(1);
+}
+
+.page-surface {
+  min-height: 100svh;
+  margin-left: 88px;
+}
+
+@media (max-width: 700px) {
+  .sidebar {
+    inset-block: auto 0;
+    right: 0;
+    width: auto;
+    height: 72px;
+  }
+
+  .sidebar-nav {
+    display: flex;
+    gap: 8px;
+  }
+
+  .nav-button {
+    width: 44px;
+    height: 44px;
+  }
+
+  .nav-tooltip {
+    left: 50%;
+    top: auto;
+    bottom: calc(100% + 10px);
+    transform: translate3d(-50%, 4px, 0) scale(0.96);
+    transform-origin: bottom center;
+  }
+
+  .nav-button:hover .nav-tooltip,
+  .nav-button:focus-visible .nav-tooltip {
+    transform: translate3d(-50%, 0, 0) scale(1);
+  }
+
+  .page-surface {
+    min-height: calc(100svh - 72px);
+    margin-left: 0;
+    margin-bottom: 72px;
+  }
+}

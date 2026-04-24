@@ -1,0 +1,8 @@
+[workspace]
+members = ["apps/server"]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "UNLICENSED"
+repository = "https://example.invalid/wadi"
