@@ -7,6 +7,8 @@ import type { MediaPreview } from '@/api/types'
 import { MediaCard } from '@/components/media-card'
 import { EmptyState, ErrorState, LoadingState } from '@/components/status'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
+import { inputClass, mediaGrid, pageStack } from '@/lib/styles'
+import { cn } from '@/lib/utils'
 
 export function SearchPage({ onOpenMedia }: { onOpenMedia: (media: MediaPreview) => void }) {
   const [query, setQuery] = useState('')
@@ -26,10 +28,11 @@ export function SearchPage({ onOpenMedia }: { onOpenMedia: (media: MediaPreview)
   const isSearching = results.some((result) => result.isLoading)
 
   return (
-    <div className="page-stack">
-      <label className="search-box">
-        <Search aria-hidden="true" />
+    <div className={pageStack}>
+      <label className="flex min-h-[52px] w-[min(760px,100%)] items-center gap-2.5 rounded-full border border-[hsl(0_0%_100%/10%)] bg-[hsl(0_0%_100%/6%)] px-[18px] max-[800px]:flex-col max-[800px]:items-stretch">
+        <Search className="size-[18px] text-[hsl(240_6%_62%)]" aria-hidden="true" />
         <input
+          className={cn(inputClass, 'min-h-[50px] border-0 bg-transparent px-0 focus:outline-0')}
           type="search"
           placeholder="Search"
           value={query}
@@ -46,7 +49,7 @@ export function SearchPage({ onOpenMedia }: { onOpenMedia: (media: MediaPreview)
       {debouncedQuery.length > 1 && !isSearching && !media.length ? <EmptyState title="No results found" /> : null}
 
       {media.length ? (
-        <div className="media-grid search-results">
+        <div className={cn(mediaGrid, 'mt-2')}>
           {media.map((item) => (
             <MediaCard key={`${item.type}-${item.id}`} media={item} onOpen={() => onOpenMedia(item)} />
           ))}

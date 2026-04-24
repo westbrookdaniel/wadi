@@ -4,6 +4,8 @@ import { type FormEvent, useState } from 'react'
 
 import { login, queryKeys, register } from '@/api/queries'
 import { ApiError } from '@/api/client'
+import { appBackground, inputClass, labelClass, primaryButton, textButton } from '@/lib/styles'
+import { cn } from '@/lib/utils'
 import { useAppStore } from '@/store/app-store'
 
 type AuthMode = 'login' | 'register'
@@ -43,17 +45,23 @@ export function AuthPage({ mode, onModeChange }: { mode: AuthMode; onModeChange:
       : 'Create a Wadi account to start building your media library.'
 
   return (
-    <main className="auth-screen">
-      <div className="auth-brand">Wadi</div>
-      <form className="auth-panel" onSubmit={onSubmit}>
-        <div className="auth-copy">
-          <h1>{title}</h1>
-          <p>{body}</p>
+    <main
+      className={cn(
+        'grid min-h-svh content-center justify-items-center gap-[clamp(34px,7vh,72px)] px-6 py-[clamp(36px,8vw,96px)]',
+        appBackground,
+      )}
+    >
+      <div className="text-sm font-bold uppercase leading-none text-[hsl(240_6%_58%)]">Wadi</div>
+      <form className="grid w-[min(640px,100%)] gap-7 border-0 bg-transparent p-0 shadow-none" onSubmit={onSubmit}>
+        <div className="grid gap-4 text-center">
+          <h1 className="m-0 text-[clamp(2rem,4vw,3.25rem)] leading-[0.95] tracking-normal">{title}</h1>
+          <p className="w-[min(560px,100%)] justify-self-center text-[clamp(1rem,1.5vw,1.18rem)] text-[hsl(240_6%_66%)]">{body}</p>
         </div>
 
-        <label>
+        <label className={cn(labelClass, 'w-[min(420px,100%)] justify-self-center')}>
           Email
           <input
+            className={inputClass}
             type="email"
             autoComplete="email"
             value={email}
@@ -62,9 +70,10 @@ export function AuthPage({ mode, onModeChange }: { mode: AuthMode; onModeChange:
           />
         </label>
 
-        <label>
+        <label className={cn(labelClass, 'w-[min(420px,100%)] justify-self-center')}>
           Password
           <input
+            className={inputClass}
             type="password"
             autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
             value={password}
@@ -75,9 +84,10 @@ export function AuthPage({ mode, onModeChange }: { mode: AuthMode; onModeChange:
         </label>
 
         {mode === 'register' ? (
-          <label>
+          <label className={cn(labelClass, 'w-[min(420px,100%)] justify-self-center')}>
             Repeat password
             <input
+              className={inputClass}
               type="password"
               autoComplete="new-password"
               value={confirmPassword}
@@ -93,16 +103,16 @@ export function AuthPage({ mode, onModeChange }: { mode: AuthMode; onModeChange:
           </label>
         ) : null}
 
-        {validationError ? <p className="form-error">{validationError}</p> : null}
-        {mutation.error ? <p className="form-error">{authError(mutation.error)}</p> : null}
+        {validationError ? <p className="w-[min(420px,100%)] justify-self-center text-[hsl(0_88%_76%)]">{validationError}</p> : null}
+        {mutation.error ? <p className="w-[min(420px,100%)] justify-self-center text-[hsl(0_88%_76%)]">{authError(mutation.error)}</p> : null}
 
-        <button className="primary-button" type="submit" disabled={mutation.isPending}>
+        <button className={cn(primaryButton, 'w-[min(420px,100%)] justify-self-center')} type="submit" disabled={mutation.isPending}>
           {mutation.isPending ? 'Working' : mode === 'login' ? 'Login' : 'Register'}
           <ArrowRight aria-hidden="true" />
         </button>
 
         <button
-          className="text-button"
+          className={cn(textButton, 'w-[min(420px,100%)] justify-self-center')}
           type="button"
           onClick={() => onModeChange(mode === 'login' ? 'register' : 'login')}
         >

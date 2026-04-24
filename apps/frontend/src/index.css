@@ -128,6 +128,20 @@ select {
   }
 }
 
+@keyframes skeleton-sheen {
+  from {
+    background-position:
+      120% 0,
+      0 0;
+  }
+
+  to {
+    background-position:
+      -120% 0,
+      0 0;
+  }
+}
+
 .dark {
   --background: oklch(0.147 0.004 49.3);
   --foreground: oklch(0.986 0.002 67.8);

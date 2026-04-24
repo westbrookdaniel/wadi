@@ -4,6 +4,8 @@ import { catalogsQuery } from '@/api/queries'
 import type { MediaPreview } from '@/api/types'
 import { CatalogSection } from '@/components/catalog-section'
 import { EmptyState, ErrorState, LoadingState } from '@/components/status'
+import { cn } from '@/lib/utils'
+import { compactHeader, pageHeader, pageStack } from '@/lib/styles'
 
 export function CatalogPage({
   type,
@@ -18,9 +20,9 @@ export function CatalogPage({
   const entries = (catalogs.data ?? []).filter((entry) => entry.catalog.type === type)
 
   return (
-    <div className="page-stack">
-      <header className="page-header compact-header">
-        <h1>{title}</h1>
+    <div className={pageStack}>
+      <header className={cn(pageHeader, compactHeader)}>
+        <h1 className="m-0 leading-[0.95] tracking-normal">{title}</h1>
       </header>
 
       {catalogs.isLoading ? <LoadingState label={`Loading ${title.toLowerCase()} catalogs`} /> : null}

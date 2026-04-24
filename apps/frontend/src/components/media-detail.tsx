@@ -4,6 +4,8 @@ import { ArrowLeft } from 'lucide-react'
 import { streamsQuery } from '@/api/queries'
 import type { MediaPreview, StreamInfo } from '@/api/types'
 import { useStreamMetadata } from '@/hooks/use-stream-metadata'
+import { iconTextButton, mutedText, primaryButton, smallButton, stateBlock } from '@/lib/styles'
+import { cn } from '@/lib/utils'
 
 export type PlayableStream = StreamInfo & { addon_id?: string }
 
@@ -25,31 +27,34 @@ export function MediaDetailPage({
   }
 
   return (
-    <div className="detail-page" aria-label={`${media.name} details`}>
-      <button className="icon-text-button detail-back" type="button" onClick={onBack}>
+    <div className="grid gap-7" aria-label={`${media.name} details`}>
+      <button className={cn(iconTextButton, 'mt-6 ml-6 w-fit')} type="button" onClick={onBack}>
         <ArrowLeft aria-hidden="true" />
         Back
       </button>
 
-      <div className="detail-layout">
-        <section className="detail-hero">
-          {media.poster ? <img src={media.poster} alt="" /> : null}
-          <div className="detail-copy">
-            <h2>{media.name}</h2>
-            <p>{[media.type, media.releaseInfo].filter(Boolean).join(' • ')}</p>
-            <p>{media.description ?? 'No description available.'}</p>
+      <div className="grid min-h-[calc(100svh-64px)] grid-cols-[minmax(0,1fr)_minmax(280px,360px)] items-stretch gap-0 pl-[clamp(24px,5vw,64px)] max-[800px]:min-h-0 max-[800px]:grid-cols-1 max-[800px]:gap-[22px] max-[800px]:px-[22px] max-[800px]:pb-[22px]">
+        <section className="grid min-h-[min(68svh,680px)] grid-cols-[minmax(180px,280px)_minmax(0,680px)] items-end gap-[clamp(22px,5vw,56px)] max-[800px]:min-h-0 max-[800px]:grid-cols-1">
+          {media.poster ? <img className="aspect-[2/3] w-full rounded-lg object-cover shadow-[0_28px_80px_hsl(0_0%_0%/42%)] max-[800px]:w-[min(220px,70vw)]" src={media.poster} alt="" /> : null}
+          <div className="grid gap-[18px]">
+            <h2 className="m-0 text-[clamp(2.3rem,6vw,5.6rem)] leading-[0.95] tracking-normal max-[800px]:text-[clamp(2rem,12vw,3.8rem)]">{media.name}</h2>
+            <p className={cn('m-0 max-w-[680px]', mutedText)}>{[media.type, media.releaseInfo].filter(Boolean).join(' • ')}</p>
+            <p className={cn('m-0 max-w-[680px]', mutedText)}>{media.description ?? 'No description available.'}</p>
             {listAction}
           </div>
         </section>
 
-        <aside className="stream-sidebar" aria-label="Available streams">
-          <h3>Streams</h3>
-          {streams.isLoading ? <p className="muted-text">Loading streams</p> : null}
+        <aside
+          className="grid h-[calc(100svh-64px)] content-start gap-3.5 overflow-hidden rounded-lg bg-[hsl(240_14%_4%/72%)] p-4 max-[800px]:h-auto max-[800px]:max-h-[55svh]"
+          aria-label="Available streams"
+        >
+          <h3 className="m-0 tracking-normal">Streams</h3>
+          {streams.isLoading ? <p className={mutedText}>Loading streams</p> : null}
           {streams.data?.length ? (
-            <div className="stream-list">
+            <div className="grid gap-2.5 overflow-y-auto pr-1 [scrollbar-width:thin]">
               {streams.data.map((stream, index) => (
                 <button
-                  className="stream-card"
+                  className="grid min-h-[116px] cursor-pointer content-between gap-2.5 rounded-lg border border-[hsl(0_0%_100%/9%)] bg-[hsl(255_16%_12%/88%)] p-3.5 text-left text-[hsl(0_0%_94%)] hover:border-[hsl(0_0%_100%/30%)] hover:bg-[hsl(0_0%_100%/9%)] hover:outline-0 focus-visible:border-[hsl(0_0%_100%/30%)] focus-visible:bg-[hsl(0_0%_100%/9%)] focus-visible:outline-0 [&_small]:text-[0.76rem] [&_small]:text-[hsl(322_90%_76%)] [&_span]:text-[hsl(240_6%_64%)]"
                   type="button"
                   key={`${stream.addon_id}-${stream.title ?? index}`}
                   onClick={() => onPlay(stream)}
@@ -61,7 +66,7 @@ export function MediaDetailPage({
               ))}
             </div>
           ) : !streams.isLoading ? (
-            <p className="muted-text">No streams returned.</p>
+            <p className={mutedText}>No streams returned.</p>
           ) : null}
         </aside>
       </div>
@@ -117,27 +122,32 @@ export function MediaPlayerPage({
   const metadata = useStreamMetadata(streamUrl)
 
   return (
-    <div className="player-page">
-      <div className="player-frame">
-        <video className="media-player" src={streamUrl} controls autoPlay playsInline poster={media.poster} />
-        <button className="player-back-button" type="button" onClick={onBack} aria-label="Back">
+    <div className="min-h-svh bg-black">
+      <div className="group relative min-h-svh bg-black focus-within:[&_.player-back-button]:translate-y-0 focus-within:[&_.player-back-button]:opacity-100 hover:[&_.player-back-button]:translate-y-0 hover:[&_.player-back-button]:opacity-100">
+        <video className="block h-svh w-screen bg-black object-contain" src={streamUrl} controls autoPlay playsInline poster={media.poster} />
+        <button
+          className="player-back-button absolute top-6 left-6 z-[5] grid size-11 -translate-y-1.5 cursor-pointer place-items-center rounded-full border-0 bg-[hsl(0_0%_0%/55%)] text-[hsl(0_0%_98%)] opacity-0 transition-[opacity,transform,background-color] duration-200 hover:bg-[hsl(0_0%_0%/78%)] hover:outline-2 hover:outline-offset-2 hover:outline-[hsl(0_0%_100%/70%)] focus-visible:bg-[hsl(0_0%_0%/78%)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(0_0%_100%/70%)] [&_svg]:size-[22px]"
+          type="button"
+          onClick={onBack}
+          aria-label="Back"
+        >
           <ArrowLeft aria-hidden="true" />
         </button>
       </div>
 
       {!streamUrl ? (
-        <div className="state-block">
+        <div className={stateBlock}>
           <strong>This stream cannot play directly</strong>
           <p>Only direct stream URLs can be played in the browser right now.</p>
           {stream.externalUrl ? (
-            <a className="primary-button small" href={stream.externalUrl} target="_blank" rel="noreferrer">
+            <a className={cn(primaryButton, smallButton)} href={stream.externalUrl} target="_blank" rel="noreferrer">
               Open external stream
             </a>
           ) : null}
         </div>
       ) : null}
 
-      <span className="sr-only" aria-live="polite">
+      <span className="absolute size-px overflow-hidden whitespace-nowrap [clip:rect(0,0,0,0)]" aria-live="polite">
         {metadata.isLoading ? 'Inspecting stream metadata' : null}
         {metadata.data ? `Playing ${media.name}, ${formatDuration(metadata.data.duration)}` : null}
       </span>

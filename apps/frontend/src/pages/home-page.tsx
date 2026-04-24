@@ -5,6 +5,8 @@ import type { MediaPreview } from '@/api/types'
 import { CatalogSection } from '@/components/catalog-section'
 import { MediaCard } from '@/components/media-card'
 import { EmptyState, ErrorState, LoadingState } from '@/components/status'
+import { contentSection, mediaRow, pageStack, primaryButton, sectionHeading, smallButton, textButton } from '@/lib/styles'
+import { cn } from '@/lib/utils'
 import { useAppStore } from '@/store/app-store'
 
 export function HomePage({ onOpenMedia }: { onOpenMedia: (media: MediaPreview) => void }) {
@@ -24,7 +26,7 @@ export function HomePage({ onOpenMedia }: { onOpenMedia: (media: MediaPreview) =
     !hasCatalogs
 
   return (
-    <div className="page-stack">
+    <div className={pageStack}>
       {lists.isLoading || catalogs.isLoading ? <LoadingState /> : null}
       {lists.error ? <ErrorState error={lists.error} /> : null}
       {catalogs.error ? <ErrorState error={catalogs.error} /> : null}
@@ -34,7 +36,7 @@ export function HomePage({ onOpenMedia }: { onOpenMedia: (media: MediaPreview) =
           title="Go to Settings to add addons"
           body="Install an addon to get catalogs, streams, and metadata to start browsing."
           action={
-            <button className="primary-button small" type="button" onClick={() => setActivePage('settings')}>
+            <button className={cn(primaryButton, smallButton)} type="button" onClick={() => setActivePage('settings')}>
               Open Settings
             </button>
           }
@@ -42,16 +44,16 @@ export function HomePage({ onOpenMedia }: { onOpenMedia: (media: MediaPreview) =
       ) : null}
 
       {!showSetup && hasSavedMedia ? (
-        <section className="content-section">
-          <div className="section-heading">
+        <section className={contentSection}>
+          <div className={sectionHeading}>
             <div>
-              <h2>Saved</h2>
+              <h2 className="m-0 tracking-normal">Saved</h2>
             </div>
-            <button className="text-button compact" type="button" onClick={() => setActivePage('watchlists')}>
+            <button className={cn(textButton, 'min-h-0')} type="button" onClick={() => setActivePage('watchlists')}>
               View all
             </button>
           </div>
-          <div className="media-row">
+          <div className={mediaRow}>
             {savedItems.slice(0, 6).map((item) => (
               <MediaCard key={item.id} media={item} />
             ))}

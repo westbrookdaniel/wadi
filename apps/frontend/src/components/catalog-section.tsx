@@ -4,6 +4,7 @@ import { catalogQuery } from '@/api/queries'
 import type { CatalogEntry, MediaPreview } from '@/api/types'
 import { MediaCard } from '@/components/media-card'
 import { EmptyState, ErrorState, PosterSkeletonRow } from '@/components/status'
+import { contentSection, mediaRow, mutedText, sectionHeading } from '@/lib/styles'
 
 export function CatalogSection({
   entry,
@@ -19,18 +20,18 @@ export function CatalogSection({
   const title = entry.catalog.name ?? entry.catalog.id
 
   return (
-    <section className="content-section">
-      <div className="section-heading">
+    <section className={contentSection}>
+      <div className={sectionHeading}>
         <div>
-          <h2>{title}</h2>
-          <p>{entry.addon_name}</p>
+          <h2 className="m-0 tracking-normal">{title}</h2>
+          <p className={mutedText}>{entry.addon_name}</p>
         </div>
       </div>
 
       {catalog.isLoading ? <PosterSkeletonRow /> : null}
       {catalog.error ? <ErrorState error={catalog.error} /> : null}
       {catalog.data?.length ? (
-        <div className="media-row">
+        <div className={mediaRow}>
           {catalog.data.slice(0, 12).map((media) => (
             <MediaCard key={`${media.type}-${media.id}`} media={media} onOpen={() => onOpen(media)} />
           ))}

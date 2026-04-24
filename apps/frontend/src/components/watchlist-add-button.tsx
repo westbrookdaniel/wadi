@@ -4,6 +4,8 @@ import { type ChangeEvent } from 'react'
 
 import { addListItem, listItemsQuery, listsQuery, queryKeys } from '@/api/queries'
 import type { ListItem, MediaPreview, UserList } from '@/api/types'
+import { mutedButton, mutedText, smallButton } from '@/lib/styles'
+import { cn } from '@/lib/utils'
 
 export function WatchlistAddButton({ media }: { media: MediaPreview }) {
   const queryClient = useQueryClient()
@@ -34,23 +36,23 @@ export function WatchlistAddButton({ media }: { media: MediaPreview }) {
 
   if (lists.isLoading) {
     return (
-      <button className="muted-button small" type="button" disabled>
+      <button className={cn(mutedButton, smallButton)} type="button" disabled>
         Add to
       </button>
     )
   }
 
   if (!lists.data?.length) {
-    return <p className="muted-text">Create a watchlist to save this title.</p>
+    return <p className={mutedText}>Create a watchlist to save this title.</p>
   }
 
   return (
-    <label className="watchlist-add-control">
-      <span className="muted-button small">
+    <label className="relative inline-grid w-fit max-w-full">
+      <span className={cn(mutedButton, smallButton)}>
         {hasSavedLists ? <Check aria-hidden="true" /> : <Plus aria-hidden="true" />}
         {label}
       </span>
-      <select aria-label="Add to watchlist" defaultValue="" onChange={onSelect}>
+      <select className="absolute inset-0 size-full cursor-pointer opacity-0" aria-label="Add to watchlist" defaultValue="" onChange={onSelect}>
         <option value="" disabled>
           Choose watchlist
         </option>

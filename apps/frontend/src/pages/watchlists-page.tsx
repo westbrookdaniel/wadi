@@ -6,6 +6,19 @@ import { createList, deleteList, deleteListItem, listItemsQuery, listsQuery, que
 import type { ListItem, MediaPreview } from '@/api/types'
 import { MediaCard } from '@/components/media-card'
 import { EmptyState, ErrorState, LoadingState } from '@/components/status'
+import {
+  compactHeader,
+  contentSection,
+  dangerText,
+  iconButton,
+  iconTextButton,
+  inputClass,
+  mediaGrid,
+  pageHeader,
+  pageStack,
+  sectionHeading,
+} from '@/lib/styles'
+import { cn } from '@/lib/utils'
 import { useAppStore } from '@/store/app-store'
 
 export function WatchlistsPage({ onOpenMedia }: { onOpenMedia: (media: MediaPreview) => void }) {
@@ -55,15 +68,15 @@ export function WatchlistsPage({ onOpenMedia }: { onOpenMedia: (media: MediaPrev
   }
 
   return (
-    <div className="page-stack split-page">
+    <div className={cn(pageStack, 'grid-cols-[minmax(240px,330px)_minmax(0,1fr)] items-start max-[800px]:grid-cols-1')}>
       <section>
-        <header className="page-header compact-header">
-          <h1>Watchlists</h1>
+        <header className={cn(pageHeader, compactHeader)}>
+          <h1 className="m-0 leading-[0.95] tracking-normal">Watchlists</h1>
         </header>
 
-        <form className="inline-form" onSubmit={onCreate}>
-          <input value={name} onChange={(event) => setName(event.target.value)} placeholder="New list name" />
-          <button className="icon-text-button" type="submit" disabled={createMutation.isPending}>
+        <form className="flex items-center gap-2.5 max-[800px]:flex-col max-[800px]:items-stretch" onSubmit={onCreate}>
+          <input className={inputClass} value={name} onChange={(event) => setName(event.target.value)} placeholder="New list name" />
+          <button className={iconTextButton} type="submit" disabled={createMutation.isPending}>
             <Plus aria-hidden="true" />
             Create
           </button>
@@ -72,17 +85,19 @@ export function WatchlistsPage({ onOpenMedia }: { onOpenMedia: (media: MediaPrev
         {lists.isLoading ? <LoadingState label="Loading lists" /> : null}
         {lists.error ? <ErrorState error={lists.error} /> : null}
         {lists.data?.length ? (
-          <div className="stack-list">
+          <div className="grid gap-2.5">
             {lists.data.map((list) => (
               <button
-                className="list-row"
+                className={cn(
+                  'flex min-h-[46px] w-full items-center justify-between gap-3.5 rounded-[7px] border border-[hsl(0_0%_100%/8%)] bg-[hsl(0_0%_100%/4%)] px-3 py-2.5 text-left text-[hsl(0_0%_92%)]',
+                  list.id === activeListId && 'border-[hsl(322_100%_72%/45%)] bg-[hsl(322_80%_55%/14%)]',
+                )}
                 type="button"
                 key={list.id}
-                data-active={list.id === activeListId}
                 onClick={() => setSelectedListId(list.id)}
               >
                 <span>{list.name}</span>
-                <small>{new Date(list.updated_at).toLocaleDateString()}</small>
+                <small className="text-[hsl(240_6%_62%)]">{new Date(list.updated_at).toLocaleDateString()}</small>
               </button>
             ))}
           </div>
@@ -91,13 +106,13 @@ export function WatchlistsPage({ onOpenMedia }: { onOpenMedia: (media: MediaPrev
         ) : null}
       </section>
 
-      <section className="content-section">
-        <div className="section-heading">
+      <section className={contentSection}>
+        <div className={sectionHeading}>
           <div>
-            <h2>{lists.data?.find((list) => list.id === activeListId)?.name ?? 'Select a list'}</h2>
+            <h2 className="m-0 tracking-normal">{lists.data?.find((list) => list.id === activeListId)?.name ?? 'Select a list'}</h2>
           </div>
           {activeListId ? (
-            <button className="icon-text-button danger" type="button" onClick={() => deleteMutation.mutate(activeListId)}>
+            <button className={cn(iconTextButton, dangerText)} type="button" onClick={() => deleteMutation.mutate(activeListId)}>
               <Trash2 aria-hidden="true" />
               Delete list
             </button>
@@ -106,7 +121,7 @@ export function WatchlistsPage({ onOpenMedia }: { onOpenMedia: (media: MediaPrev
 
         {items.isLoading ? <LoadingState label="Loading items" /> : null}
         {items.data?.length ? (
-          <div className="media-grid">
+          <div className={mediaGrid}>
             {items.data.map((item) => (
               <MediaCard
                 key={item.id}
@@ -114,7 +129,7 @@ export function WatchlistsPage({ onOpenMedia }: { onOpenMedia: (media: MediaPrev
                 onOpen={() => onOpenMedia(mediaFromListItem(item))}
                 action={
                   <button
-                    className="icon-button"
+                    className={iconButton}
                     type="button"
                     aria-label={`Remove ${item.title}`}
                     onClick={() => activeListId && removeItemMutation.mutate({ listId: activeListId, itemId: item.id })}
