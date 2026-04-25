@@ -1,3 +1,4 @@
+import { Skeleton } from '@/components/ui/skeleton'
 import { bottomPagePadding, mutedText } from '@/lib/styles'
 
 import type { PlayableStream } from './types'
@@ -13,7 +14,7 @@ export function StreamList({
   onPlay: (stream: PlayableStream) => void
 }) {
   if (isLoading) {
-    return <p className={mutedText}>Loading streams</p>
+    return <StreamListSkeleton />
   }
 
   if (!streams.length) {
@@ -33,6 +34,24 @@ export function StreamList({
           <p className="max-w-full break-all">{streamDetail(stream)}</p>
           <p className="text-xs text-muted-foreground max-w-full break-all">{streamSource(stream)}</p>
         </button>
+      ))}
+    </div>
+  )
+}
+
+export function StreamListSkeleton({ count = 5 }: { count?: number }) {
+  return (
+    <div
+      className={cn("flex flex-col gap-2.5 overflow-y-auto pr-1 [scrollbar-width:thin]", bottomPagePadding)}
+      role="status"
+      aria-label="Loading streams"
+    >
+      {Array.from({ length: count }).map((_, index) => (
+        <div className="grid gap-2.5 rounded-lg border border-border bg-card/70 p-3.5" key={index}>
+          <Skeleton className="h-4 w-[62%] rounded-full" />
+          <Skeleton className="h-4 w-full rounded-full" />
+          <Skeleton className="h-3 w-[46%] rounded-full" />
+        </div>
       ))}
     </div>
   )

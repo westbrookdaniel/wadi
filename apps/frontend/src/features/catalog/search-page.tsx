@@ -4,8 +4,9 @@ import { useState } from 'react'
 
 import { catalogQuery, catalogsQuery } from '@/api/queries'
 import type { MediaPreview } from '@/api/types'
-import { EmptyState, ErrorState, LoadingState } from '@/components/status'
+import { EmptyState, ErrorState } from '@/components/status'
 import { Input } from '@/components/ui/input'
+import { Skeleton } from '@/components/ui/skeleton'
 import { MediaCard } from '@/features/media/media-card'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { mediaGrid, pageStack } from '@/lib/styles'
@@ -41,12 +42,12 @@ export function SearchPage({ onOpenMedia }: { onOpenMedia: (media: MediaPreview)
         />
       </label>
 
-      {catalogs.isLoading ? <LoadingState label="Loading searchable catalogs" /> : null}
+      {catalogs.isLoading ? <CatalogSearchSkeleton /> : null}
       {catalogs.error ? <ErrorState error={catalogs.error} /> : null}
       {!catalogs.isLoading && !searchable.length ? (
         <EmptyState title="No searchable catalogs" body="Install an addon with catalog search support." />
       ) : null}
-      {isSearching ? <LoadingState label="Searching" /> : null}
+      {isSearching ? <SearchResultsSkeleton /> : null}
       {debouncedQuery.length > 1 && !isSearching && !media.length ? <EmptyState title="No results found" /> : null}
 
       {media.length ? (
@@ -56,6 +57,26 @@ export function SearchPage({ onOpenMedia }: { onOpenMedia: (media: MediaPreview)
           ))}
         </div>
       ) : null}
+    </div>
+  )
+}
+
+function CatalogSearchSkeleton() {
+  return (
+    <div className="grid w-[min(520px,100%)] gap-3" role="status" aria-label="Loading searchable catalogs">
+      <Skeleton className="h-4 w-36 rounded-full" />
+      <Skeleton className="h-9 w-full rounded-full" />
+      <Skeleton className="h-9 w-[72%] rounded-full" />
+    </div>
+  )
+}
+
+function SearchResultsSkeleton({ count = 10 }: { count?: number }) {
+  return (
+    <div className={cn(mediaGrid, 'mt-2')} role="status" aria-label="Searching">
+      {Array.from({ length: count }).map((_, index) => (
+        <Skeleton className="aspect-[2/3] rounded-lg" key={index} />
+      ))}
     </div>
   )
 }

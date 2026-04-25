@@ -1,12 +1,13 @@
 import type { MediaPreview } from '@/api/types'
 
+import { DetailShellSkeleton } from './detail-shell'
 import { MovieDetailPage } from './movie-detail'
 import { MediaPlayerPage } from './player'
 import { SeriesDetailPage } from './series-detail'
 import type { PlaybackTarget, PlayableStream } from './types'
 
 export type { PlaybackTarget, PlayableStream }
-export { MediaPlayerPage }
+export { DetailShellSkeleton, MediaPlayerPage }
 
 export function MediaDetailPage({
   media,

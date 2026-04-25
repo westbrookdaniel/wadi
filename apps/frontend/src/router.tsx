@@ -21,6 +21,7 @@ import { CatalogPage } from '@/features/catalog/catalog-page'
 import { HomePage } from '@/features/catalog/home-page'
 import { SearchPage } from '@/features/catalog/search-page'
 import {
+  DetailShellSkeleton,
   MediaDetailPage,
   MediaPlayerPage,
   type PlaybackTarget,
@@ -229,6 +230,7 @@ function MediaRoute() {
   const routeMedia = useQuery(metaQuery(type, id, true))
   const selectedMedia = mediaPreviewFromParams(type, id)
   const displayMedia = mediaPreviewFromMeta(selectedMedia, routeMedia.data) ?? selectedMedia
+  const isLoadingMediaDetails = routeMedia.isLoading && !routeMedia.data
   const backPath = browsePath(from)
 
   const playStream = (stream: PlayableStream, target: PlaybackTarget) => {
@@ -256,6 +258,8 @@ function MediaRoute() {
                 setSelectedPlaybackTarget(null)
               }}
             />
+          ) : isLoadingMediaDetails ? (
+            <DetailShellSkeleton onBack={() => navigate({ to: backPath })} />
           ) : (
             <MediaDetailPage
               media={displayMedia}
