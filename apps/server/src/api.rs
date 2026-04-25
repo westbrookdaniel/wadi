@@ -1,23 +1,30 @@
 use std::collections::BTreeMap;
 
 use axum::{
-    extract::{Path, Query, State},
-    http::StatusCode,
-    routing::{delete, get, post, put},
     Json, Router,
+    body::Body,
+    extract::{Path, Query, State},
+    http::{
+        HeaderMap, HeaderValue, Response, StatusCode,
+        header::{
+            ACCEPT_RANGES, ACCESS_CONTROL_EXPOSE_HEADERS, CACHE_CONTROL, CONTENT_LENGTH,
+            CONTENT_RANGE, CONTENT_TYPE, ETAG, EXPIRES, LAST_MODIFIED, RANGE,
+        },
+    },
+    routing::{delete, get, post, put},
 };
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sqlx::Row;
 use uuid::Uuid;
 
 use crate::{
+    AppState,
     addon::{ResourceRequest, TransportKind},
     auth,
     error::{AppError, AppResult},
     models::{AddonRecord, AuthUser, ListItem, User, UserList, WatchData, WatchState},
     stremio::{Manifest, ResourceKind},
-    AppState,
 };
 
 pub fn router(state: AppState) -> Router {
@@ -49,6 +56,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/meta/{content_type}/{id}", get(meta))
         .route("/api/streams/{content_type}/{id}", get(streams))
         .route("/api/subtitles/{content_type}/{id}", get(subtitles))
+        .route("/api/stream-proxy", get(stream_proxy))
         .route("/api/watch-state", put(set_watch_state))
         .route("/api/watch-state/{content_type}/{id}", get(get_watch_state))
         .route("/api/watch-data/{content_type}/{id}", get(get_watch_data))
@@ -684,6 +692,63 @@ async fn subtitles(
     Path((content_type, id)): Path<(String, String)>,
 ) -> AppResult<Json<Value>> {
     aggregate_resource(state, user, ResourceKind::Subtitles, content_type, id).await
+}
+
+#[derive(Debug, Deserialize)]
+struct StreamProxyQuery {
+    url: String,
+}
+
+async fn stream_proxy(
+    State(state): State<AppState>,
+    _user: AuthUser,
+    headers: HeaderMap,
+    Query(query): Query<StreamProxyQuery>,
+) -> AppResult<Response<Body>> {
+    let url = url::Url::parse(&query.url)?;
+    if !matches!(url.scheme(), "http" | "https") {
+        return Err(AppError::BadRequest(
+            "stream proxy only supports http and https URLs".into(),
+        ));
+    }
+
+    let mut request = state.http.get(url);
+    if let Some(range) = headers.get(RANGE) {
+        request = request.header(RANGE, range);
+    }
+
+    let upstream = request.send().await?;
+    let status = upstream.status();
+    let upstream_headers = upstream.headers().clone();
+    let mut response = Response::builder().status(status);
+
+    for name in [
+        CONTENT_TYPE,
+        CONTENT_LENGTH,
+        CONTENT_RANGE,
+        ACCEPT_RANGES,
+        ETAG,
+        LAST_MODIFIED,
+        CACHE_CONTROL,
+        EXPIRES,
+    ] {
+        if let Some(value) = upstream_headers.get(&name) {
+            response = response.header(name, value);
+        }
+    }
+
+    response = response.header(
+        ACCESS_CONTROL_EXPOSE_HEADERS,
+        HeaderValue::from_static("Content-Length, Content-Range, Accept-Ranges, Content-Type"),
+    );
+
+    if !upstream_headers.contains_key(ACCEPT_RANGES) {
+        response = response.header(ACCEPT_RANGES, HeaderValue::from_static("bytes"));
+    }
+
+    response
+        .body(Body::from_stream(upstream.bytes_stream()))
+        .map_err(|err| AppError::Upstream(err.to_string()))
 }
 
 async fn aggregate_resource(

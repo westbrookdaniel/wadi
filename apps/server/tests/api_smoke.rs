@@ -1,15 +1,15 @@
 use axum::{
-    body::Body,
-    http::{header, Method, Request, StatusCode},
+    body::{Body, Bytes},
+    http::{HeaderMap, Method, Request, StatusCode, header},
 };
 use http_body_util::BodyExt;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sqlx::SqlitePool;
 use tower::ServiceExt;
-use wadi_server::{api, config::Config, db, AppState};
+use wadi_server::{AppState, api, config::Config, db};
 use wiremock::{
-    matchers::{method, path},
     Mock, MockServer, ResponseTemplate,
+    matchers::{method, path},
 };
 
 async fn test_app() -> axum::Router {
@@ -53,6 +53,32 @@ async fn json_request(
         serde_json::from_slice(&bytes).unwrap()
     };
     (status, json)
+}
+
+async fn raw_request(
+    app: axum::Router,
+    method: Method,
+    uri: &str,
+    token: Option<&str>,
+    body: Body,
+    configure: impl FnOnce(axum::http::request::Builder) -> axum::http::request::Builder,
+) -> (StatusCode, HeaderMap, Bytes) {
+    let mut builder = Request::builder().method(method).uri(uri);
+    if let Some(token) = token {
+        builder = builder.header(header::AUTHORIZATION, format!("Bearer {token}"));
+    }
+    let response = app
+        .oneshot(configure(builder).body(body).unwrap())
+        .await
+        .unwrap();
+    let status = response.status();
+    let headers = response.headers().clone();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    (status, headers, bytes)
+}
+
+fn encode_query_value(value: &str) -> String {
+    url::form_urlencoded::byte_serialize(value.as_bytes()).collect()
 }
 
 #[tokio::test]
@@ -105,6 +131,102 @@ async fn auth_and_lists_flow() {
     )
     .await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn stream_proxy_requires_auth_and_valid_http_url() {
+    let app = test_app().await;
+
+    let upstream_url = encode_query_value("https://cdn.example/movie.mp4");
+    let (status, _, _) = raw_request(
+        app.clone(),
+        Method::GET,
+        &format!("/api/stream-proxy?url={upstream_url}"),
+        None,
+        Body::empty(),
+        |builder| builder,
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+
+    let (_, auth) = json_request(
+        app.clone(),
+        Method::POST,
+        "/api/auth/register",
+        None,
+        json!({ "email": "proxy-invalid@example.com", "password": "password123" }),
+    )
+    .await;
+    let token = auth["token"].as_str().unwrap();
+
+    let invalid_url = encode_query_value("file:///etc/passwd");
+    let (status, body) = json_request(
+        app,
+        Method::GET,
+        &format!("/api/stream-proxy?url={invalid_url}"),
+        Some(token),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("http and https")
+    );
+}
+
+#[tokio::test]
+async fn stream_proxy_forwards_range_and_preserves_media_headers() {
+    let app = test_app().await;
+    let upstream = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/movie.mp4"))
+        .and(wiremock::matchers::header("range", "bytes=0-3"))
+        .respond_with(
+            ResponseTemplate::new(206)
+                .insert_header("content-type", "video/mp4")
+                .insert_header("content-range", "bytes 0-3/10")
+                .insert_header("content-length", "4")
+                .insert_header("accept-ranges", "bytes")
+                .set_body_bytes("test"),
+        )
+        .mount(&upstream)
+        .await;
+
+    let (_, auth) = json_request(
+        app.clone(),
+        Method::POST,
+        "/api/auth/register",
+        None,
+        json!({ "email": "proxy@example.com", "password": "password123" }),
+    )
+    .await;
+    let token = auth["token"].as_str().unwrap();
+    let upstream_url = encode_query_value(&format!("{}/movie.mp4", upstream.uri()));
+
+    let (status, headers, body) = raw_request(
+        app,
+        Method::GET,
+        &format!("/api/stream-proxy?url={upstream_url}"),
+        Some(token),
+        Body::empty(),
+        |builder| builder.header(header::RANGE, "bytes=0-3"),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::PARTIAL_CONTENT);
+    assert_eq!(headers[header::CONTENT_TYPE], "video/mp4");
+    assert_eq!(headers[header::CONTENT_RANGE], "bytes 0-3/10");
+    assert_eq!(headers[header::CONTENT_LENGTH], "4");
+    assert_eq!(headers[header::ACCEPT_RANGES], "bytes");
+    assert_eq!(
+        headers[header::ACCESS_CONTROL_EXPOSE_HEADERS],
+        "Content-Length, Content-Range, Accept-Ranges, Content-Type"
+    );
+    assert_eq!(body, "test");
 }
 
 #[tokio::test]
@@ -275,10 +397,12 @@ async fn watch_state_progress_and_continue_watching_flow() {
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert!(invalid["error"]["message"]
-        .as_str()
-        .unwrap()
-        .contains("position_seconds"));
+    assert!(
+        invalid["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("position_seconds")
+    );
 }
 
 #[tokio::test]
