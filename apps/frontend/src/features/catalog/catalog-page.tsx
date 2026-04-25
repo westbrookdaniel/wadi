@@ -2,10 +2,11 @@ import { useQuery } from '@tanstack/react-query'
 
 import { catalogsQuery } from '@/api/queries'
 import type { MediaPreview } from '@/api/types'
-import { CatalogSection } from '@/components/catalog-section'
 import { EmptyState, ErrorState, LoadingState } from '@/components/status'
 import { cn } from '@/lib/utils'
 import { compactHeader, pageHeader, pageStack } from '@/lib/styles'
+
+import { CatalogSection } from './catalog-section'
 
 export function CatalogPage({
   type,

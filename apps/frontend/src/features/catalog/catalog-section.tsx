@@ -2,8 +2,9 @@ import { useQuery } from '@tanstack/react-query'
 
 import { catalogQuery } from '@/api/queries'
 import type { CatalogEntry, MediaPreview } from '@/api/types'
-import { MediaCard } from '@/components/media-card'
 import { EmptyState, ErrorState, PosterSkeletonRow } from '@/components/status'
+
+import { MediaCard } from '@/features/media/media-card'
 import { contentSection, mediaRow, mutedText, sectionHeading } from '@/lib/styles'
 
 export function CatalogSection({

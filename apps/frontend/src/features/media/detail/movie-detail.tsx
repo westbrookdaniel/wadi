@@ -6,7 +6,8 @@ import type { MediaPreview } from '@/api/types'
 import { DetailShell } from './detail-shell'
 import { StreamList } from './stream-list'
 import type { PlaybackTarget, PlayableStream } from './types'
-import { useWatchToggle, WatchedButton } from './watch-state'
+import { useWatchToggle } from './use-watch-toggle'
+import { WatchedButton } from './watch-state'
 
 export function MovieDetailPage({
   media,

@@ -1,26 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Check, RotateCcw } from 'lucide-react'
 
 import { queryKeys, setWatchState } from '@/api/queries'
 import type { WatchState } from '@/api/types'
-import { Button } from '@/components/ui/button'
-
-export function WatchedButton({
-  watched,
-  isPending,
-  onClick,
-}: {
-  watched: boolean
-  isPending: boolean
-  onClick: () => void
-}) {
-  return (
-    <Button className="w-fit" variant={watched ? 'default' : 'secondary'} type="button" disabled={isPending} onClick={onClick}>
-      {watched ? <RotateCcw aria-hidden="true" /> : <Check aria-hidden="true" />}
-      {watched ? 'Mark unwatched' : 'Mark watched'}
-    </Button>
-  )
-}
 
 export function useWatchToggle(mediaType: string, mediaId: string, videoId: string | null) {
   const queryClient = useQueryClient()

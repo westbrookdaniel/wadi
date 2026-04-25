@@ -2,19 +2,20 @@ import { useQuery } from '@tanstack/react-query'
 
 import { catalogsQuery, continueWatchingQuery, metaQuery } from '@/api/queries'
 import type { ContinueWatchingItem, MediaPreview } from '@/api/types'
-import { CatalogSection } from '@/components/catalog-section'
-import { MediaCard } from '@/components/media-card'
 import { EmptyState, ErrorState, LoadingState } from '@/components/status'
 import { Button } from '@/components/ui/button'
+import { MediaCard } from '@/features/media/media-card'
 import { contentSection, mediaRow, pageStack, sectionHeading } from '@/lib/styles'
-import { useAppStore } from '@/store/app-store'
+
+import { CatalogSection } from './catalog-section'
 
 export function HomePage({
   onOpenMedia,
+  onOpenSettings,
 }: {
   onOpenMedia: (media: MediaPreview, preferredVideoId?: string | null) => void
+  onOpenSettings: () => void
 }) {
-  const setActivePage = useAppStore((state) => state.setActivePage)
   const catalogs = useQuery(catalogsQuery)
   const continueWatching = useQuery(continueWatchingQuery(12))
   const continueItems = continueWatching.data ?? []
@@ -37,7 +38,7 @@ export function HomePage({
           title="Go to Settings to add addons"
           body="Install an addon to get catalogs, streams, and metadata to start browsing."
           action={
-            <Button size="sm" type="button" onClick={() => setActivePage('settings')}>
+            <Button size="sm" type="button" onClick={onOpenSettings}>
               Open Settings
             </Button>
           }

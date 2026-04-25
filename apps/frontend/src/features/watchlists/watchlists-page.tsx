@@ -6,10 +6,10 @@ import { z } from 'zod'
 
 import { createList, deleteList, deleteListItem, listItemsQuery, listsQuery, queryKeys } from '@/api/queries'
 import type { ListItem, MediaPreview } from '@/api/types'
-import { MediaCard } from '@/components/media-card'
 import { EmptyState, ErrorState, LoadingState } from '@/components/status'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { MediaCard } from '@/features/media/media-card'
 import {
   compactHeader,
   contentSection,

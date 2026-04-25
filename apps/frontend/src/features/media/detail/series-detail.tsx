@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { ChevronLeft } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 
 import { findWatchState, streamsQuery, watchDataQuery } from '@/api/queries'
 import type { MediaPreview, WatchDataResponse } from '@/api/types'
@@ -36,34 +36,21 @@ export function SeriesDetailPage({
 }) {
   const episodes = useMemo(() => parseEpisodes(media.raw), [media.raw])
   const preferredEpisode = episodes.find((episode) => episode.id === preferredVideoId)
-  const [selectedSeason, setSelectedSeason] = useState<number | null>(
-    preferredEpisode?.season ?? episodes[0]?.season ?? null,
-  )
+  const [selectedSeasonOverride, setSelectedSeasonOverride] = useState<number | null>(null)
+  const selectedSeason = selectedSeasonOverride ?? preferredEpisode?.season ?? episodes[0]?.season ?? null
   const visibleEpisodes = episodes.filter((episode) => episode.season === selectedSeason)
-  const [selectedEpisodeId, setSelectedEpisodeId] = useState<string | null>(preferredEpisode?.id ?? null)
-  const [step, setStep] = useState<SeriesStep>(preferredEpisode ? 'streams' : 'episodes')
+  const [selectedEpisodeIdOverride, setSelectedEpisodeIdOverride] = useState<string | null>(null)
+  const selectedEpisodeId = selectedEpisodeIdOverride ?? preferredEpisode?.id ?? null
+  const [stepOverride, setStepOverride] = useState<SeriesStep | null>(null)
+  const step = stepOverride ?? (preferredEpisode ? 'streams' : 'episodes')
   const selectedEpisode = episodes.find((episode) => episode.id === selectedEpisodeId) ?? null
   const streams = useQuery(streamsQuery(media.type, selectedEpisode?.id ?? '', Boolean(selectedEpisode)))
   const watchData = useQuery(watchDataQuery(media.type, media.id, Boolean(media)))
   const seasons = uniqueSeasons(episodes)
 
-  useEffect(() => {
-    if (preferredEpisode) {
-      setSelectedSeason(preferredEpisode.season)
-      setSelectedEpisodeId(preferredEpisode.id)
-      setStep('streams')
-    }
-  }, [preferredEpisode])
-
-  useEffect(() => {
-    if (selectedSeason === null && episodes[0]) {
-      setSelectedSeason(episodes[0].season)
-    }
-  }, [episodes, selectedSeason])
-
   const selectEpisode = (episode: Episode) => {
-    setSelectedEpisodeId(episode.id)
-    setStep('streams')
+    setSelectedEpisodeIdOverride(episode.id)
+    setStepOverride('streams')
   }
 
   return (
@@ -75,7 +62,7 @@ export function SeriesDetailPage({
       sideContent={
         step === 'streams' && selectedEpisode ? (
           <div className="grid min-h-0 gap-4">
-            <Button className="w-fit" type="button" size="sm" variant="secondary" onClick={() => setStep('episodes')}>
+            <Button className="w-fit" type="button" size="sm" variant="secondary" onClick={() => setStepOverride('episodes')}>
               <ChevronLeft aria-hidden="true" />
               Change Episode
             </Button>
@@ -99,7 +86,7 @@ export function SeriesDetailPage({
             selectedSeason={selectedSeason}
             visibleEpisodes={visibleEpisodes}
             watchData={watchData.data}
-            onSeasonChange={setSelectedSeason}
+            onSeasonChange={setSelectedSeasonOverride}
             onSelectEpisode={selectEpisode}
           />
         )
