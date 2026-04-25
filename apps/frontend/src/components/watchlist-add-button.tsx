@@ -1,11 +1,11 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Plus } from 'lucide-react'
-import { type ChangeEvent } from 'react'
 
 import { addListItem, listItemsQuery, listsQuery, queryKeys } from '@/api/queries'
 import type { ListItem, MediaPreview, UserList } from '@/api/types'
-import { mutedButton, mutedText, smallButton } from '@/lib/styles'
-import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { mutedText } from '@/lib/styles'
 
 export function WatchlistAddButton({ media }: { media: MediaPreview }) {
   const queryClient = useQueryClient()
@@ -26,19 +26,17 @@ export function WatchlistAddButton({ media }: { media: MediaPreview }) {
   const hasSavedLists = savedLists.length > 0
   const label = hasSavedLists ? savedLists.map((list) => list.name).join(', ') : 'Add to'
 
-  function onSelect(event: ChangeEvent<HTMLSelectElement>) {
-    const listId = event.target.value
+  function onSelect(listId: string) {
     if (listId) {
       addMutation.mutate(listId)
-      event.target.value = ''
     }
   }
 
   if (lists.isLoading) {
     return (
-      <button className={cn(mutedButton, smallButton)} type="button" disabled>
+      <Button variant="secondary" size="sm" type="button" disabled>
         Add to
-      </button>
+      </Button>
     )
   }
 
@@ -47,22 +45,19 @@ export function WatchlistAddButton({ media }: { media: MediaPreview }) {
   }
 
   return (
-    <label className="relative inline-grid w-fit max-w-full">
-      <span className={cn(mutedButton, smallButton)}>
+    <Select value="" onValueChange={onSelect} disabled={addMutation.isPending}>
+      <SelectTrigger className="w-fit max-w-[min(520px,100%)]" size="sm" aria-label="Add to watchlist">
         {hasSavedLists ? <Check aria-hidden="true" /> : <Plus aria-hidden="true" />}
-        {label}
-      </span>
-      <select className="absolute inset-0 size-full cursor-pointer opacity-0" aria-label="Add to watchlist" defaultValue="" onChange={onSelect}>
-        <option value="" disabled>
-          Choose watchlist
-        </option>
+        <SelectValue placeholder={label} />
+      </SelectTrigger>
+      <SelectContent>
         {lists.data.map((list) => (
-          <option value={list.id} key={list.id}>
+          <SelectItem value={list.id} key={list.id}>
             {optionLabel(list, savedLists)}
-          </option>
+          </SelectItem>
         ))}
-      </select>
-    </label>
+      </SelectContent>
+    </Select>
   )
 }
 
@@ -71,5 +66,5 @@ function containsMedia(items: ListItem[], media: MediaPreview) {
 }
 
 function optionLabel(list: UserList, savedLists: UserList[]) {
-  return savedLists.some((savedList) => savedList.id === list.id) ? `✓ ${list.name}` : list.name
+  return savedLists.some((savedList) => savedList.id === list.id) ? `Saved: ${list.name}` : list.name
 }

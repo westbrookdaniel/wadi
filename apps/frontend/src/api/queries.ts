@@ -1,18 +1,23 @@
 import { queryOptions } from '@tanstack/react-query'
 
-import { apiRequest } from '@/api/client'
+import { ApiError, apiRequest } from '@/api/client'
 import type {
   AddonRecord,
   ApiListResponse,
   ApiResponses,
   AuthResponse,
   CatalogEntry,
+  ContinueWatchingItem,
   ListItem,
   MediaPreview,
   StreamInfo,
   SubtitleInfo,
   User,
   UserList,
+  WatchDataResponse,
+  WatchProgressRequest,
+  WatchState,
+  WatchStateRequest,
 } from '@/api/types'
 
 export const queryKeys = {
@@ -26,6 +31,8 @@ export const queryKeys = {
   meta: (type: string, id: string) => ['meta', type, id] as const,
   streams: (type: string, id: string) => ['streams', type, id] as const,
   subtitles: (type: string, id: string) => ['subtitles', type, id] as const,
+  watchData: (type: string, id: string) => ['watch-data', type, id] as const,
+  continueWatching: (limit = 20) => ['continue-watching', limit] as const,
 }
 
 export const meQuery = (enabled: boolean) =>
@@ -108,6 +115,41 @@ export const streamsQuery = (contentType: string, mediaId: string, enabled = tru
       )
     },
     enabled,
+  })
+
+export const watchDataQuery = (
+  contentType: string,
+  mediaId: string,
+  enabled = true,
+) =>
+  queryOptions({
+    queryKey: queryKeys.watchData(contentType, mediaId),
+    queryFn: () =>
+      apiRequest<WatchDataResponse>(
+        `/api/watch-data/${encodeURIComponent(contentType)}/${encodeURIComponent(mediaId)}`,
+      ),
+    enabled,
+  })
+
+export const continueWatchingQuery = (limit = 20) =>
+  queryOptions({
+    queryKey: queryKeys.continueWatching(limit),
+    queryFn: async () => {
+      let data: ApiListResponse<ContinueWatchingItem>
+      try {
+        data = await apiRequest<ApiListResponse<ContinueWatchingItem>>(
+          `/api/continue-watching?limit=${limit}`,
+        )
+      } catch (error) {
+        // A 404 here usually means the dev frontend is pointed at a backend that has not been restarted with the viewing-state routes.
+        if (error instanceof ApiError && error.status === 404) {
+          return []
+        }
+        throw error
+      }
+      return data.items
+    },
+    retry: (failureCount, error) => !(error instanceof ApiError && error.status === 404) && failureCount < 3,
   })
 
 export const subtitlesQuery = (contentType: string, mediaId: string, enabled = true) =>
@@ -199,6 +241,36 @@ export function addListItem(listId: string, media: MediaPreview) {
 
 export function deleteListItem(listId: string, itemId: string) {
   return apiRequest<null>(`/api/lists/${listId}/items/${itemId}`, { method: 'DELETE' })
+}
+
+export function setWatchState(payload: WatchStateRequest) {
+  return apiRequest<WatchState>('/api/watch-state', {
+    method: 'PUT',
+    body: payload,
+  })
+}
+
+export function updateWatchProgress(payload: WatchProgressRequest) {
+  return apiRequest<WatchState>('/api/watch-progress', {
+    method: 'PUT',
+    body: payload,
+  })
+}
+
+export function findWatchState(data: WatchDataResponse | undefined, videoId: string | null) {
+  return data?.items.find((item) => (item.video_id ?? null) === videoId)
+}
+
+export function defaultWatchState(mediaType: string, mediaId: string, videoId: string | null): WatchState {
+  return {
+    media_type: mediaType,
+    media_id: mediaId,
+    video_id: videoId,
+    watched: false,
+    position_seconds: 0,
+    duration_seconds: null,
+    updated_at: null,
+  }
 }
 
 function flattenMediaResponses(

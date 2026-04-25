@@ -8,10 +8,14 @@ export function MediaCard({
   media,
   onOpen,
   action,
+  watched,
+  progress,
 }: {
   media: CardMedia
   onOpen?: () => void
   action?: React.ReactNode
+  watched?: boolean
+  progress?: { position: number; duration?: number | null }
 }) {
   const title = 'name' in media ? media.name : media.title
   const type = 'type' in media ? media.type : media.media_type
@@ -21,19 +25,61 @@ export function MediaCard({
   return (
     <article className="media-card-item grid min-w-0 gap-2.5 overflow-hidden">
       <button
-        className="aspect-[2/3] w-full cursor-pointer overflow-hidden rounded-lg border border-[hsl(0_0%_100%/8%)] bg-[hsl(240_10%_12%)] text-[hsl(240_6%_70%)] hover:outline-2 hover:outline-offset-2 hover:outline-[hsl(0_0%_100%/70%)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[hsl(0_0%_100%/70%)]"
+        className="relative aspect-[2/3] w-full cursor-pointer overflow-hidden rounded-lg border border-border bg-card text-muted-foreground hover:outline-2 hover:outline-offset-2 hover:outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         type="button"
         onClick={onOpen}
       >
         {poster ? <img className="size-full object-cover" src={poster} alt="" loading="lazy" /> : <span className="grid h-full place-items-center text-[1.4rem] font-bold">{title.slice(0, 2)}</span>}
+        {watched ? (
+          <span className="absolute top-2 right-2 rounded-full bg-[hsl(142_72%_36%)] px-2 py-1 text-[0.72rem] font-semibold text-white">
+            Watched
+          </span>
+        ) : null}
+        {!watched && progress && progress.position > 0 ? (
+          <span className="absolute inset-x-2 bottom-2 h-1.5 overflow-hidden rounded-full bg-black/55">
+            <span
+              className="block h-full rounded-full bg-primary"
+              style={{ width: `${progressPercent(progress.position, progress.duration)}%` }}
+            />
+          </span>
+        ) : null}
       </button>
       <div className="flex min-w-0 justify-between gap-2.5">
         <div className="min-w-0">
           <h3 className="m-0 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[0.95rem] tracking-normal">{title}</h3>
-          <p className={cn('mt-1 mb-0 text-[0.82rem] text-[hsl(240_6%_66%)]')}>{[type, release].filter(Boolean).join(' • ')}</p>
+          <p className={cn('mt-1 mb-0 text-[0.82rem] text-muted-foreground')}>
+            {[type, progressLabel(progress), release].filter(Boolean).join(' • ')}
+          </p>
         </div>
         {action}
       </div>
     </article>
   )
+}
+
+function progressPercent(position: number, duration?: number | null) {
+  if (!duration || duration <= 0) {
+    return 8
+  }
+  return Math.min(100, Math.max(4, Math.round((position / duration) * 100)))
+}
+
+function progressLabel(progress?: { position: number; duration?: number | null }) {
+  if (!progress || progress.position <= 0) {
+    return undefined
+  }
+  if (progress.duration && progress.duration > 0) {
+    return `${formatTime(progress.position)} / ${formatTime(progress.duration)}`
+  }
+  return formatTime(progress.position)
+}
+
+function formatTime(seconds: number) {
+  const minutes = Math.max(1, Math.round(seconds / 60))
+  if (minutes < 60) {
+    return `${minutes}m`
+  }
+  const hours = Math.floor(minutes / 60)
+  const remaining = minutes % 60
+  return remaining ? `${hours}h ${remaining}m` : `${hours}h`
 }

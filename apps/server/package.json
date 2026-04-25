@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "dev": "cargo run -p wadi-server",
+    "dev": "cargo watch -w src -w tests -w Cargo.toml -w ../../Cargo.toml -w ../../Cargo.lock -x \"run -p wadi-server\"",
     "build": "cargo build -p wadi-server",
     "lint": "cargo check -p wadi-server",
     "test": "cargo test -p wadi-server"

@@ -10,8 +10,12 @@ impl Config {
     pub fn from_env() -> Self {
         Self {
             bind_addr: std::env::var("BIND_ADDR").unwrap_or_else(|_| "127.0.0.1:4000".into()),
-            database_url: std::env::var("DATABASE_URL")
-                .unwrap_or_else(|_| "sqlite://apps/server/wadi.sqlite?mode=rwc".into()),
+            database_url: std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+                format!(
+                    "sqlite://{}/wadi.sqlite?mode=rwc",
+                    env!("CARGO_MANIFEST_DIR")
+                )
+            }),
             ipfs_gateway: std::env::var("IPFS_GATEWAY")
                 .unwrap_or_else(|_| "https://ipfs.io".into()),
             session_ttl_days: std::env::var("SESSION_TTL_DAYS")

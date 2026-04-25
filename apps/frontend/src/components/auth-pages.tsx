@@ -1,42 +1,55 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useForm } from '@tanstack/react-form'
 import { ArrowRight } from 'lucide-react'
-import { type FormEvent, useState } from 'react'
+import { z } from 'zod'
 
 import { login, queryKeys, register } from '@/api/queries'
 import { ApiError } from '@/api/client'
-import { appBackground, inputClass, labelClass, primaryButton, textButton } from '@/lib/styles'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { authBackground } from '@/lib/styles'
+import { canSubmitForm, fieldError, fieldErrorClass } from '@/lib/form'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/store/app-store'
 
 type AuthMode = 'login' | 'register'
 
+const authSchema = z
+  .object({
+    email: z.email('Enter a valid email address.'),
+    password: z.string().min(8, 'Password must be at least 8 characters.'),
+    confirmPassword: z.string(),
+  })
+  .refine((value) => !value.confirmPassword || value.password === value.confirmPassword, {
+    message: 'Passwords do not match.',
+    path: ['confirmPassword'],
+  })
+
 export function AuthPage({ mode, onModeChange }: { mode: AuthMode; onModeChange: (mode: AuthMode) => void }) {
   const queryClient = useQueryClient()
   const setToken = useAppStore((state) => state.setToken)
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
-  const [validationError, setValidationError] = useState<string | null>(null)
 
   const mutation = useMutation({
-    mutationFn: () => (mode === 'login' ? login(email, password) : register(email, password)),
+    mutationFn: (value: z.infer<typeof authSchema>) =>
+      mode === 'login' ? login(value.email, value.password) : register(value.email, value.password),
     onSuccess: async (data) => {
       setToken(data.token)
       await queryClient.invalidateQueries({ queryKey: queryKeys.me })
     },
   })
 
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-
-    if (mode === 'register' && password !== confirmPassword) {
-      setValidationError('Passwords do not match.')
-      return
-    }
-
-    setValidationError(null)
-    mutation.mutate()
-  }
+  const form = useForm({
+    defaultValues: {
+      email: '',
+      password: '',
+      confirmPassword: '',
+    },
+    validators: {
+      onSubmit: authSchema,
+    },
+    onSubmit: ({ value }) => mutation.mutate(value),
+  })
 
   const title = mode === 'login' ? 'Welcome back' : 'Create account'
   const body =
@@ -48,76 +61,98 @@ export function AuthPage({ mode, onModeChange }: { mode: AuthMode; onModeChange:
     <main
       className={cn(
         'grid min-h-svh content-center justify-items-center gap-[clamp(34px,7vh,72px)] px-6 py-[clamp(36px,8vw,96px)]',
-        appBackground,
+        'dark',
+        authBackground,
       )}
     >
-      <div className="text-sm font-bold uppercase leading-none text-[hsl(240_6%_58%)]">Wadi</div>
-      <form className="grid w-[min(640px,100%)] gap-7 border-0 bg-transparent p-0 shadow-none" onSubmit={onSubmit}>
+      <div className="text-sm font-bold uppercase leading-none text-muted-foreground">Wadi</div>
+      <form
+        className="grid w-[min(640px,100%)] gap-7 border-0 bg-transparent p-0 shadow-none"
+        onSubmit={(event) => {
+          event.preventDefault()
+          void form.handleSubmit()
+        }}
+      >
         <div className="grid gap-4 text-center">
           <h1 className="m-0 text-[clamp(2rem,4vw,3.25rem)] leading-[0.95] tracking-normal">{title}</h1>
-          <p className="w-[min(560px,100%)] justify-self-center text-[clamp(1rem,1.5vw,1.18rem)] text-[hsl(240_6%_66%)]">{body}</p>
+          <p className="w-[min(560px,100%)] justify-self-center text-[clamp(1rem,1.5vw,1.18rem)] text-muted-foreground">{body}</p>
         </div>
 
-        <label className={cn(labelClass, 'w-[min(420px,100%)] justify-self-center')}>
-          Email
-          <input
-            className={inputClass}
-            type="email"
-            autoComplete="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            required
-          />
-        </label>
+        <form.Field name="email">
+          {(field) => (
+            <div className="grid w-[min(420px,100%)] justify-self-center gap-2">
+              <Label htmlFor={field.name}>Email</Label>
+              <Input
+                id={field.name}
+                type="email"
+                autoComplete="email"
+                value={field.state.value}
+                onBlur={field.handleBlur}
+                onChange={(event) => field.handleChange(event.target.value)}
+                aria-invalid={field.state.meta.errors.length ? true : undefined}
+              />
+              {fieldError(field) ? <p className={fieldErrorClass}>{fieldError(field)}</p> : null}
+            </div>
+          )}
+        </form.Field>
 
-        <label className={cn(labelClass, 'w-[min(420px,100%)] justify-self-center')}>
-          Password
-          <input
-            className={inputClass}
-            type="password"
-            autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            minLength={8}
-            required
-          />
-        </label>
+        <form.Field name="password">
+          {(field) => (
+            <div className="grid w-[min(420px,100%)] justify-self-center gap-2">
+              <Label htmlFor={field.name}>Password</Label>
+              <Input
+                id={field.name}
+                type="password"
+                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                value={field.state.value}
+                onBlur={field.handleBlur}
+                onChange={(event) => field.handleChange(event.target.value)}
+                aria-invalid={field.state.meta.errors.length ? true : undefined}
+              />
+              {fieldError(field) ? <p className={fieldErrorClass}>{fieldError(field)}</p> : null}
+            </div>
+          )}
+        </form.Field>
 
         {mode === 'register' ? (
-          <label className={cn(labelClass, 'w-[min(420px,100%)] justify-self-center')}>
-            Repeat password
-            <input
-              className={inputClass}
-              type="password"
-              autoComplete="new-password"
-              value={confirmPassword}
-              onChange={(event) => {
-                setConfirmPassword(event.target.value)
-                if (validationError) {
-                  setValidationError(null)
-                }
-              }}
-              minLength={8}
-              required
-            />
-          </label>
+          <form.Field name="confirmPassword">
+            {(field) => (
+              <div className="grid w-[min(420px,100%)] justify-self-center gap-2">
+                <Label htmlFor={field.name}>Repeat password</Label>
+                <Input
+                  id={field.name}
+                  type="password"
+                  autoComplete="new-password"
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                  aria-invalid={field.state.meta.errors.length ? true : undefined}
+                />
+                {fieldError(field) ? <p className={fieldErrorClass}>{fieldError(field)}</p> : null}
+              </div>
+            )}
+          </form.Field>
         ) : null}
 
-        {validationError ? <p className="w-[min(420px,100%)] justify-self-center text-[hsl(0_88%_76%)]">{validationError}</p> : null}
-        {mutation.error ? <p className="w-[min(420px,100%)] justify-self-center text-[hsl(0_88%_76%)]">{authError(mutation.error)}</p> : null}
+        {mutation.error ? <p className="w-[min(420px,100%)] justify-self-center text-destructive">{authError(mutation.error)}</p> : null}
 
-        <button className={cn(primaryButton, 'w-[min(420px,100%)] justify-self-center')} type="submit" disabled={mutation.isPending}>
-          {mutation.isPending ? 'Working' : mode === 'login' ? 'Login' : 'Register'}
-          <ArrowRight aria-hidden="true" />
-        </button>
+        <form.Subscribe selector={(state) => ({ canSubmit: state.canSubmit, isSubmitting: state.isSubmitting })}>
+          {(state) => (
+            <Button className="w-[min(420px,100%)] justify-self-center" type="submit" disabled={!canSubmitForm(state, mutation.isPending)}>
+              {mutation.isPending ? 'Working' : mode === 'login' ? 'Login' : 'Register'}
+              <ArrowRight aria-hidden="true" />
+            </Button>
+          )}
+        </form.Subscribe>
 
-        <button
-          className={cn(textButton, 'w-[min(420px,100%)] justify-self-center')}
+        <Button
+          className="w-[min(420px,100%)] justify-self-center"
+          variant="link"
           type="button"
           onClick={() => onModeChange(mode === 'login' ? 'register' : 'login')}
         >
           {mode === 'login' ? 'Need an account? Register' : 'Already have an account? Login'}
-        </button>
+        </Button>
       </form>
     </main>
   )

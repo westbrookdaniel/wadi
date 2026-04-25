@@ -1,5 +1,6 @@
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Skeleton } from '@/components/ui/skeleton'
 import { mediaRow, stateBlock } from '@/lib/styles'
-import { cn } from '@/lib/utils'
 
 export function LoadingState({ label = 'Loading' }: { label?: string }) {
   return (
@@ -29,9 +30,10 @@ export function EmptyState({
 
 export function ErrorState({ error }: { error: unknown }) {
   return (
-    <div className={cn(stateBlock, 'text-[hsl(0_88%_76%)]')} role="alert">
-      {error instanceof Error ? error.message : 'Something went wrong'}
-    </div>
+    <Alert variant="destructive">
+      <AlertTitle>Unable to continue</AlertTitle>
+      <AlertDescription>{error instanceof Error ? error.message : 'Something went wrong'}</AlertDescription>
+    </Alert>
   )
 }
 
@@ -39,10 +41,7 @@ export function PosterSkeletonRow({ count = 8 }: { count?: number }) {
   return (
     <div className={mediaRow} aria-hidden="true">
       {Array.from({ length: count }).map((_, index) => (
-        <div
-          className="aspect-[2/3] rounded-lg bg-[linear-gradient(90deg,transparent,hsl(0_0%_100%/7%),transparent),hsl(0_0%_100%/6%)] bg-[length:220%_100%,100%_100%] animate-[skeleton-sheen_1.4s_ease-in-out_infinite]"
-          key={index}
-        />
+        <Skeleton className="aspect-[2/3] rounded-lg" key={index} />
       ))}
     </div>
   )

@@ -54,3 +54,21 @@ pub struct ListItem {
     pub meta: Option<Value>,
     pub created_at: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WatchState {
+    pub media_type: String,
+    pub media_id: String,
+    pub video_id: Option<String>,
+    pub watched: bool,
+    pub position_seconds: i64,
+    pub duration_seconds: Option<i64>,
+    pub updated_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WatchData {
+    pub media_type: String,
+    pub media_id: String,
+    pub items: Vec<WatchState>,
+}

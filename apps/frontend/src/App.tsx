@@ -12,8 +12,15 @@ import { useEffect, useState } from 'react'
 import { meQuery, metaQuery } from '@/api/queries'
 import type { MediaPreview, Page } from '@/api/types'
 import { AuthPage } from '@/components/auth-pages'
-import { MediaDetailPage, MediaPlayerPage, type PlayableStream } from '@/components/media-detail'
+import {
+  MediaDetailPage,
+  MediaPlayerPage,
+  type PlaybackTarget,
+  type PlayableStream,
+} from '@/components/media-detail'
 import { LoadingState } from '@/components/status'
+import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { WatchlistAddButton } from '@/components/watchlist-add-button'
 import { appBackground } from '@/lib/styles'
 import { cn } from '@/lib/utils'
@@ -85,6 +92,8 @@ function App() {
   })
   const [selectedMedia, setSelectedMedia] = useState<MediaPreview | null>(() => mediaFromPath())
   const [selectedStream, setSelectedStream] = useState<PlayableStream | null>(null)
+  const [selectedPlaybackTarget, setSelectedPlaybackTarget] = useState<PlaybackTarget | null>(null)
+  const [preferredVideoId, setPreferredVideoId] = useState<string | null>(null)
 
   const me = useQuery(meQuery(Boolean(token)))
   const routeMedia = useQuery(
@@ -104,16 +113,25 @@ function App() {
 
   const displayMedia = mediaPreviewFromMeta(selectedMedia, routeMedia.data) ?? selectedMedia
 
-  const openMedia = (media: MediaPreview) => {
+  const openMedia = (media: MediaPreview, videoId: string | null = null) => {
     setSelectedStream(null)
+    setSelectedPlaybackTarget(null)
+    setPreferredVideoId(videoId)
     setSelectedMedia(media)
     window.history.pushState(null, '', mediaPath(media))
   }
 
   const backToBrowse = () => {
     setSelectedStream(null)
+    setSelectedPlaybackTarget(null)
+    setPreferredVideoId(null)
     setSelectedMedia(null)
     window.history.pushState(null, '', `/${activePage}`)
+  }
+
+  const playStream = (stream: PlayableStream, target: PlaybackTarget) => {
+    setSelectedPlaybackTarget(target)
+    setSelectedStream(stream)
   }
 
   if (!token) {
@@ -168,13 +186,17 @@ function App() {
               const isActive = activePage === id
 
               return (
-                <button
+                <Tooltip key={id}>
+                  <TooltipTrigger asChild>
+                <Button
                   key={id}
+                  variant="ghost"
+                  size="icon-lg"
                   type="button"
                   className={cn(
-                    'group relative grid size-12 cursor-pointer place-items-center rounded-full border-0 bg-transparent text-[hsl(240_6%_58%)] transition-[color,background-color,transform] duration-200 ease-out focus-visible:bg-[hsl(0_0%_100%/7%)] focus-visible:text-[hsl(0_0%_88%)] focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-[hsl(322_100%_72%/72%)] hover:bg-[hsl(0_0%_100%/7%)] hover:text-[hsl(0_0%_88%)] max-[800px]:size-11 [&_svg]:size-[22px] [&_svg]:transition-[transform,stroke-width] [&_svg]:duration-200 [&_svg]:ease-out',
+                    'size-13 rounded-full text-muted-foreground transition-[color,background-color,transform] duration-200 ease-out hover:bg-muted hover:text-foreground max-[800px]:size-12 [&_svg]:size-6 [&_svg]:transition-[transform,stroke-width] [&_svg]:duration-200 [&_svg]:ease-out',
                     isActive &&
-                      'scale-[1.08] bg-[hsl(0_0%_100%/10%)] text-[hsl(0_0%_98%)] [&_svg]:scale-[1.16] [&_svg]:stroke-[2.35]',
+                      'scale-[1.06] bg-muted text-foreground [&_svg]:scale-[1.12] [&_svg]:stroke-[2.35]',
                   )}
                   aria-label={label}
                   aria-current={isActive ? 'page' : undefined}
@@ -182,18 +204,19 @@ function App() {
                     setActivePage(id)
                     setSelectedMedia(null)
                     setSelectedStream(null)
+                    setSelectedPlaybackTarget(null)
+                    setPreferredVideoId(null)
                     window.history.pushState(null, '', `/${id}`)
                   }}
                   title={label}
                 >
                   <Icon aria-hidden="true" />
-                  <span
-                    className="pointer-events-none absolute left-[calc(100%+12px)] top-1/2 z-30 w-max max-w-[180px] origin-left -translate-y-1/2 translate-x-[-4px] scale-95 rounded-[7px] border border-[hsl(0_0%_100%/10%)] bg-[hsl(240_12%_8%/92%)] px-[9px] py-1.5 text-xs leading-none text-[hsl(0_0%_96%)] opacity-0 shadow-[0_12px_28px_hsl(0_0%_0%/28%)] transition-[opacity,transform] duration-150 group-focus-visible:translate-x-0 group-focus-visible:scale-100 group-focus-visible:opacity-100 group-hover:translate-x-0 group-hover:scale-100 group-hover:opacity-100 max-[800px]:left-1/2 max-[800px]:top-auto max-[800px]:bottom-[calc(100%+10px)] max-[800px]:origin-bottom max-[800px]:-translate-x-1/2 max-[800px]:translate-y-1 max-[800px]:group-focus-visible:-translate-x-1/2 max-[800px]:group-focus-visible:translate-y-0 max-[800px]:group-hover:-translate-x-1/2 max-[800px]:group-hover:translate-y-0"
-                    role="presentation"
-                  >
+                </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" className="max-[800px]:hidden">
                     {label}
-                  </span>
-                </button>
+                  </TooltipContent>
+                </Tooltip>
               )
             })}
           </nav>
@@ -208,17 +231,22 @@ function App() {
         )}
         aria-label={displayMedia ? `${displayMedia.name} page` : `${activePage} page`}
       >
-        {displayMedia && selectedStream ? (
+        {displayMedia && selectedStream && selectedPlaybackTarget ? (
           <MediaPlayerPage
             media={displayMedia}
             stream={selectedStream}
-            onBack={() => setSelectedStream(null)}
+            target={selectedPlaybackTarget}
+            onBack={() => {
+              setSelectedStream(null)
+              setSelectedPlaybackTarget(null)
+            }}
           />
         ) : displayMedia ? (
           <MediaDetailPage
             media={displayMedia}
+            preferredVideoId={preferredVideoId}
             onBack={backToBrowse}
-            onPlay={setSelectedStream}
+            onPlay={playStream}
             listAction={<WatchlistAddButton media={displayMedia} />}
           />
         ) : (
@@ -243,7 +271,7 @@ function App() {
 export default App
 
 function mediaPreviewFromMeta(media: MediaPreview | null, data: unknown): MediaPreview | null {
-  if (!media || media.name !== media.id) {
+  if (!media) {
     return null
   }
 
@@ -267,18 +295,27 @@ function mediaPreviewFromMeta(media: MediaPreview | null, data: unknown): MediaP
       continue
     }
 
-    const name = stringValue(meta.name) ?? stringValue(meta.title)
+    const metaId = stringValue(meta.id)
+    const metaType = stringValue(meta.type)
+    if (metaId && metaId !== media.id) {
+      continue
+    }
+    if (metaType && metaType !== media.type) {
+      continue
+    }
+
+    const name = stringValue(meta.name) ?? stringValue(meta.title) ?? media.name
     if (!name) {
       continue
     }
 
     return {
-      id: stringValue(meta.id) ?? media.id,
-      type: stringValue(meta.type) ?? media.type,
+      id: metaId ?? media.id,
+      type: metaType ?? media.type,
       name,
-      poster: stringValue(meta.poster),
-      releaseInfo: stringValue(meta.releaseInfo) ?? stringValue(meta.year),
-      description: stringValue(meta.description),
+      poster: stringValue(meta.poster) ?? media.poster,
+      releaseInfo: stringValue(meta.releaseInfo) ?? stringValue(meta.year) ?? media.releaseInfo,
+      description: stringValue(meta.description) ?? media.description,
       raw: meta,
     }
   }

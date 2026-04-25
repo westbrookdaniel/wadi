@@ -106,6 +106,39 @@ export type MediaPreview = {
   raw: Record<string, unknown>
 }
 
+export type WatchState = {
+  media_type: string
+  media_id: string
+  video_id: string | null
+  watched: boolean
+  position_seconds: number
+  duration_seconds: number | null
+  updated_at: string | null
+}
+
+export type ContinueWatchingItem = WatchState
+
+export type WatchDataResponse = {
+  media_type: string
+  media_id: string
+  items: WatchState[]
+}
+
+export type WatchStateRequest = {
+  media_type: string
+  media_id: string
+  video_id?: string | null
+  watched: boolean
+}
+
+export type WatchProgressRequest = {
+  media_type: string
+  media_id: string
+  video_id?: string | null
+  position_seconds: number
+  duration_seconds?: number | null
+}
+
 export type StreamInfo = {
   title?: string
   name?: string

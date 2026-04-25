@@ -11,6 +11,13 @@ Run the backend directly with:
 cargo run -p wadi-server
 ```
 
+For watched local development through Turbo, install `cargo-watch` once:
+
+```sh
+cargo install cargo-watch
+pnpm dev
+```
+
 By default it listens on `127.0.0.1:4000` and stores SQLite data at
 `apps/server/wadi.sqlite`. Configure with `BIND_ADDR`, `DATABASE_URL`,
 `IPFS_GATEWAY`, and `SESSION_TTL_DAYS`.

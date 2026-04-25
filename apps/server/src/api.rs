@@ -15,7 +15,7 @@ use crate::{
     addon::{ResourceRequest, TransportKind},
     auth,
     error::{AppError, AppResult},
-    models::{AddonRecord, AuthUser, ListItem, User, UserList},
+    models::{AddonRecord, AuthUser, ListItem, User, UserList, WatchData, WatchState},
     stremio::{Manifest, ResourceKind},
     AppState,
 };
@@ -29,11 +29,17 @@ pub fn router(state: AppState) -> Router {
         .route("/api/auth/me", get(me))
         .route("/api/addons", get(list_addons))
         .route("/api/addons/install", post(install_addon))
-        .route("/api/addons/{addon_id}", get(get_addon).delete(delete_addon))
+        .route(
+            "/api/addons/{addon_id}",
+            get(get_addon).delete(delete_addon),
+        )
         .route("/api/addons/{addon_id}/configure", post(configure_addon))
         .route("/api/lists", get(list_lists).post(create_list))
         .route("/api/lists/{list_id}", put(update_list).delete(delete_list))
-        .route("/api/lists/{list_id}/items", get(list_items).post(add_list_item))
+        .route(
+            "/api/lists/{list_id}/items",
+            get(list_items).post(add_list_item),
+        )
         .route(
             "/api/lists/{list_id}/items/{item_id}",
             delete(delete_list_item),
@@ -43,6 +49,11 @@ pub fn router(state: AppState) -> Router {
         .route("/api/meta/{content_type}/{id}", get(meta))
         .route("/api/streams/{content_type}/{id}", get(streams))
         .route("/api/subtitles/{content_type}/{id}", get(subtitles))
+        .route("/api/watch-state", put(set_watch_state))
+        .route("/api/watch-state/{content_type}/{id}", get(get_watch_state))
+        .route("/api/watch-data/{content_type}/{id}", get(get_watch_data))
+        .route("/api/watch-progress", put(set_watch_progress))
+        .route("/api/continue-watching", get(continue_watching))
         .with_state(state)
 }
 
@@ -89,7 +100,10 @@ async fn register(
         .fetch_one(&state.db)
         .await?;
     let user = user_from_row(&row)?;
-    Ok((StatusCode::CREATED, Json(auth::create_session(&state, user).await?)))
+    Ok((
+        StatusCode::CREATED,
+        Json(auth::create_session(&state, user).await?),
+    ))
 }
 
 #[derive(Debug, Deserialize)]
@@ -183,7 +197,10 @@ async fn install_addon(
     .execute(&state.db)
     .await?;
 
-    Ok((StatusCode::CREATED, Json(load_addon(&state, &user.id, &id).await?)))
+    Ok((
+        StatusCode::CREATED,
+        Json(load_addon(&state, &user.id, &id).await?),
+    ))
 }
 
 async fn list_addons(State(state): State<AppState>, user: AuthUser) -> AppResult<Json<Value>> {
@@ -269,7 +286,10 @@ async fn create_list(
         .bind(payload.description)
         .execute(&state.db)
         .await?;
-    Ok((StatusCode::CREATED, Json(load_list(&state, &user.id, &id).await?)))
+    Ok((
+        StatusCode::CREATED,
+        Json(load_list(&state, &user.id, &id).await?),
+    ))
 }
 
 async fn update_list(
@@ -393,18 +413,181 @@ async fn delete_list_item(
     user: AuthUser,
     Path((list_id, item_id)): Path<(String, String)>,
 ) -> AppResult<StatusCode> {
-    let result = sqlx::query(
-        "DELETE FROM list_items WHERE id = ?1 AND list_id = ?2 AND user_id = ?3",
-    )
-    .bind(item_id)
-    .bind(list_id)
-    .bind(user.id)
-    .execute(&state.db)
-    .await?;
+    let result =
+        sqlx::query("DELETE FROM list_items WHERE id = ?1 AND list_id = ?2 AND user_id = ?3")
+            .bind(item_id)
+            .bind(list_id)
+            .bind(user.id)
+            .execute(&state.db)
+            .await?;
     if result.rows_affected() == 0 {
         return Err(AppError::NotFound);
     }
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Debug, Deserialize)]
+struct SetWatchStateRequest {
+    media_type: String,
+    media_id: String,
+    video_id: Option<String>,
+    watched: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct SetWatchProgressRequest {
+    media_type: String,
+    media_id: String,
+    video_id: Option<String>,
+    position_seconds: i64,
+    duration_seconds: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WatchStateQuery {
+    video_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ContinueWatchingQuery {
+    limit: Option<i64>,
+}
+
+async fn set_watch_state(
+    State(state): State<AppState>,
+    user: AuthUser,
+    Json(payload): Json<SetWatchStateRequest>,
+) -> AppResult<Json<WatchState>> {
+    let media_type = validate_identity_part(&payload.media_type, "media_type")?;
+    let media_id = validate_identity_part(&payload.media_id, "media_id")?;
+    let video_id = normalize_optional_identity(payload.video_id);
+    upsert_watch_state(
+        &state,
+        &user.id,
+        &media_type,
+        &media_id,
+        video_id.as_deref(),
+        Some(payload.watched),
+        None,
+        None,
+    )
+    .await?;
+    Ok(Json(
+        load_watch_state(
+            &state,
+            &user.id,
+            &media_type,
+            &media_id,
+            video_id.as_deref(),
+        )
+        .await?,
+    ))
+}
+
+async fn set_watch_progress(
+    State(state): State<AppState>,
+    user: AuthUser,
+    Json(payload): Json<SetWatchProgressRequest>,
+) -> AppResult<Json<WatchState>> {
+    if payload.position_seconds < 0 {
+        return Err(AppError::BadRequest(
+            "position_seconds must be at least 0".into(),
+        ));
+    }
+    if matches!(payload.duration_seconds, Some(duration) if duration <= 0) {
+        return Err(AppError::BadRequest(
+            "duration_seconds must be greater than 0".into(),
+        ));
+    }
+
+    let media_type = validate_identity_part(&payload.media_type, "media_type")?;
+    let media_id = validate_identity_part(&payload.media_id, "media_id")?;
+    let video_id = normalize_optional_identity(payload.video_id);
+    let watched = payload
+        .duration_seconds
+        .filter(|duration| payload.position_seconds >= *duration)
+        .map(|_| true);
+
+    upsert_watch_state(
+        &state,
+        &user.id,
+        &media_type,
+        &media_id,
+        video_id.as_deref(),
+        watched,
+        Some(payload.position_seconds),
+        Some(payload.duration_seconds),
+    )
+    .await?;
+    Ok(Json(
+        load_watch_state(
+            &state,
+            &user.id,
+            &media_type,
+            &media_id,
+            video_id.as_deref(),
+        )
+        .await?,
+    ))
+}
+
+async fn get_watch_state(
+    State(state): State<AppState>,
+    user: AuthUser,
+    Path((media_type, media_id)): Path<(String, String)>,
+    Query(query): Query<WatchStateQuery>,
+) -> AppResult<Json<WatchState>> {
+    let media_type = validate_identity_part(&media_type, "media_type")?;
+    let media_id = validate_identity_part(&media_id, "media_id")?;
+    let video_id = normalize_optional_identity(query.video_id);
+    Ok(Json(
+        load_watch_state(
+            &state,
+            &user.id,
+            &media_type,
+            &media_id,
+            video_id.as_deref(),
+        )
+        .await?,
+    ))
+}
+
+async fn get_watch_data(
+    State(state): State<AppState>,
+    user: AuthUser,
+    Path((media_type, media_id)): Path<(String, String)>,
+) -> AppResult<Json<WatchData>> {
+    let media_type = validate_identity_part(&media_type, "media_type")?;
+    let media_id = validate_identity_part(&media_id, "media_id")?;
+    Ok(Json(
+        load_watch_data(&state, &user.id, &media_type, &media_id).await?,
+    ))
+}
+
+async fn continue_watching(
+    State(state): State<AppState>,
+    user: AuthUser,
+    Query(query): Query<ContinueWatchingQuery>,
+) -> AppResult<Json<Value>> {
+    let limit = query.limit.unwrap_or(20).clamp(1, 100);
+    let rows = sqlx::query(
+        r#"
+        SELECT media_type, media_id, video_id, watched, position_seconds, duration_seconds, updated_at
+        FROM watch_states
+        WHERE user_id = ?1 AND watched = 0 AND position_seconds > 0
+        ORDER BY updated_at DESC
+        LIMIT ?2
+        "#,
+    )
+    .bind(user.id)
+    .bind(limit)
+    .fetch_all(&state.db)
+    .await?;
+    let items = rows
+        .iter()
+        .map(watch_state_from_row)
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(Json(json!({ "items": items })))
 }
 
 async fn catalogs(State(state): State<AppState>, user: AuthUser) -> AppResult<Json<Value>> {
@@ -564,6 +747,21 @@ fn validate_list_name(name: &str) -> AppResult<String> {
     Ok(name.to_string())
 }
 
+fn validate_identity_part(value: &str, field: &str) -> AppResult<String> {
+    let value = value.trim();
+    if value.is_empty() {
+        return Err(AppError::BadRequest(format!("{field} is required")));
+    }
+    Ok(value.to_string())
+}
+
+fn normalize_optional_identity(value: Option<String>) -> Option<String> {
+    value.and_then(|value| {
+        let value = value.trim().to_string();
+        (!value.is_empty()).then_some(value)
+    })
+}
+
 fn parse_transport(value: &str) -> AppResult<TransportKind> {
     TransportKind::parse(value)
         .ok_or_else(|| AppError::BadRequest(format!("unknown addon transport '{value}'")))
@@ -637,6 +835,113 @@ async fn load_list_item_by_identity(
     list_item_from_row(&row)
 }
 
+async fn upsert_watch_state(
+    state: &AppState,
+    user_id: &str,
+    media_type: &str,
+    media_id: &str,
+    video_id: Option<&str>,
+    watched: Option<bool>,
+    position_seconds: Option<i64>,
+    duration_seconds: Option<Option<i64>>,
+) -> AppResult<()> {
+    let id = Uuid::new_v4().to_string();
+    let watched_value = watched.map(|value| if value { 1_i64 } else { 0_i64 });
+    sqlx::query(
+        r#"
+        INSERT INTO watch_states
+            (id, user_id, media_type, media_id, video_id, watched, position_seconds, duration_seconds)
+        VALUES
+            (?1, ?2, ?3, ?4, ?5, COALESCE(?6, 0), COALESCE(?7, 0), ?8)
+        ON CONFLICT(user_id, media_type, media_id, COALESCE(video_id, '')) DO UPDATE SET
+            watched = CASE WHEN ?9 THEN excluded.watched ELSE watch_states.watched END,
+            position_seconds = CASE WHEN ?10 THEN excluded.position_seconds ELSE watch_states.position_seconds END,
+            duration_seconds = CASE WHEN ?11 THEN excluded.duration_seconds ELSE watch_states.duration_seconds END,
+            updated_at = datetime('now')
+        "#,
+    )
+    .bind(id)
+    .bind(user_id)
+    .bind(media_type)
+    .bind(media_id)
+    .bind(video_id)
+    .bind(watched_value)
+    .bind(position_seconds)
+    .bind(duration_seconds.flatten())
+    .bind(watched.is_some())
+    .bind(position_seconds.is_some())
+    .bind(duration_seconds.is_some())
+    .execute(&state.db)
+    .await?;
+    Ok(())
+}
+
+async fn load_watch_state(
+    state: &AppState,
+    user_id: &str,
+    media_type: &str,
+    media_id: &str,
+    video_id: Option<&str>,
+) -> AppResult<WatchState> {
+    let row = sqlx::query(
+        r#"
+        SELECT media_type, media_id, video_id, watched, position_seconds, duration_seconds, updated_at
+        FROM watch_states
+        WHERE user_id = ?1 AND media_type = ?2 AND media_id = ?3 AND COALESCE(video_id, '') = COALESCE(?4, '')
+        "#,
+    )
+    .bind(user_id)
+    .bind(media_type)
+    .bind(media_id)
+    .bind(video_id)
+    .fetch_optional(&state.db)
+    .await?;
+
+    match row {
+        Some(row) => watch_state_from_row(&row),
+        None => Ok(WatchState {
+            media_type: media_type.to_string(),
+            media_id: media_id.to_string(),
+            video_id: video_id.map(ToString::to_string),
+            watched: false,
+            position_seconds: 0,
+            duration_seconds: None,
+            updated_at: None,
+        }),
+    }
+}
+
+async fn load_watch_data(
+    state: &AppState,
+    user_id: &str,
+    media_type: &str,
+    media_id: &str,
+) -> AppResult<WatchData> {
+    let rows = sqlx::query(
+        r#"
+        SELECT media_type, media_id, video_id, watched, position_seconds, duration_seconds, updated_at
+        FROM watch_states
+        WHERE user_id = ?1 AND media_type = ?2 AND media_id = ?3
+        ORDER BY COALESCE(video_id, ''), updated_at DESC
+        "#,
+    )
+    .bind(user_id)
+    .bind(media_type)
+    .bind(media_id)
+    .fetch_all(&state.db)
+    .await?;
+    let items = rows
+        .iter()
+        .map(watch_state_from_row)
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(WatchData {
+        media_type: media_type.to_string(),
+        media_id: media_id.to_string(),
+        items,
+    })
+}
+
 fn user_from_row(row: &sqlx::sqlite::SqliteRow) -> AppResult<User> {
     Ok(User {
         id: row.try_get("id")?,
@@ -686,5 +991,18 @@ fn list_item_from_row(row: &sqlx::sqlite::SqliteRow) -> AppResult<ListItem> {
         release_info: row.try_get("release_info")?,
         meta: meta_json.as_deref().map(serde_json::from_str).transpose()?,
         created_at: row.try_get("created_at")?,
+    })
+}
+
+fn watch_state_from_row(row: &sqlx::sqlite::SqliteRow) -> AppResult<WatchState> {
+    let watched: i64 = row.try_get("watched")?;
+    Ok(WatchState {
+        media_type: row.try_get("media_type")?,
+        media_id: row.try_get("media_id")?,
+        video_id: row.try_get("video_id")?,
+        watched: watched != 0,
+        position_seconds: row.try_get("position_seconds")?,
+        duration_seconds: row.try_get("duration_seconds")?,
+        updated_at: row.try_get("updated_at")?,
     })
 }

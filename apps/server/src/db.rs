@@ -64,12 +64,29 @@ pub async fn migrate(pool: &SqlitePool) -> sqlx::Result<()> {
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
 
+        CREATE TABLE IF NOT EXISTS watch_states (
+            id TEXT PRIMARY KEY NOT NULL,
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            media_type TEXT NOT NULL,
+            media_id TEXT NOT NULL,
+            video_id TEXT,
+            watched INTEGER NOT NULL DEFAULT 0,
+            position_seconds INTEGER NOT NULL DEFAULT 0,
+            duration_seconds INTEGER,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
         CREATE INDEX IF NOT EXISTS idx_sessions_token_hash ON sessions(token_hash);
         CREATE INDEX IF NOT EXISTS idx_addons_user ON addons(user_id);
         CREATE INDEX IF NOT EXISTS idx_lists_user ON lists(user_id);
         CREATE INDEX IF NOT EXISTS idx_list_items_list ON list_items(list_id);
         CREATE UNIQUE INDEX IF NOT EXISTS idx_list_items_identity
             ON list_items(list_id, media_type, media_id, COALESCE(video_id, ''));
+        CREATE INDEX IF NOT EXISTS idx_watch_states_continue
+            ON watch_states(user_id, watched, position_seconds, updated_at);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_watch_states_identity
+            ON watch_states(user_id, media_type, media_id, COALESCE(video_id, ''));
         "#,
     )
     .execute(pool)
