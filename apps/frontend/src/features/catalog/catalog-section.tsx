@@ -1,24 +1,27 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery } from "@tanstack/react-query";
 
-import { catalogQuery } from '@/api/queries'
-import type { CatalogEntry, MediaPreview } from '@/api/types'
-import { EmptyState, ErrorState, PosterSkeletonRow } from '@/components/status'
+import { catalogQuery } from "@/api/queries";
+import type { CatalogEntry, MediaPreview } from "@/api/types";
+import { EmptyState, ErrorState, PosterSkeletonRow } from "@/components/status";
 
-import { MediaCard } from '@/features/media/media-card'
-import { contentSection, mediaRow, mutedText, sectionHeading } from '@/lib/styles'
+import { MediaCard } from "@/features/media/media-card";
+import { contentSection, mutedText, sectionHeading } from "@/lib/styles";
+import { MediaRow } from "@/components/media-row";
 
 export function CatalogSection({
   entry,
   search,
   onOpen,
 }: {
-  entry: CatalogEntry
-  search?: string
-  onOpen: (media: MediaPreview) => void
+  entry: CatalogEntry;
+  search?: string;
+  onOpen: (media: MediaPreview) => void;
 }) {
-  const extras: Record<string, string> = search ? { search } : {}
-  const catalog = useQuery(catalogQuery(entry.catalog.type, entry.catalog.id, extras))
-  const title = entry.catalog.name ?? entry.catalog.id
+  const extras: Record<string, string> = search ? { search } : {};
+  const catalog = useQuery(
+    catalogQuery(entry.catalog.type, entry.catalog.id, extras),
+  );
+  const title = entry.catalog.name ?? entry.catalog.id;
 
   return (
     <section className={contentSection}>
@@ -32,14 +35,18 @@ export function CatalogSection({
       {catalog.isLoading ? <PosterSkeletonRow /> : null}
       {catalog.error ? <ErrorState error={catalog.error} /> : null}
       {catalog.data?.length ? (
-        <div className={mediaRow}>
+        <MediaRow>
           {catalog.data.slice(0, 12).map((media) => (
-            <MediaCard key={`${media.type}-${media.id}`} media={media} onOpen={() => onOpen(media)} />
+            <MediaCard
+              key={`${media.type}-${media.id}`}
+              media={media}
+              onOpen={() => onOpen(media)}
+            />
           ))}
-        </div>
+        </MediaRow>
       ) : !catalog.isLoading && !catalog.error ? (
         <EmptyState title="No items returned" />
       ) : null}
     </section>
-  )
+  );
 }

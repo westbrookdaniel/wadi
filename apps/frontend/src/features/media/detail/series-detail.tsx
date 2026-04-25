@@ -1,25 +1,25 @@
-import { useQuery } from '@tanstack/react-query'
-import { ChevronLeft } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useQuery } from "@tanstack/react-query";
+import { ChevronLeft } from "lucide-react";
+import { useMemo, useState } from "react";
 
-import { findWatchState, streamsQuery, watchDataQuery } from '@/api/queries'
-import type { MediaPreview, WatchDataResponse } from '@/api/types'
-import { Button } from '@/components/ui/button'
+import { findWatchState, streamsQuery, watchDataQuery } from "@/api/queries";
+import type { MediaPreview, WatchDataResponse } from "@/api/types";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
-import { mutedText } from '@/lib/styles'
-import { cn } from '@/lib/utils'
+} from "@/components/ui/select";
+import { bottomPagePadding, mutedText } from "@/lib/styles";
+import { cn } from "@/lib/utils";
 
-import { DetailShell } from './detail-shell'
-import { StreamList } from './stream-list'
-import type { Episode, PlaybackTarget, PlayableStream } from './types'
+import { DetailShell } from "./detail-shell";
+import { StreamList } from "./stream-list";
+import type { Episode, PlaybackTarget, PlayableStream } from "./types";
 
-type SeriesStep = 'episodes' | 'streams'
+type SeriesStep = "episodes" | "streams";
 
 export function SeriesDetailPage({
   media,
@@ -28,45 +28,81 @@ export function SeriesDetailPage({
   onBack,
   onPlay,
 }: {
-  media: MediaPreview
-  listAction?: React.ReactNode
-  preferredVideoId?: string | null
-  onBack: () => void
-  onPlay: (stream: PlayableStream, target: PlaybackTarget) => void
+  media: MediaPreview;
+  listAction?: React.ReactNode;
+  preferredVideoId?: string | null;
+  onBack: () => void;
+  onPlay: (stream: PlayableStream, target: PlaybackTarget) => void;
 }) {
-  const episodes = useMemo(() => parseEpisodes(media.raw), [media.raw])
-  const preferredEpisode = episodes.find((episode) => episode.id === preferredVideoId)
-  const [selectedSeasonOverride, setSelectedSeasonOverride] = useState<number | null>(null)
-  const selectedSeason = selectedSeasonOverride ?? preferredEpisode?.season ?? episodes[0]?.season ?? null
-  const visibleEpisodes = episodes.filter((episode) => episode.season === selectedSeason)
-  const [selectedEpisodeIdOverride, setSelectedEpisodeIdOverride] = useState<string | null>(null)
-  const selectedEpisodeId = selectedEpisodeIdOverride ?? preferredEpisode?.id ?? null
-  const [stepOverride, setStepOverride] = useState<SeriesStep | null>(null)
-  const step = stepOverride ?? (preferredEpisode ? 'streams' : 'episodes')
-  const selectedEpisode = episodes.find((episode) => episode.id === selectedEpisodeId) ?? null
-  const streams = useQuery(streamsQuery(media.type, selectedEpisode?.id ?? '', Boolean(selectedEpisode)))
-  const watchData = useQuery(watchDataQuery(media.type, media.id, Boolean(media)))
-  const seasons = uniqueSeasons(episodes)
+  const episodes = useMemo(() => parseEpisodes(media.raw), [media.raw]);
+  const preferredEpisode = episodes.find(
+    (episode) => episode.id === preferredVideoId,
+  );
+  const [selectedSeasonOverride, setSelectedSeasonOverride] = useState<
+    number | null
+  >(null);
+  const selectedSeason =
+    selectedSeasonOverride ??
+    preferredEpisode?.season ??
+    episodes[0]?.season ??
+    null;
+  const visibleEpisodes = episodes.filter(
+    (episode) => episode.season === selectedSeason,
+  );
+  const [selectedEpisodeIdOverride, setSelectedEpisodeIdOverride] = useState<
+    string | null
+  >(null);
+  const selectedEpisodeId =
+    selectedEpisodeIdOverride ?? preferredEpisode?.id ?? null;
+  const [stepOverride, setStepOverride] = useState<SeriesStep | null>(null);
+  const step = stepOverride ?? (preferredEpisode ? "streams" : "episodes");
+  const selectedEpisode =
+    episodes.find((episode) => episode.id === selectedEpisodeId) ?? null;
+  const streams = useQuery(
+    streamsQuery(
+      media.type,
+      selectedEpisode?.id ?? "",
+      Boolean(selectedEpisode),
+    ),
+  );
+  const watchData = useQuery(
+    watchDataQuery(media.type, media.id, Boolean(media)),
+  );
+  const seasons = uniqueSeasons(episodes);
 
   const selectEpisode = (episode: Episode) => {
-    setSelectedEpisodeIdOverride(episode.id)
-    setStepOverride('streams')
-  }
+    setSelectedEpisodeIdOverride(episode.id);
+    setStepOverride("streams");
+  };
 
   return (
     <DetailShell
       media={media}
       onBack={onBack}
-      sideLabel={step === 'streams' ? 'Available streams' : 'Available episodes'}
-      sideTitle={step === 'streams' && selectedEpisode ? selectedEpisode.title : 'Select Episode'}
+      sideLabel={
+        step === "streams" ? "Available streams" : "Available episodes"
+      }
+      sideTitle={
+        step === "streams" && selectedEpisode
+          ? selectedEpisode.title
+          : "Select Episode"
+      }
       sideContent={
-        step === 'streams' && selectedEpisode ? (
+        step === "streams" && selectedEpisode ? (
           <div className="grid min-h-0 gap-4">
-            <Button className="w-fit" type="button" size="sm" variant="secondary" onClick={() => setStepOverride('episodes')}>
+            <Button
+              className="w-fit"
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={() => setStepOverride("episodes")}
+            >
               <ChevronLeft aria-hidden="true" />
               Change Episode
             </Button>
-            <p className={cn('m-0', mutedText)}>{episodeLabel(selectedEpisode)}</p>
+            <p className={cn("m-0", mutedText)}>
+              {episodeLabel(selectedEpisode)}
+            </p>
             <StreamList
               streams={streams.data ?? []}
               isLoading={streams.isLoading}
@@ -93,13 +129,13 @@ export function SeriesDetailPage({
       }
     >
       {selectedEpisode ? (
-        <p className={cn('m-0 max-w-[680px]', mutedText)}>
+        <p className={cn("m-0 max-w-[680px]", mutedText)}>
           {episodeLabel(selectedEpisode)}
         </p>
       ) : null}
       {listAction}
     </DetailShell>
-  )
+  );
 }
 
 function EpisodeSelector({
@@ -111,21 +147,24 @@ function EpisodeSelector({
   onSeasonChange,
   onSelectEpisode,
 }: {
-  episodes: Episode[]
-  seasons: Array<number | null>
-  selectedSeason: number | null
-  visibleEpisodes: Episode[]
-  watchData: WatchDataResponse | undefined
-  onSeasonChange: (season: number | null) => void
-  onSelectEpisode: (episode: Episode) => void
+  episodes: Episode[];
+  seasons: Array<number | null>;
+  selectedSeason: number | null;
+  visibleEpisodes: Episode[];
+  watchData: WatchDataResponse | undefined;
+  onSeasonChange: (season: number | null) => void;
+  onSelectEpisode: (episode: Episode) => void;
 }) {
   if (!episodes.length) {
-    return <p className={mutedText}>No episodes returned for this series.</p>
+    return <p className={mutedText}>No episodes returned for this series.</p>;
   }
 
   return (
     <div className="grid min-h-0 gap-4">
-      <Select value={seasonValue(selectedSeason)} onValueChange={(value) => onSeasonChange(parseSeasonValue(value))}>
+      <Select
+        value={seasonValue(selectedSeason)}
+        onValueChange={(value) => onSeasonChange(parseSeasonValue(value))}
+      >
         <SelectTrigger className="w-full" aria-label="Season">
           <SelectValue placeholder="Season" />
         </SelectTrigger>
@@ -137,7 +176,12 @@ function EpisodeSelector({
           ))}
         </SelectContent>
       </Select>
-      <div className="grid max-h-[56svh] gap-2 overflow-y-auto pr-1 [scrollbar-width:thin]">
+      <div
+        className={cn(
+          "grid gap-2 overflow-y-auto pr-1 [scrollbar-width:thin]",
+          bottomPagePadding,
+        )}
+      >
         {visibleEpisodes.map((episode) => (
           <EpisodeButton
             key={episode.id}
@@ -148,7 +192,7 @@ function EpisodeSelector({
         ))}
       </div>
     </div>
-  )
+  );
 }
 
 function EpisodeButton({
@@ -156,110 +200,129 @@ function EpisodeButton({
   watchState,
   onClick,
 }: {
-  episode: Episode
-  watchState?: { position_seconds: number }
-  onClick: () => void
+  episode: Episode;
+  watchState?: { position_seconds: number };
+  onClick: () => void;
 }) {
   return (
     <div className="rounded-lg border border-border bg-card/70 p-2.5">
-      <button className="block w-full min-w-0 cursor-pointer text-left" type="button" onClick={onClick}>
-        <strong className="block overflow-hidden text-ellipsis whitespace-nowrap">{episode.title}</strong>
-        <span className={cn('text-[0.8rem]', mutedText)}>{episodeLabel(episode)}</span>
+      <button
+        className="block w-full min-w-0 cursor-pointer text-left"
+        type="button"
+        onClick={onClick}
+      >
+        <strong className="block overflow-hidden text-ellipsis whitespace-nowrap">
+          {episode.title}
+        </strong>
+        <span className={cn("text-[0.8rem]", mutedText)}>
+          {episodeLabel(episode)}
+        </span>
         {watchState?.position_seconds ? (
-          <span className={cn('block text-[0.8rem]', mutedText)}>
+          <span className={cn("block text-[0.8rem]", mutedText)}>
             {formatDuration(watchState.position_seconds)}
           </span>
         ) : null}
       </button>
     </div>
-  )
+  );
 }
 
 function parseEpisodes(raw: Record<string, unknown>): Episode[] {
-  const videos = Array.isArray(raw.videos) ? raw.videos : []
+  const videos = Array.isArray(raw.videos) ? raw.videos : [];
   return videos.flatMap((value) => {
-    if (!value || typeof value !== 'object') {
-      return []
+    if (!value || typeof value !== "object") {
+      return [];
     }
-    const video = value as Record<string, unknown>
-    const id = stringValue(video.id)
+    const video = value as Record<string, unknown>;
+    const id = stringValue(video.id);
     if (!id) {
-      return []
+      return [];
     }
-    const season = numberValue(video.season)
-    const episode = numberValue(video.episode)
-    const fallbackTitle = [season === null ? undefined : `S${season}`, episode === null ? undefined : `E${episode}`]
+    const season = numberValue(video.season);
+    const episode = numberValue(video.episode);
+    const fallbackTitle = [
+      season === null ? undefined : `S${season}`,
+      episode === null ? undefined : `E${episode}`,
+    ]
       .filter(Boolean)
-      .join(' ')
+      .join(" ");
     return {
       id,
-      title: (stringValue(video.title) ?? stringValue(video.name) ?? fallbackTitle) || id,
+      title:
+        (stringValue(video.title) ??
+          stringValue(video.name) ??
+          fallbackTitle) ||
+        id,
       season,
       episode,
       released: stringValue(video.released),
       overview: stringValue(video.overview) ?? stringValue(video.description),
       thumbnail: stringValue(video.thumbnail) ?? stringValue(video.poster),
-    }
-  })
+    };
+  });
 }
 
 function uniqueSeasons(episodes: Episode[]) {
-  return Array.from(new Set(episodes.map((episode) => episode.season))).sort((a, b) => {
-    if (a === null) {
-      return 1
-    }
-    if (b === null) {
-      return -1
-    }
-    return a - b
-  })
+  return Array.from(new Set(episodes.map((episode) => episode.season))).sort(
+    (a, b) => {
+      if (a === null) {
+        return 1;
+      }
+      if (b === null) {
+        return -1;
+      }
+      return a - b;
+    },
+  );
 }
 
 function seasonValue(season: number | null) {
-  return season === null ? 'extras' : String(season)
+  return season === null ? "extras" : String(season);
 }
 
 function parseSeasonValue(value: string) {
-  if (value === 'extras') {
-    return null
+  if (value === "extras") {
+    return null;
   }
-  const season = Number(value)
-  return Number.isFinite(season) ? season : null
+  const season = Number(value);
+  return Number.isFinite(season) ? season : null;
 }
 
 function seasonLabel(season: number | null) {
-  return season === null ? 'Extras' : `Season ${season}`
+  return season === null ? "Extras" : `Season ${season}`;
 }
 
-function episodeLabel(episode: Pick<Episode, 'season' | 'episode' | 'released'>) {
+function episodeLabel(
+  episode: Pick<Episode, "season" | "episode" | "released">,
+) {
   const parts = [
     episode.season === null ? undefined : `S${episode.season}`,
     episode.episode === null ? undefined : `E${episode.episode}`,
     episode.released?.slice(0, 10),
-  ].filter(Boolean)
-  return parts.length ? parts.join(' • ') : 'Episode'
+  ].filter(Boolean);
+  return parts.length ? parts.join(" • ") : "Episode";
 }
 
 function stringValue(value: unknown) {
-  return typeof value === 'string' && value.trim() ? value : undefined
+  return typeof value === "string" && value.trim() ? value : undefined;
 }
 
 function numberValue(value: unknown) {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
   }
-  if (typeof value === 'string' && value.trim()) {
-    const number = Number(value)
-    return Number.isFinite(number) ? number : null
+  if (typeof value === "string" && value.trim()) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
   }
-  return null
+  return null;
 }
 
 function formatDuration(duration: number) {
   if (!Number.isFinite(duration)) {
-    return 'Unknown duration'
+    return "Unknown duration";
   }
 
-  const minutes = Math.round(duration / 60)
-  return `${minutes} min`
+  const minutes = Math.round(duration / 60);
+  return `${minutes} min`;
 }

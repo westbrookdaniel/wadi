@@ -1,37 +1,42 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery } from "@tanstack/react-query";
 
-import { catalogsQuery, continueWatchingQuery, metaQuery } from '@/api/queries'
-import type { ContinueWatchingItem, MediaPreview } from '@/api/types'
-import { EmptyState, ErrorState, LoadingState } from '@/components/status'
-import { Button } from '@/components/ui/button'
-import { MediaCard } from '@/features/media/media-card'
-import { contentSection, mediaRow, pageStack, sectionHeading } from '@/lib/styles'
+import { catalogsQuery, continueWatchingQuery, metaQuery } from "@/api/queries";
+import type { ContinueWatchingItem, MediaPreview } from "@/api/types";
+import { EmptyState, ErrorState, LoadingState } from "@/components/status";
+import { Button } from "@/components/ui/button";
+import { MediaCard } from "@/features/media/media-card";
+import { contentSection, pageStack, sectionHeading } from "@/lib/styles";
 
-import { CatalogSection } from './catalog-section'
+import { CatalogSection } from "./catalog-section";
+import { MediaRow } from "@/components/media-row";
 
 export function HomePage({
   onOpenMedia,
   onOpenSettings,
 }: {
-  onOpenMedia: (media: MediaPreview, preferredVideoId?: string | null) => void
-  onOpenSettings: () => void
+  onOpenMedia: (media: MediaPreview, preferredVideoId?: string | null) => void;
+  onOpenSettings: () => void;
 }) {
-  const catalogs = useQuery(catalogsQuery)
-  const continueWatching = useQuery(continueWatchingQuery(12))
-  const continueItems = continueWatching.data ?? []
-  const hasContinueWatching = Boolean(continueItems.length)
-  const hasCatalogs = Boolean(catalogs.data?.length)
+  const catalogs = useQuery(catalogsQuery);
+  const continueWatching = useQuery(continueWatchingQuery(12));
+  const continueItems = continueWatching.data ?? [];
+  const hasContinueWatching = Boolean(continueItems.length);
+  const hasCatalogs = Boolean(catalogs.data?.length);
   const showSetup =
     !catalogs.isLoading &&
     !continueWatching.isLoading &&
     !hasContinueWatching &&
-    !hasCatalogs
+    !hasCatalogs;
 
   return (
     <div className={pageStack}>
-      {catalogs.isLoading || continueWatching.isLoading ? <LoadingState /> : null}
+      {catalogs.isLoading || continueWatching.isLoading ? (
+        <LoadingState />
+      ) : null}
       {catalogs.error ? <ErrorState error={catalogs.error} /> : null}
-      {continueWatching.error ? <ErrorState error={continueWatching.error} /> : null}
+      {continueWatching.error ? (
+        <ErrorState error={continueWatching.error} />
+      ) : null}
 
       {showSetup ? (
         <EmptyState
@@ -52,36 +57,40 @@ export function HomePage({
               <h2 className="m-0 tracking-normal">Continue Watching</h2>
             </div>
           </div>
-          <div className={mediaRow}>
+          <MediaRow>
             {continueItems.map((item) => (
               <ContinueWatchingCard
-                key={`${item.media_type}-${item.media_id}-${item.video_id ?? 'movie'}`}
+                key={`${item.media_type}-${item.media_id}-${item.video_id ?? "movie"}`}
                 item={item}
                 onOpenMedia={onOpenMedia}
               />
             ))}
-          </div>
+          </MediaRow>
         </section>
       ) : null}
 
-      {!showSetup && catalogs.data?.length ? (
-        catalogs.data.slice(0, 3).map((entry) => (
-          <CatalogSection key={`${entry.addon_id}-${entry.catalog.type}-${entry.catalog.id}`} entry={entry} onOpen={onOpenMedia} />
-        ))
-      ) : null}
+      {!showSetup && catalogs.data?.length
+        ? catalogs.data.map((entry) => (
+            <CatalogSection
+              key={`${entry.addon_id}-${entry.catalog.type}-${entry.catalog.id}`}
+              entry={entry}
+              onOpen={onOpenMedia}
+            />
+          ))
+        : null}
     </div>
-  )
+  );
 }
 
 function ContinueWatchingCard({
   item,
   onOpenMedia,
 }: {
-  item: ContinueWatchingItem
-  onOpenMedia: (media: MediaPreview, preferredVideoId?: string | null) => void
+  item: ContinueWatchingItem;
+  onOpenMedia: (media: MediaPreview, preferredVideoId?: string | null) => void;
 }) {
-  const meta = useQuery(metaQuery(item.media_type, item.media_id))
-  const media = mediaPreviewFromMeta(item, meta.data)
+  const meta = useQuery(metaQuery(item.media_type, item.media_id));
+  const media = mediaPreviewFromMeta(item, meta.data);
 
   if (!media) {
     return (
@@ -92,9 +101,12 @@ function ContinueWatchingCard({
           name: item.media_id,
           raw: { id: item.media_id, type: item.media_type },
         }}
-        progress={{ position: item.position_seconds, duration: item.duration_seconds }}
+        progress={{
+          position: item.position_seconds,
+          duration: item.duration_seconds,
+        }}
       />
-    )
+    );
   }
 
   return (
@@ -102,35 +114,48 @@ function ContinueWatchingCard({
       media={media}
       onOpen={() => onOpenMedia(media, item.video_id)}
       watched={item.watched}
-      progress={{ position: item.position_seconds, duration: item.duration_seconds }}
+      progress={{
+        position: item.position_seconds,
+        duration: item.duration_seconds,
+      }}
     />
-  )
+  );
 }
 
-function mediaPreviewFromMeta(item: ContinueWatchingItem, data: unknown): MediaPreview | null {
+function mediaPreviewFromMeta(
+  item: ContinueWatchingItem,
+  data: unknown,
+): MediaPreview | null {
   const responses =
-    data && typeof data === 'object' && 'responses' in data && Array.isArray(data.responses)
+    data &&
+    typeof data === "object" &&
+    "responses" in data &&
+    Array.isArray(data.responses)
       ? data.responses
-      : []
+      : [];
 
   for (const response of responses) {
-    if (!response || typeof response !== 'object') {
-      continue
+    if (!response || typeof response !== "object") {
+      continue;
     }
 
-    const body = 'response' in response ? response.response : null
+    const body = "response" in response ? response.response : null;
     const meta =
-      body && typeof body === 'object' && 'meta' in body && body.meta && typeof body.meta === 'object'
+      body &&
+      typeof body === "object" &&
+      "meta" in body &&
+      body.meta &&
+      typeof body.meta === "object"
         ? (body.meta as Record<string, unknown>)
-        : null
+        : null;
 
     if (!meta) {
-      continue
+      continue;
     }
 
-    const name = stringValue(meta.name) ?? stringValue(meta.title)
+    const name = stringValue(meta.name) ?? stringValue(meta.title);
     if (!name) {
-      continue
+      continue;
     }
 
     return {
@@ -141,12 +166,12 @@ function mediaPreviewFromMeta(item: ContinueWatchingItem, data: unknown): MediaP
       releaseInfo: stringValue(meta.releaseInfo) ?? stringValue(meta.year),
       description: stringValue(meta.description),
       raw: meta,
-    }
+    };
   }
 
-  return null
+  return null;
 }
 
 function stringValue(value: unknown) {
-  return typeof value === 'string' && value.trim() ? value : undefined
+  return typeof value === "string" && value.trim() ? value : undefined;
 }

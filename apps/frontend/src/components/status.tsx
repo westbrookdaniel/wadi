@@ -1,13 +1,14 @@
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Skeleton } from '@/components/ui/skeleton'
-import { mediaRow, stateBlock } from '@/lib/styles'
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Skeleton } from "@/components/ui/skeleton";
+import { stateBlock } from "@/lib/styles";
+import { MediaRow } from "./media-row";
 
-export function LoadingState({ label = 'Loading' }: { label?: string }) {
+export function LoadingState({ label = "Loading" }: { label?: string }) {
   return (
     <div className={stateBlock} role="status">
       {label}
     </div>
-  )
+  );
 }
 
 export function EmptyState({
@@ -15,9 +16,9 @@ export function EmptyState({
   body,
   action,
 }: {
-  title: string
-  body?: string
-  action?: React.ReactNode
+  title: string;
+  body?: string;
+  action?: React.ReactNode;
 }) {
   return (
     <div className={stateBlock}>
@@ -25,24 +26,26 @@ export function EmptyState({
       {body ? <p>{body}</p> : null}
       {action}
     </div>
-  )
+  );
 }
 
 export function ErrorState({ error }: { error: unknown }) {
   return (
     <Alert variant="destructive">
       <AlertTitle>Unable to continue</AlertTitle>
-      <AlertDescription>{error instanceof Error ? error.message : 'Something went wrong'}</AlertDescription>
+      <AlertDescription>
+        {error instanceof Error ? error.message : "Something went wrong"}
+      </AlertDescription>
     </Alert>
-  )
+  );
 }
 
 export function PosterSkeletonRow({ count = 8 }: { count?: number }) {
   return (
-    <div className={mediaRow} aria-hidden="true">
+    <MediaRow>
       {Array.from({ length: count }).map((_, index) => (
         <Skeleton className="aspect-[2/3] rounded-lg" key={index} />
       ))}
-    </div>
-  )
+    </MediaRow>
+  );
 }
