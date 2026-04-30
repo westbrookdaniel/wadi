@@ -176,7 +176,58 @@ select {
   --sidebar-ring: oklch(0.553 0.013 58.071);
 }
 
+@property --media-accent-r {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 137;
+}
+
+@property --media-accent-g {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 76;
+}
+
+@property --media-accent-b {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 181;
+}
+
+@property --media-accent-strength {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+
 @layer utilities {
+  .media-driven-backdrop {
+    --media-accent-r: 137;
+    --media-accent-g: 76;
+    --media-accent-b: 181;
+    --media-accent-strength: 0;
+    background-color: var(--background);
+    background-image:
+      radial-gradient(
+        circle at 18% 8%,
+        rgb(var(--media-accent-r) var(--media-accent-g) var(--media-accent-b) / calc(0.24 * var(--media-accent-strength))),
+        transparent 46rem
+      ),
+      radial-gradient(
+        circle at 62% -6%,
+        rgb(var(--media-accent-r) var(--media-accent-g) var(--media-accent-b) / calc(0.13 * var(--media-accent-strength))),
+        transparent 40rem
+      ),
+      radial-gradient(circle at 0% 0%, oklch(0.452 0.211 324.591 / 0.2), transparent 40rem),
+      radial-gradient(circle at 26% 9%, oklch(0.553 0.013 58.071 / 0.16), transparent 36rem),
+      linear-gradient(135deg, var(--background) 0%, oklch(0.216 0.006 56.043) 100%);
+    transition:
+      --media-accent-r 520ms ease,
+      --media-accent-g 520ms ease,
+      --media-accent-b 520ms ease,
+      --media-accent-strength 360ms ease;
+  }
+
   /* Chrome, Safari, and Opera */
   .no-scrollbar::-webkit-scrollbar {
     display: none;
