@@ -1,7 +1,11 @@
 import type { CSSProperties } from 'react'
 import { useEffect, useMemo, useState } from 'react'
 
-import { dominantSaturatedBucket, rgbString } from '@/lib/backdrop-color'
+import {
+  dominantSaturatedBucket,
+  fallbackSaturatedAverage,
+  rgbString,
+} from '@/lib/backdrop-color'
 
 const MEDIA_BROWSE_PATHS = new Set([
   '/home',
@@ -21,8 +25,13 @@ type UseDynamicBackdropColorOptions = {
 }
 
 type CssVars = CSSProperties & {
-  '--media-accent-rgb'?: string
+  '--media-accent-r'?: string
+  '--media-accent-g'?: string
+  '--media-accent-b'?: string
+  '--media-accent-strength'?: string
 }
+
+const DEFAULT_ACCENT = { r: 137, g: 76, b: 181 }
 
 export function useDynamicBackdropColor(
   pathname: string,
@@ -114,11 +123,18 @@ export function useDynamicBackdropColor(
   const activeAccent = isMediaDrivenPage && accent.path === pathname ? accent.color : null
 
   const style = useMemo<CssVars | undefined>(() => {
-    if (!activeAccent) {
+    if (!isMediaDrivenPage) {
       return undefined
     }
-    return { '--media-accent-rgb': activeAccent }
-  }, [activeAccent])
+    const parsed = activeAccent ? parseRgbTriplet(activeAccent) : null
+    const color = parsed ?? DEFAULT_ACCENT
+    return {
+      '--media-accent-r': String(color.r),
+      '--media-accent-g': String(color.g),
+      '--media-accent-b': String(color.b),
+      '--media-accent-strength': parsed ? '1' : '0',
+    }
+  }, [activeAccent, isMediaDrivenPage])
 
   return {
     isMediaDrivenPage,
@@ -171,8 +187,13 @@ export async function extractPosterAccentRgb(
   try {
     drawCoverImage(context, image, SAMPLE_SIZE)
     const imageData = context.getImageData(0, 0, SAMPLE_SIZE, SAMPLE_SIZE).data
-    const color = dominantSaturatedBucket(imageData)
-    return color ? rgbString(color) : null
+    const primaryColor = dominantSaturatedBucket(imageData)
+    if (primaryColor) {
+      return rgbString(primaryColor)
+    }
+
+    const fallbackColor = fallbackSaturatedAverage(imageData)
+    return fallbackColor ? rgbString(fallbackColor) : null
   } catch {
     return null
   }
@@ -238,4 +259,26 @@ function loadImage(sourceUrl: string, signal: AbortSignal) {
 
 function abortedError() {
   return new DOMException('Operation aborted', 'AbortError')
+}
+
+function parseRgbTriplet(value: string) {
+  const parts = value.trim().split(/\s+/)
+  if (parts.length !== 3) {
+    return null
+  }
+  const red = Number(parts[0])
+  const green = Number(parts[1])
+  const blue = Number(parts[2])
+  if ([red, green, blue].some((channel) => !Number.isFinite(channel))) {
+    return null
+  }
+  return {
+    r: clampChannel(red),
+    g: clampChannel(green),
+    b: clampChannel(blue),
+  }
+}
+
+function clampChannel(value: number) {
+  return Math.min(255, Math.max(0, Math.round(value)))
 }

@@ -100,9 +100,27 @@ describe('useDynamicBackdropColor', () => {
       expect(
         screen
           .getByTestId('backdrop')
-          .style.getPropertyValue('--media-accent-rgb')
+          .style.getPropertyValue('--media-accent-r')
           .trim(),
-      ).toBe('33 120 200')
+      ).toBe('33')
+      expect(
+        screen
+          .getByTestId('backdrop')
+          .style.getPropertyValue('--media-accent-g')
+          .trim(),
+      ).toBe('120')
+      expect(
+        screen
+          .getByTestId('backdrop')
+          .style.getPropertyValue('--media-accent-b')
+          .trim(),
+      ).toBe('200')
+      expect(
+        screen
+          .getByTestId('backdrop')
+          .style.getPropertyValue('--media-accent-strength')
+          .trim(),
+      ).toBe('1')
     })
 
     rerender(
@@ -120,9 +138,9 @@ describe('useDynamicBackdropColor', () => {
       expect(
         screen
           .getByTestId('backdrop')
-          .style.getPropertyValue('--media-accent-rgb')
+          .style.getPropertyValue('--media-accent-strength')
           .trim(),
-      ).toBe('')
+      ).toBe('0')
     })
   })
 

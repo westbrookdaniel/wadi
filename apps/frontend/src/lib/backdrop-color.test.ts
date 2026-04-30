@@ -1,4 +1,8 @@
-import { dominantSaturatedBucket, rgbString } from './backdrop-color'
+import {
+  dominantSaturatedBucket,
+  fallbackSaturatedAverage,
+  rgbString,
+} from './backdrop-color'
 
 describe('dominantSaturatedBucket', () => {
   it('chooses the most frequent saturated bucket', () => {
@@ -33,6 +37,28 @@ describe('dominantSaturatedBucket', () => {
 
   it('returns null when no pixels are provided', () => {
     expect(dominantSaturatedBucket(new Uint8ClampedArray())).toBeNull()
+  })
+})
+
+describe('fallbackSaturatedAverage', () => {
+  it('returns a color when the primary formula has no qualifying pixels', () => {
+    const pixels = rgbaPixels(
+      ...repeatPixel([121, 108, 95, 255], 10),
+      ...repeatPixel([132, 116, 99, 255], 7),
+      ...repeatPixel([90, 90, 90, 255], 6),
+    )
+
+    expect(dominantSaturatedBucket(pixels)).toBeNull()
+    expect(fallbackSaturatedAverage(pixels)).toEqual({ r: 126, g: 111, b: 97 })
+  })
+
+  it('returns null when no valid fallback pixels exist', () => {
+    const pixels = rgbaPixels(
+      ...repeatPixel([100, 100, 100, 255], 16),
+      ...repeatPixel([255, 0, 0, 0], 8),
+    )
+
+    expect(fallbackSaturatedAverage(pixels)).toBeNull()
   })
 })
 

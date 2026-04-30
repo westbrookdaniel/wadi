@@ -15,6 +15,9 @@ const SATURATION_THRESHOLD = 0.22
 const LIGHTNESS_MIN = 0.14
 const LIGHTNESS_MAX = 0.88
 const BUCKET_SIZE = 32
+const FALLBACK_SATURATION_THRESHOLD = 0.08
+const FALLBACK_LIGHTNESS_MIN = 0.08
+const FALLBACK_LIGHTNESS_MAX = 0.92
 
 export function dominantSaturatedBucket(
   pixels: Uint8ClampedArray,
@@ -80,6 +83,55 @@ export function dominantSaturatedBucket(
 
 export function rgbString(color: RgbColor) {
   return `${color.r} ${color.g} ${color.b}`
+}
+
+export function fallbackSaturatedAverage(
+  pixels: Uint8ClampedArray,
+): RgbColor | null {
+  if (!pixels.length) {
+    return null
+  }
+
+  let weightTotal = 0
+  let redTotal = 0
+  let greenTotal = 0
+  let blueTotal = 0
+
+  for (let index = 0; index <= pixels.length - 4; index += 4) {
+    const alpha = pixels[index + 3] / 255
+    if (alpha < 0.08) {
+      continue
+    }
+
+    const red = pixels[index]
+    const green = pixels[index + 1]
+    const blue = pixels[index + 2]
+    const { saturation, lightness } = rgbToHsl(red, green, blue)
+
+    if (
+      saturation < FALLBACK_SATURATION_THRESHOLD ||
+      lightness < FALLBACK_LIGHTNESS_MIN ||
+      lightness > FALLBACK_LIGHTNESS_MAX
+    ) {
+      continue
+    }
+
+    const weight = (0.35 + saturation) * alpha
+    weightTotal += weight
+    redTotal += red * weight
+    greenTotal += green * weight
+    blueTotal += blue * weight
+  }
+
+  if (weightTotal <= 0) {
+    return null
+  }
+
+  return {
+    r: clampRgb(Math.round(redTotal / weightTotal)),
+    g: clampRgb(Math.round(greenTotal / weightTotal)),
+    b: clampRgb(Math.round(blueTotal / weightTotal)),
+  }
 }
 
 function rgbToHsl(red: number, green: number, blue: number) {
