@@ -1,6 +1,6 @@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
-import { stateBlock } from "@/lib/styles";
+import { contentSection, sectionHeading, stateBlock } from "@/lib/styles";
 import { MediaRow } from "./media-row";
 
 export function LoadingState({ label = "Loading" }: { label?: string }) {
@@ -47,5 +47,23 @@ export function PosterSkeletonRow({ count = 8 }: { count?: number }) {
         <Skeleton className="aspect-[2/3] rounded-lg" key={index} />
       ))}
     </MediaRow>
+  );
+}
+
+export function HomePageSkeleton({ sections = 3 }: { sections?: number }) {
+  return (
+    <div className="grid gap-8" role="status" aria-label="Loading home page">
+      {Array.from({ length: sections }).map((_, index) => (
+        <section className={contentSection} key={index}>
+          <div className={sectionHeading}>
+            <div className="grid gap-2">
+              <Skeleton className="h-7 w-[min(280px,65vw)] rounded-full" />
+              <Skeleton className="h-4 w-[min(180px,48vw)] rounded-full" />
+            </div>
+          </div>
+          <PosterSkeletonRow />
+        </section>
+      ))}
+    </div>
   );
 }

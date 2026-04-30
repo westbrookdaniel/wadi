@@ -2,7 +2,7 @@ import { useQueries, useQuery } from '@tanstack/react-query'
 
 import { browseLayoutQuery, catalogsQuery, continueWatchingQuery, listItemsQuery, listsQuery } from '@/api/queries'
 import type { MediaPreview } from '@/api/types'
-import { EmptyState, ErrorState, LoadingState } from '@/components/status'
+import { EmptyState, ErrorState, HomePageSkeleton } from '@/components/status'
 import { Button } from '@/components/ui/button'
 import { pageStack } from '@/lib/styles'
 
@@ -37,6 +37,12 @@ export function HomePage({
   const hasCatalogs = Boolean(catalogs.data?.length)
   const hasContinueWatching = Boolean(continueItems.length)
   const hasWatchlistContent = Object.values(listItemsByListId).some((items) => items.length > 0)
+  const hasAnyDataLoaded =
+    catalogs.data !== undefined ||
+    continueWatching.data !== undefined ||
+    lists.data !== undefined ||
+    browseLayout.data !== undefined ||
+    listItems.some((query) => query.data !== undefined)
   const listItemsError = listItems.find((query) => query.error)?.error ?? null
   const isLoading =
     catalogs.isLoading ||
@@ -44,11 +50,12 @@ export function HomePage({
     lists.isLoading ||
     browseLayout.isLoading ||
     listItems.some((query) => query.isLoading)
+  const showLoadingState = isLoading && !hasAnyDataLoaded
   const showSetup = !isLoading && !hasContinueWatching && !hasCatalogs && !hasWatchlistContent
 
   return (
     <div className={pageStack}>
-      {isLoading ? <LoadingState /> : null}
+      {showLoadingState ? <HomePageSkeleton /> : null}
       {catalogs.error ? <ErrorState error={catalogs.error} /> : null}
       {continueWatching.error ? <ErrorState error={continueWatching.error} /> : null}
       {lists.error ? <ErrorState error={lists.error} /> : null}
