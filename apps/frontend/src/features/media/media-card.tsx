@@ -28,8 +28,20 @@ export function MediaCard({
         className="relative aspect-[2/3] w-full cursor-pointer overflow-hidden rounded-lg border border-border bg-card text-muted-foreground hover:outline-2 hover:outline-offset-2 hover:outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         type="button"
         onClick={onOpen}
+        data-bg-source="catalog"
+        data-has-poster={poster ? 'true' : 'false'}
       >
-        {poster ? <img className="size-full object-cover" src={poster} alt="" loading="lazy" /> : <span className="grid h-full place-items-center text-[1.4rem] font-bold">{title.slice(0, 2)}</span>}
+        {poster ? (
+          <img
+            className="size-full object-cover"
+            src={poster}
+            alt=""
+            loading="lazy"
+            data-bg-source="catalog"
+          />
+        ) : (
+          <span className="grid h-full place-items-center text-[1.4rem] font-bold">{title.slice(0, 2)}</span>
+        )}
         {watched ? (
           <span className="absolute top-2 right-2 rounded-full bg-[hsl(142_72%_36%)] px-2 py-1 text-[0.72rem] font-semibold text-white">
             Watched

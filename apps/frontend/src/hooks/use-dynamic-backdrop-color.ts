@@ -1,0 +1,241 @@
+import type { CSSProperties } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+
+import { dominantSaturatedBucket, rgbString } from '@/lib/backdrop-color'
+
+const MEDIA_BROWSE_PATHS = new Set([
+  '/home',
+  '/movies',
+  '/series',
+  '/search',
+  '/watchlists',
+])
+
+const SAMPLE_SIZE = 48
+const DEFAULT_REFRESH_DELAY = 70
+
+const accentCache = new Map<string, string | null>()
+
+type UseDynamicBackdropColorOptions = {
+  extractAccent?: (sourceUrl: string, signal: AbortSignal) => Promise<string | null>
+}
+
+type CssVars = CSSProperties & {
+  '--media-accent-rgb'?: string
+}
+
+export function useDynamicBackdropColor(
+  pathname: string,
+  options: UseDynamicBackdropColorOptions = {},
+) {
+  const [accent, setAccent] = useState<{ path: string; color: string | null }>({
+    path: '',
+    color: null,
+  })
+  const extractAccent = options.extractAccent ?? extractPosterAccentRgb
+  const isMediaDrivenPage = isMediaDrivenPath(pathname)
+
+  useEffect(() => {
+    if (!isMediaDrivenPage) {
+      return
+    }
+
+    let activeSource = ''
+    let isCancelled = false
+    let timerId: number | null = null
+    let activeController: AbortController | null = null
+
+    const refreshAccent = () => {
+      const source = resolveBackdropPosterSource(pathname, document)
+      if (source === activeSource) {
+        return
+      }
+      activeSource = source ?? ''
+
+      if (!source) {
+        activeController?.abort()
+        activeController = null
+        setAccent({ path: pathname, color: null })
+        return
+      }
+
+      activeController?.abort()
+      activeController = new AbortController()
+      const cached = accentCache.get(source)
+      if (cached !== undefined) {
+        setAccent({ path: pathname, color: cached })
+        return
+      }
+
+      extractAccent(source, activeController.signal)
+        .then((color) => {
+          if (isCancelled || activeController?.signal.aborted) {
+            return
+          }
+          accentCache.set(source, color)
+          setAccent({ path: pathname, color })
+        })
+        .catch(() => {
+          if (isCancelled || activeController?.signal.aborted) {
+            return
+          }
+          accentCache.set(source, null)
+          setAccent({ path: pathname, color: null })
+        })
+    }
+
+    const queueRefresh = () => {
+      if (timerId !== null) {
+        window.clearTimeout(timerId)
+      }
+      timerId = window.setTimeout(refreshAccent, DEFAULT_REFRESH_DELAY)
+    }
+
+    const observer = new MutationObserver(queueRefresh)
+    observer.observe(document.body, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ['src', 'data-bg-source'],
+    })
+
+    queueRefresh()
+
+    return () => {
+      isCancelled = true
+      observer.disconnect()
+      activeController?.abort()
+      if (timerId !== null) {
+        window.clearTimeout(timerId)
+      }
+    }
+  }, [extractAccent, isMediaDrivenPage, pathname])
+
+  const activeAccent = isMediaDrivenPage && accent.path === pathname ? accent.color : null
+
+  const style = useMemo<CssVars | undefined>(() => {
+    if (!activeAccent) {
+      return undefined
+    }
+    return { '--media-accent-rgb': activeAccent }
+  }, [activeAccent])
+
+  return {
+    isMediaDrivenPage,
+    hasMediaAccent: Boolean(activeAccent),
+    style,
+  }
+}
+
+export function isMediaDrivenPath(pathname: string) {
+  return pathname.startsWith('/media/') || MEDIA_BROWSE_PATHS.has(pathname)
+}
+
+export function resolveBackdropPosterSource(
+  pathname: string,
+  root: ParentNode,
+): string | null {
+  if (pathname.startsWith('/media/')) {
+    return imageSource(
+      root.querySelector<HTMLImageElement>('img[data-bg-source="detail"]'),
+    )
+  }
+
+  if (!MEDIA_BROWSE_PATHS.has(pathname)) {
+    return null
+  }
+
+  return imageSource(
+    root.querySelector<HTMLImageElement>('img[data-bg-source="catalog"]'),
+  )
+}
+
+export async function extractPosterAccentRgb(
+  sourceUrl: string,
+  signal: AbortSignal,
+) {
+  if (signal.aborted) {
+    throw abortedError()
+  }
+
+  const image = await loadImage(sourceUrl, signal)
+  const canvas = document.createElement('canvas')
+  canvas.width = SAMPLE_SIZE
+  canvas.height = SAMPLE_SIZE
+
+  const context = canvas.getContext('2d', { willReadFrequently: true })
+  if (!context) {
+    return null
+  }
+
+  try {
+    drawCoverImage(context, image, SAMPLE_SIZE)
+    const imageData = context.getImageData(0, 0, SAMPLE_SIZE, SAMPLE_SIZE).data
+    const color = dominantSaturatedBucket(imageData)
+    return color ? rgbString(color) : null
+  } catch {
+    return null
+  }
+}
+
+function drawCoverImage(
+  context: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+  size: number,
+) {
+  const width = Math.max(1, image.naturalWidth || image.width || size)
+  const height = Math.max(1, image.naturalHeight || image.height || size)
+  const scale = Math.max(size / width, size / height)
+  const drawWidth = width * scale
+  const drawHeight = height * scale
+  const drawX = (size - drawWidth) / 2
+  const drawY = (size - drawHeight) / 2
+
+  context.clearRect(0, 0, size, size)
+  context.drawImage(image, drawX, drawY, drawWidth, drawHeight)
+}
+
+function imageSource(image: HTMLImageElement | null) {
+  if (!image) {
+    return null
+  }
+  const source = image.currentSrc || image.src
+  return source || null
+}
+
+function loadImage(sourceUrl: string, signal: AbortSignal) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image()
+    image.crossOrigin = 'anonymous'
+    image.decoding = 'async'
+    image.referrerPolicy = 'no-referrer'
+
+    const cleanup = () => {
+      image.onload = null
+      image.onerror = null
+      signal.removeEventListener('abort', onAbort)
+    }
+
+    const onAbort = () => {
+      cleanup()
+      reject(abortedError())
+    }
+
+    image.onload = () => {
+      cleanup()
+      resolve(image)
+    }
+
+    image.onerror = () => {
+      cleanup()
+      reject(new Error(`Failed to load image: ${sourceUrl}`))
+    }
+
+    signal.addEventListener('abort', onAbort)
+    image.src = sourceUrl
+  })
+}
+
+function abortedError() {
+  return new DOMException('Operation aborted', 'AbortError')
+}

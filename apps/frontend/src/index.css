@@ -177,6 +177,22 @@ select {
 }
 
 @layer utilities {
+  .media-driven-backdrop {
+    background-color: var(--background);
+    background-image:
+      radial-gradient(circle at 0% 0%, oklch(0.452 0.211 324.591 / 0.24), transparent 42rem),
+      radial-gradient(circle at 26% 9%, oklch(0.553 0.013 58.071 / 0.16), transparent 36rem),
+      linear-gradient(135deg, var(--background) 0%, oklch(0.216 0.006 56.043) 100%);
+  }
+
+  .media-driven-backdrop.has-media-accent {
+    background-image:
+      radial-gradient(circle at 18% 8%, rgb(var(--media-accent-rgb) / 0.24), transparent 46rem),
+      radial-gradient(circle at 62% -6%, rgb(var(--media-accent-rgb) / 0.13), transparent 40rem),
+      radial-gradient(circle at 0% 0%, oklch(0.452 0.211 324.591 / 0.2), transparent 40rem),
+      linear-gradient(135deg, var(--background) 0%, oklch(0.216 0.006 56.043) 100%);
+  }
+
   /* Chrome, Safari, and Opera */
   .no-scrollbar::-webkit-scrollbar {
     display: none;

@@ -47,6 +47,7 @@ export function DetailShell({
               <img
                 className="aspect-[2/3] w-full rounded-lg object-cover shadow-[0_28px_80px_hsl(0_0%_0%/42%)] max-[800px]:w-[min(220px,70vw)]"
                 src={media.poster}
+                data-bg-source="detail"
                 alt=""
               />
             ) : null}
