@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { findWatchState, streamsQuery, watchDataQuery } from "@/api/queries";
@@ -83,9 +83,7 @@ export function SeriesDetailPage({
         step === "streams" ? "Available streams" : "Available episodes"
       }
       sideTitle={
-        step === "streams" && selectedEpisode
-          ? selectedEpisode.title
-          : "Select Episode"
+        step === "streams" && selectedEpisode ? selectedEpisode.title : ""
       }
       sideContent={
         step === "streams" && selectedEpisode ? (
@@ -158,24 +156,58 @@ function EpisodeSelector({
   if (!episodes.length) {
     return <p className={mutedText}>No episodes returned for this series.</p>;
   }
+  const currentSeasonIndex = seasons.findIndex(
+    (season) => season === selectedSeason,
+  );
+  const hasPreviousSeason = currentSeasonIndex > 0;
+  const hasNextSeason =
+    currentSeasonIndex >= 0 && currentSeasonIndex < seasons.length - 1;
 
   return (
     <div className="grid min-h-0 gap-4">
-      <Select
-        value={seasonValue(selectedSeason)}
-        onValueChange={(value) => onSeasonChange(parseSeasonValue(value))}
-      >
-        <SelectTrigger className="w-full" aria-label="Season">
-          <SelectValue placeholder="Season" />
-        </SelectTrigger>
-        <SelectContent>
-          {seasons.map((season) => (
-            <SelectItem key={seasonValue(season)} value={seasonValue(season)}>
-              {seasonLabel(season)}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <div className="grid grid-cols-[auto_1fr_auto] items-center gap-2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label="Previous season"
+          disabled={!hasPreviousSeason}
+          onClick={() => {
+            if (!hasPreviousSeason) return;
+            onSeasonChange(seasons[currentSeasonIndex - 1] ?? null);
+          }}
+        >
+          <ChevronLeft aria-hidden="true" />
+        </Button>
+        <Select
+          value={seasonValue(selectedSeason)}
+          onValueChange={(value) => onSeasonChange(parseSeasonValue(value))}
+        >
+          <SelectTrigger className="w-full" aria-label="Season">
+            <SelectValue placeholder="Season" />
+          </SelectTrigger>
+          <SelectContent>
+            {seasons.map((season) => (
+              <SelectItem key={seasonValue(season)} value={seasonValue(season)}>
+                {seasonLabel(season)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label="Next season"
+          disabled={!hasNextSeason}
+          onClick={() => {
+            if (!hasNextSeason) return;
+            onSeasonChange(seasons[currentSeasonIndex + 1] ?? null);
+          }}
+        >
+          <ChevronRight aria-hidden="true" />
+        </Button>
+      </div>
       <div
         className={cn(
           "grid gap-2 overflow-y-auto pr-1 [scrollbar-width:thin]",
@@ -204,24 +236,47 @@ function EpisodeButton({
   watchState?: { position_seconds: number };
   onClick: () => void;
 }) {
+  const [imageError, setImageError] = useState(false);
+  const showImage = Boolean(episode.thumbnail) && !imageError;
+
   return (
-    <div className="rounded-lg border border-border bg-card/70 p-2.5">
+    <div className="rounded-lg border border-border bg-card/70">
       <button
-        className="block w-full min-w-0 cursor-pointer text-left"
+        className="grid w-full min-w-0 cursor-pointer grid-cols-[84px_1fr] gap-3 text-left"
         type="button"
         onClick={onClick}
       >
-        <strong className="block overflow-hidden text-ellipsis whitespace-nowrap">
-          {episode.title}
-        </strong>
-        <span className={cn("text-[0.8rem]", mutedText)}>
-          {episodeLabel(episode)}
-        </span>
-        {watchState?.position_seconds ? (
+        {showImage ? (
+          <div className="h-16 w-24 rounded-l-lg overflow-hidden">
+            <img
+              src={episode.thumbnail}
+              alt={episode.title}
+              className="h-16 w-24 object-cover"
+              loading="lazy"
+              onError={() => setImageError(true)}
+            />
+          </div>
+        ) : (
+          <div
+            className="grid h-16 w-24 rounded-l-lg place-items-center bg-muted text-[0.65rem] uppercase tracking-wide text-muted-foreground"
+            aria-hidden="true"
+          >
+            No Image
+          </div>
+        )}
+        <div className="min-w-0 flex flex-col justify-center px-4 p-2.5">
+          <strong className="block overflow-hidden text-ellipsis whitespace-nowrap">
+            {episode.title}
+          </strong>
           <span className={cn("block text-[0.8rem]", mutedText)}>
-            {formatDuration(watchState.position_seconds)}
+            {episodeMetaLabel(episode)}
           </span>
-        ) : null}
+          {watchState?.position_seconds ? (
+            <span className={cn("block text-[0.8rem]", mutedText)}>
+              {formatWatchDuration(watchState.position_seconds)}
+            </span>
+          ) : null}
+        </div>
       </button>
     </div>
   );
@@ -303,6 +358,18 @@ function episodeLabel(
   return parts.length ? parts.join(" • ") : "Episode";
 }
 
+function episodeCardLabel(episode: Pick<Episode, "episode">) {
+  return episode.episode === null ? "Episode" : `E${episode.episode}`;
+}
+
+function episodeMetaLabel(episode: Pick<Episode, "episode" | "released">) {
+  const parts = [
+    episodeCardLabel(episode),
+    formatReleaseDate(episode.released),
+  ].filter(Boolean);
+  return parts.length ? parts.join(" • ") : "Details unavailable";
+}
+
 function stringValue(value: unknown) {
   return typeof value === "string" && value.trim() ? value : undefined;
 }
@@ -318,11 +385,25 @@ function numberValue(value: unknown) {
   return null;
 }
 
-function formatDuration(duration: number) {
+function formatReleaseDate(value?: string) {
+  if (!value) {
+    return null;
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  }).format(date);
+}
+
+function formatWatchDuration(duration: number) {
   if (!Number.isFinite(duration)) {
     return "Unknown duration";
   }
-
   const minutes = Math.round(duration / 60);
   return `${minutes} min`;
 }
