@@ -4,6 +4,7 @@ import { catalogsQuery, continueWatchingQuery, metaQuery } from "@/api/queries";
 import type { ContinueWatchingItem, MediaPreview } from "@/api/types";
 import { EmptyState, ErrorState, LoadingState } from "@/components/status";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { MediaCard } from "@/features/media/media-card";
 import { contentSection, pageStack, sectionHeading } from "@/lib/styles";
 
@@ -92,13 +93,17 @@ function ContinueWatchingCard({
   const meta = useQuery(metaQuery(item.media_type, item.media_id));
   const media = mediaPreviewFromMeta(item, meta.data);
 
+  if (meta.isLoading || meta.isFetching) {
+    return <ContinueWatchingCardSkeleton />;
+  }
+
   if (!media) {
     return (
       <MediaCard
         media={{
           id: item.media_id,
           type: item.media_type,
-          name: item.media_id,
+          name: "Unknown title",
           raw: { id: item.media_id, type: item.media_type },
         }}
         progress={{
@@ -119,6 +124,20 @@ function ContinueWatchingCard({
         duration: item.duration_seconds,
       }}
     />
+  );
+}
+
+function ContinueWatchingCardSkeleton() {
+  return (
+    <article className="media-card-item grid min-w-0 gap-2.5" aria-hidden="true">
+      <div className="relative aspect-[2/3] w-full overflow-hidden rounded-lg border border-border bg-card">
+        <Skeleton className="size-full rounded-none" />
+      </div>
+      <div className="grid min-w-0 gap-2">
+        <Skeleton className="h-4 w-[78%] rounded-full" />
+        <Skeleton className="h-3 w-[56%] rounded-full" />
+      </div>
+    </article>
   );
 }
 
