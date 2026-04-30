@@ -1,8 +1,8 @@
 import { Skeleton } from '@/components/ui/skeleton'
 import { bottomPagePadding, mutedText } from '@/lib/styles'
+import { cn } from '@/lib/utils'
 
 import type { PlayableStream } from './types'
-import { cn } from '@/lib/utils'
 
 export function StreamList({
   streams,

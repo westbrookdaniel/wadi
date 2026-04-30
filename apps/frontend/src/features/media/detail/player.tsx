@@ -27,7 +27,6 @@ import {
   type WrappedCanvas,
 } from 'mediabunny'
 
-import { API_BASE_URL } from '@/api/client'
 import { defaultWatchState, findWatchState, queryKeys, updateWatchProgress, watchDataQuery } from '@/api/queries'
 import type { MediaPreview, WatchState } from '@/api/types'
 import { Button } from '@/components/ui/button'
@@ -41,6 +40,7 @@ import { cn } from '@/lib/utils'
 import { stateBlock } from '@/lib/styles'
 import { useAppStore } from '@/store/app-store'
 
+import { buildStreamProxyUrl } from './stream-playback'
 import type { PlaybackTarget, PlayableStream } from './types'
 
 type PlayerStatus = 'idle' | 'loading' | 'ready' | 'error'
@@ -272,10 +272,6 @@ export function MediaPlayerPage({
       </div>
     </TooltipProvider>
   )
-}
-
-function buildStreamProxyUrl(streamUrl: string) {
-  return `${API_BASE_URL}/api/stream-proxy?url=${encodeURIComponent(streamUrl)}`
 }
 
 function PlayerChrome({
