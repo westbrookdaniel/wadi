@@ -23,7 +23,7 @@ use crate::{
     addon::{ResourceRequest, TransportKind},
     auth,
     error::{AppError, AppResult},
-    models::{AddonRecord, AuthUser, ListItem, User, UserList, WatchData, WatchState},
+    models::{AddonPreview, AddonRecord, AuthUser, ListItem, User, UserList, WatchData, WatchState},
     stremio::{Manifest, ResourceKind},
 };
 
@@ -35,6 +35,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/auth/logout", post(logout))
         .route("/api/auth/me", get(me))
         .route("/api/addons", get(list_addons))
+        .route("/api/addons/preview", post(preview_addon))
         .route("/api/addons/install", post(install_addon))
         .route(
             "/api/addons/{addon_id}",
@@ -209,6 +210,28 @@ async fn install_addon(
         StatusCode::CREATED,
         Json(load_addon(&state, &user.id, &id).await?),
     ))
+}
+
+async fn preview_addon(
+    State(state): State<AppState>,
+    user: AuthUser,
+    Json(payload): Json<InstallAddonRequest>,
+) -> AppResult<Json<AddonPreview>> {
+    let (transport, _manifest, manifest_json) = state.addons.fetch_manifest(&payload.url).await?;
+    let existing = sqlx::query("SELECT id FROM addons WHERE user_id = ?1 AND source_url = ?2")
+        .bind(&user.id)
+        .bind(&payload.url)
+        .fetch_optional(&state.db)
+        .await?;
+    let installed_addon_id = existing.and_then(|row| row.try_get::<String, _>("id").ok());
+    let favicon_url = derive_favicon_url(&payload.url, &manifest_json);
+    Ok(Json(AddonPreview {
+        source_url: payload.url,
+        transport: transport.to_string(),
+        manifest: manifest_json,
+        favicon_url,
+        installed_addon_id,
+    }))
 }
 
 async fn list_addons(State(state): State<AppState>, user: AuthUser) -> AppResult<Json<Value>> {
@@ -1070,4 +1093,30 @@ fn watch_state_from_row(row: &sqlx::sqlite::SqliteRow) -> AppResult<WatchState> 
         duration_seconds: row.try_get("duration_seconds")?,
         updated_at: row.try_get("updated_at")?,
     })
+}
+
+fn derive_favicon_url(source_url: &str, manifest: &Value) -> Option<String> {
+    if let Some(url) = manifest
+        .as_object()
+        .and_then(|obj| obj.get("logo").or_else(|| obj.get("icon")))
+        .and_then(Value::as_str)
+        .and_then(|value| {
+            let trimmed = value.trim();
+            (!trimmed.is_empty()).then_some(trimmed)
+        })
+    {
+        return Some(url.to_string());
+    }
+
+    let parsed = url::Url::parse(source_url).ok()?;
+    match parsed.scheme() {
+        "http" | "https" => {
+            let mut origin = parsed;
+            origin.set_path("/favicon.ico");
+            origin.set_query(None);
+            origin.set_fragment(None);
+            Some(origin.to_string())
+        }
+        _ => None,
+    }
 }

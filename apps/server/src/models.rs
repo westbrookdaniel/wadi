@@ -32,6 +32,15 @@ pub struct AddonRecord {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddonPreview {
+    pub source_url: String,
+    pub transport: String,
+    pub manifest: Value,
+    pub favicon_url: Option<String>,
+    pub installed_addon_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserList {
     pub id: String,
     pub name: String,

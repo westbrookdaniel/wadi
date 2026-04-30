@@ -15,7 +15,7 @@ import type { MediaPreview } from '@/api/types'
 import { AppShell } from '@/features/app-shell/app-shell'
 import type { NavPath } from '@/features/app-shell/nav-items'
 import { ProtectedRoute } from '@/features/app-shell/protected-route'
-import { SettingsPage } from '@/features/app-shell/settings-page'
+import { AddAddonPage, SettingsPage } from '@/features/app-shell/settings-page'
 import { AuthPage } from '@/features/auth/auth-pages'
 import { CatalogPage } from '@/features/catalog/catalog-page'
 import { HomePage } from '@/features/catalog/home-page'
@@ -112,6 +112,12 @@ const settingsRoute = createRoute({
   component: SettingsRoute,
 })
 
+const addAddonRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/settings/add-addon',
+  component: AddAddonRoute,
+})
+
 const mediaRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/media/$type/$id',
@@ -132,6 +138,7 @@ const routeTree = rootRoute.addChildren([
   moviesRoute,
   seriesRoute,
   settingsRoute,
+  addAddonRoute,
   mediaRoute,
 ])
 
@@ -141,6 +148,20 @@ declare module '@tanstack/react-router' {
   interface Register {
     router: typeof router
   }
+}
+
+function AddAddonRoute() {
+  const navigate = useNavigate()
+  const location = useLocation()
+  return (
+    <ProtectedRoute>
+      {() => (
+        <AppShell activePath="/settings" label="add addon page" onNavigate={(path) => navigate({ to: path })}>
+          <AddAddonPage />
+        </AppShell>
+      )}
+    </ProtectedRoute>
+  )
 }
 
 function AuthRoute({ mode }: { mode: 'login' | 'register' }) {

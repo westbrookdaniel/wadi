@@ -3,6 +3,7 @@ import { queryOptions } from '@tanstack/react-query'
 import { ApiError, apiRequest } from '@/api/client'
 import type {
   AddonRecord,
+  AddonPreview,
   ApiListResponse,
   ApiResponses,
   AuthResponse,
@@ -191,6 +192,13 @@ export function logout() {
 
 export function installAddon(url: string) {
   return apiRequest<AddonRecord>('/api/addons/install', {
+    method: 'POST',
+    body: { url },
+  })
+}
+
+export function previewAddon(url: string) {
+  return apiRequest<AddonPreview>('/api/addons/preview', {
     method: 'POST',
     body: { url },
   })

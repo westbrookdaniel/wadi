@@ -32,6 +32,14 @@ export type AddonRecord = {
   updated_at: string
 }
 
+export type AddonPreview = {
+  source_url: string
+  transport: string
+  manifest: AddonManifest
+  favicon_url: string | null
+  installed_addon_id: string | null
+}
+
 export type AddonManifest = {
   id?: string
   name?: string
