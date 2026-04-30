@@ -35,6 +35,7 @@ pub struct AddonRecord {
 pub struct UserList {
     pub id: String,
     pub name: String,
+    pub is_default: bool,
     pub description: Option<String>,
     pub created_at: String,
     pub updated_at: String,

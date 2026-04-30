@@ -77,6 +77,7 @@ export type ConfigDecl = {
 export type UserList = {
   id: string
   name: string
+  is_default: boolean
   description: string | null
   created_at: string
   updated_at: string
