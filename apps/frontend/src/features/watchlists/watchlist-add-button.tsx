@@ -2,7 +2,7 @@ import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/rea
 import { Heart, Plus } from 'lucide-react'
 
 import { addListItem, deleteListItem, listItemsQuery, listsQuery, queryKeys } from '@/api/queries'
-import type { ListItem, MediaPreview } from '@/api/types'
+import type { MediaPreview } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'

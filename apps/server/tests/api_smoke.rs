@@ -1,15 +1,15 @@
 use axum::{
     body::{Body, Bytes},
-    http::{HeaderMap, Method, Request, StatusCode, header},
+    http::{header, HeaderMap, Method, Request, StatusCode},
 };
 use http_body_util::BodyExt;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sqlx::SqlitePool;
 use tower::ServiceExt;
-use wadi_server::{AppState, api, config::Config, db};
+use wadi_server::{api, config::Config, db, AppState};
 use wiremock::{
-    Mock, MockServer, ResponseTemplate,
     matchers::{method, path},
+    Mock, MockServer, ResponseTemplate,
 };
 
 async fn test_app() -> axum::Router {
@@ -169,12 +169,10 @@ async fn stream_proxy_requires_auth_and_valid_http_url() {
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert!(
-        body["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("http and https")
-    );
+    assert!(body["error"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("http and https"));
 }
 
 #[tokio::test]
@@ -397,12 +395,10 @@ async fn watch_state_progress_and_continue_watching_flow() {
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert!(
-        invalid["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("position_seconds")
-    );
+    assert!(invalid["error"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("position_seconds"));
 }
 
 #[tokio::test]
@@ -487,6 +483,120 @@ async fn watch_state_is_user_scoped() {
     .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(second_continue["items"].as_array().unwrap().len(), 0);
+}
+
+#[tokio::test]
+async fn browse_layout_requires_auth_and_roundtrips_normalized_values() {
+    let app = test_app().await;
+
+    let (status, _) = json_request(
+        app.clone(),
+        Method::GET,
+        "/api/settings/browse-layout",
+        None,
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+
+    let (status, _) = json_request(
+        app.clone(),
+        Method::PUT,
+        "/api/settings/browse-layout",
+        None,
+        json!({}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+
+    let (_, auth) = json_request(
+        app.clone(),
+        Method::POST,
+        "/api/auth/register",
+        None,
+        json!({ "email": "layout@example.com", "password": "password123" }),
+    )
+    .await;
+    let token = auth["token"].as_str().unwrap();
+
+    let (status, empty_layout) = json_request(
+        app.clone(),
+        Method::GET,
+        "/api/settings/browse-layout",
+        Some(token),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        empty_layout,
+        json!({
+            "pages": {
+                "home": { "order": [], "hidden": [] },
+                "movies": { "order": [], "hidden": [] },
+                "series": { "order": [], "hidden": [] }
+            }
+        })
+    );
+
+    let (status, saved) = json_request(
+        app.clone(),
+        Method::PUT,
+        "/api/settings/browse-layout",
+        Some(token),
+        json!({
+            "pages": {
+                "home": {
+                    "order": ["continue_watching", "catalog:addon-1:movie:top", "continue_watching", ""],
+                    "hidden": ["watchlist:list-1", "watchlist:list-1", " "]
+                },
+                "movies": {
+                    "order": ["watchlist:list-1", "watchlist:list-1"],
+                    "hidden": ["catalog:addon-2:movie:trending", "catalog:addon-2:movie:trending"]
+                },
+                "series": {
+                    "order": ["watchlist:list-2"],
+                    "hidden": []
+                },
+                "unknown_page": {
+                    "order": ["ignored:value"],
+                    "hidden": []
+                }
+            }
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        saved,
+        json!({
+            "pages": {
+                "home": {
+                    "order": ["continue_watching", "catalog:addon-1:movie:top"],
+                    "hidden": ["watchlist:list-1"]
+                },
+                "movies": {
+                    "order": ["watchlist:list-1"],
+                    "hidden": ["catalog:addon-2:movie:trending"]
+                },
+                "series": {
+                    "order": ["watchlist:list-2"],
+                    "hidden": []
+                }
+            }
+        })
+    );
+
+    let (status, fetched) = json_request(
+        app,
+        Method::GET,
+        "/api/settings/browse-layout",
+        Some(token),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(fetched, saved);
 }
 
 #[tokio::test]

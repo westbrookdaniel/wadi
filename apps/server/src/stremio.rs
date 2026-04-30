@@ -102,7 +102,12 @@ impl ResourceKind {
 }
 
 impl Manifest {
-    pub fn supports_resource(&self, kind: ResourceKind, content_type: &str, id: Option<&str>) -> bool {
+    pub fn supports_resource(
+        &self,
+        kind: ResourceKind,
+        content_type: &str,
+        id: Option<&str>,
+    ) -> bool {
         if kind == ResourceKind::Catalog {
             return self
                 .catalogs

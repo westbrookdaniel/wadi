@@ -72,7 +72,10 @@ impl AddonClient {
         }
     }
 
-    pub async fn fetch_manifest(&self, source_url: &str) -> AppResult<(TransportKind, Manifest, Value)> {
+    pub async fn fetch_manifest(
+        &self,
+        source_url: &str,
+    ) -> AppResult<(TransportKind, Manifest, Value)> {
         let transport = self.detect_transport(source_url)?;
         let manifest_url = self.manifest_url(source_url, transport)?;
         let response = self
@@ -245,15 +248,21 @@ mod tests {
     fn detects_transports() {
         let client = client();
         assert_eq!(
-            client.detect_transport("https://example.com/manifest.json").unwrap(),
+            client
+                .detect_transport("https://example.com/manifest.json")
+                .unwrap(),
             TransportKind::Http
         );
         assert_eq!(
-            client.detect_transport("https://example.com/stremio/v1").unwrap(),
+            client
+                .detect_transport("https://example.com/stremio/v1")
+                .unwrap(),
             TransportKind::Legacy
         );
         assert_eq!(
-            client.detect_transport("ipfs://bafy/manifest.json").unwrap(),
+            client
+                .detect_transport("ipfs://bafy/manifest.json")
+                .unwrap(),
             TransportKind::Ipfs
         );
     }
@@ -288,6 +297,9 @@ mod tests {
         let url = client
             .manifest_url("ipfs://bafybeifoo", TransportKind::Ipfs)
             .unwrap();
-        assert_eq!(url.as_str(), "https://gateway.example/ipfs/bafybeifoo/manifest.json");
+        assert_eq!(
+            url.as_str(),
+            "https://gateway.example/ipfs/bafybeifoo/manifest.json"
+        );
     }
 }
