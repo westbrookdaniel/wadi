@@ -49,21 +49,3 @@ export function PosterSkeletonRow({ count = 8 }: { count?: number }) {
     </MediaRow>
   );
 }
-
-export function HomePageSkeleton({ sections = 3 }: { sections?: number }) {
-  return (
-    <div className="grid gap-8" role="status" aria-label="Loading home page">
-      {Array.from({ length: sections }).map((_, index) => (
-        <section className={contentSection} key={index}>
-          <div className={sectionHeading}>
-            <div className="grid gap-2">
-              <Skeleton className="h-7 w-[min(280px,65vw)] rounded-full" />
-              <Skeleton className="h-4 w-[min(180px,48vw)] rounded-full" />
-            </div>
-          </div>
-          <PosterSkeletonRow />
-        </section>
-      ))}
-    </div>
-  );
-}
