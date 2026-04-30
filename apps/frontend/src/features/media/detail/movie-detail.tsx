@@ -39,11 +39,13 @@ export function MovieDetailPage({
         />
       }
     >
-      <WatchedButton
-        watched={watchState.watched}
-        isPending={toggleWatched.isPending}
-        onClick={() => toggleWatched.mutate(!watchState.watched)}
-      />
+      {media.type === 'movie' ? (
+        <WatchedButton
+          watched={watchState.watched}
+          isPending={toggleWatched.isPending}
+          onClick={() => toggleWatched.mutate(!watchState.watched)}
+        />
+      ) : null}
       {listAction}
     </DetailShell>
   )
