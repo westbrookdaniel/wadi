@@ -60,7 +60,7 @@ export function MediaCard({
         <div className="min-w-0">
           <h3 className="m-0 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[0.95rem] tracking-normal">{title}</h3>
           <p className={cn('mt-1 mb-0 text-[0.82rem] text-muted-foreground')}>
-            {[type, progressLabel(progress), release].filter(Boolean).join(' • ')}
+            {[type, release].filter(Boolean).join(' • ')}
           </p>
         </div>
         {action}
@@ -74,24 +74,4 @@ function progressPercent(position: number, duration?: number | null) {
     return 8
   }
   return Math.min(100, Math.max(4, Math.round((position / duration) * 100)))
-}
-
-function progressLabel(progress?: { position: number; duration?: number | null }) {
-  if (!progress || progress.position <= 0) {
-    return undefined
-  }
-  if (progress.duration && progress.duration > 0) {
-    return `${formatTime(progress.position)} / ${formatTime(progress.duration)}`
-  }
-  return formatTime(progress.position)
-}
-
-function formatTime(seconds: number) {
-  const minutes = Math.max(1, Math.round(seconds / 60))
-  if (minutes < 60) {
-    return `${minutes}m`
-  }
-  const hours = Math.floor(minutes / 60)
-  const remaining = minutes % 60
-  return remaining ? `${hours}h ${remaining}m` : `${hours}h`
 }

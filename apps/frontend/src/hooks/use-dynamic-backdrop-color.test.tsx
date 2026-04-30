@@ -40,6 +40,44 @@ describe('resolveBackdropPosterSource', () => {
       'https://cdn.example/a.jpg',
     )
   })
+
+  it('prefers the visual top-left visible catalog image over DOM order', () => {
+    const root = document.createElement('div')
+    const hiddenFirst = document.createElement('img')
+    hiddenFirst.setAttribute('data-bg-source', 'catalog')
+    hiddenFirst.src = 'https://cdn.example/hidden-first.jpg'
+    setRect(hiddenFirst, { top: 0, left: -800, width: 180, height: 270 })
+
+    const visibleSecond = document.createElement('img')
+    visibleSecond.setAttribute('data-bg-source', 'catalog')
+    visibleSecond.src = 'https://cdn.example/visible-second.jpg'
+    setRect(visibleSecond, { top: 20, left: 16, width: 180, height: 270 })
+
+    root.append(hiddenFirst, visibleSecond)
+
+    expect(resolveBackdropPosterSource('/home', root)).toBe(
+      'https://cdn.example/visible-second.jpg',
+    )
+  })
+
+  it('falls back to first usable catalog image when none are visible', () => {
+    const root = document.createElement('div')
+    const first = document.createElement('img')
+    first.setAttribute('data-bg-source', 'catalog')
+    first.src = 'https://cdn.example/first.jpg'
+    setRect(first, { top: 0, left: -1200, width: 180, height: 270 })
+
+    const second = document.createElement('img')
+    second.setAttribute('data-bg-source', 'catalog')
+    second.src = 'https://cdn.example/second.jpg'
+    setRect(second, { top: 4000, left: 40, width: 180, height: 270 })
+
+    root.append(first, second)
+
+    expect(resolveBackdropPosterSource('/home', root)).toBe(
+      'https://cdn.example/first.jpg',
+    )
+  })
 })
 
 describe('useDynamicBackdropColor', () => {
@@ -70,6 +108,81 @@ describe('useDynamicBackdropColor', () => {
       expect(screen.getByTestId('backdrop').className).toContain(
         'has-media-accent',
       )
+    })
+  })
+
+  it('updates when home content mutates and a new top-left visible poster appears', async () => {
+    const extractAccent = vi.fn(async (sourceUrl: string) => {
+      if (sourceUrl.endsWith('/first.jpg')) {
+        return '120 80 40'
+      }
+      if (sourceUrl.endsWith('/new-top-left.jpg')) {
+        return '20 180 80'
+      }
+      return null
+    })
+
+    const { rerender } = render(
+      <BackdropHarness
+        pathname="/home"
+        catalogSources={['https://cdn.example/first.jpg']}
+        catalogRects={{
+          'https://cdn.example/first.jpg': {
+            top: 20,
+            left: 24,
+            width: 180,
+            height: 270,
+          },
+        }}
+        extractAccent={extractAccent}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(
+        screen
+          .getByTestId('backdrop')
+          .style.getPropertyValue('--media-accent-r')
+          .trim(),
+      ).toBe('120')
+    })
+
+    rerender(
+      <BackdropHarness
+        pathname="/home"
+        catalogSources={[
+          'https://cdn.example/new-top-left.jpg',
+          'https://cdn.example/first.jpg',
+        ]}
+        catalogRects={{
+          'https://cdn.example/new-top-left.jpg': {
+            top: 10,
+            left: 8,
+            width: 180,
+            height: 270,
+          },
+          'https://cdn.example/first.jpg': {
+            top: 30,
+            left: 40,
+            width: 180,
+            height: 270,
+          },
+        }}
+        extractAccent={extractAccent}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(extractAccent).toHaveBeenCalledWith(
+        'https://cdn.example/new-top-left.jpg',
+        expect.any(AbortSignal),
+      )
+      expect(
+        screen
+          .getByTestId('backdrop')
+          .style.getPropertyValue('--media-accent-r')
+          .trim(),
+      ).toBe('20')
     })
   })
 
@@ -169,11 +282,16 @@ function BackdropHarness({
   pathname,
   detailSrc,
   catalogSources = [],
+  catalogRects = {},
   extractAccent,
 }: {
   pathname: string
   detailSrc?: string
   catalogSources?: string[]
+  catalogRects?: Record<
+    string,
+    { top: number; left: number; width: number; height: number }
+  >
   extractAccent: (sourceUrl: string, signal: AbortSignal) => Promise<string | null>
 }) {
   const backdrop = useDynamicBackdropColor(pathname, { extractAccent })
@@ -184,7 +302,19 @@ function BackdropHarness({
         <img data-bg-source="detail" src={detailSrc} alt="" />
       ) : null}
       {catalogSources.map((source) => (
-        <img data-bg-source="catalog" src={source} alt="" key={source} />
+        <img
+          data-bg-source="catalog"
+          src={source}
+          alt=""
+          key={source}
+          ref={(element) => {
+            const rect = catalogRects[source]
+            if (!element || !rect) {
+              return
+            }
+            setRect(element, rect)
+          }}
+        />
       ))}
       <div
         data-testid="backdrop"
@@ -193,4 +323,25 @@ function BackdropHarness({
       />
     </div>
   )
+}
+
+function setRect(
+  element: Element,
+  rect: { top: number; left: number; width: number; height: number },
+) {
+  const value: DOMRect = {
+    x: rect.left,
+    y: rect.top,
+    top: rect.top,
+    left: rect.left,
+    width: rect.width,
+    height: rect.height,
+    right: rect.left + rect.width,
+    bottom: rect.top + rect.height,
+    toJSON: () => ({}),
+  } as DOMRect
+  Object.defineProperty(element, 'getBoundingClientRect', {
+    configurable: true,
+    value: () => value,
+  })
 }

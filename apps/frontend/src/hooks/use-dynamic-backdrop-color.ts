@@ -161,9 +161,30 @@ export function resolveBackdropPosterSource(
     return null
   }
 
-  return imageSource(
-    root.querySelector<HTMLImageElement>('img[data-bg-source="catalog"]'),
-  )
+  const posters = Array.from(
+    root.querySelectorAll<HTMLImageElement>('img[data-bg-source="catalog"]'),
+  ).map((image) => ({ image, source: imageSource(image) }))
+
+  const usable = posters.filter((entry) => Boolean(entry.source))
+  if (!usable.length) {
+    return null
+  }
+
+  const visible = usable.filter((entry) => isVisibleInViewport(entry.image))
+  if (!visible.length) {
+    return usable[0]?.source ?? null
+  }
+
+  visible.sort((left, right) => {
+    const leftRect = left.image.getBoundingClientRect()
+    const rightRect = right.image.getBoundingClientRect()
+    if (leftRect.top !== rightRect.top) {
+      return leftRect.top - rightRect.top
+    }
+    return leftRect.left - rightRect.left
+  })
+
+  return visible[0]?.source ?? usable[0]?.source ?? null
 }
 
 export async function extractPosterAccentRgb(
@@ -222,6 +243,29 @@ function imageSource(image: HTMLImageElement | null) {
   }
   const source = image.currentSrc || image.src
   return source || null
+}
+
+function isVisibleInViewport(image: HTMLImageElement) {
+  const rect = image.getBoundingClientRect()
+  if (rect.width <= 0 || rect.height <= 0) {
+    return false
+  }
+
+  const viewportWidth =
+    typeof window !== 'undefined' && window.innerWidth > 0
+      ? window.innerWidth
+      : Number.POSITIVE_INFINITY
+  const viewportHeight =
+    typeof window !== 'undefined' && window.innerHeight > 0
+      ? window.innerHeight
+      : Number.POSITIVE_INFINITY
+
+  return (
+    rect.right > 0 &&
+    rect.bottom > 0 &&
+    rect.left < viewportWidth &&
+    rect.top < viewportHeight
+  )
 }
 
 function loadImage(sourceUrl: string, signal: AbortSignal) {
