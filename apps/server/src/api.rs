@@ -1,30 +1,33 @@
 use std::collections::BTreeMap;
 
 use axum::{
-    Json, Router,
     body::Body,
     extract::{Path, Query, State},
     http::{
-        HeaderMap, HeaderValue, Response, StatusCode,
         header::{
             ACCEPT_RANGES, ACCESS_CONTROL_EXPOSE_HEADERS, CACHE_CONTROL, CONTENT_LENGTH,
             CONTENT_RANGE, CONTENT_TYPE, ETAG, EXPIRES, LAST_MODIFIED, RANGE,
         },
+        HeaderMap, HeaderValue, Response, StatusCode,
     },
     routing::{delete, get, post, put},
+    Json, Router,
 };
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sqlx::Row;
 use uuid::Uuid;
 
 use crate::{
-    AppState,
     addon::{ResourceRequest, TransportKind},
     auth,
     error::{AppError, AppResult},
-    models::{AddonPreview, AddonRecord, AuthUser, ListItem, User, UserList, WatchData, WatchState},
+    models::{
+        AddonPreview, AddonRecord, AuthUser, BrowseLayout, BrowseLayoutPage, BrowseLayoutPages,
+        ListItem, User, UserList, WatchData, WatchState,
+    },
     stremio::{Manifest, ResourceKind},
+    AppState,
 };
 
 const DEFAULT_LIST_NAME: &str = "Saved";
@@ -65,6 +68,10 @@ pub fn router(state: AppState) -> Router {
         .route("/api/watch-data/{content_type}/{id}", get(get_watch_data))
         .route("/api/watch-progress", put(set_watch_progress))
         .route("/api/continue-watching", get(continue_watching))
+        .route(
+            "/api/settings/browse-layout",
+            get(get_browse_layout).put(set_browse_layout),
+        )
         .with_state(state)
 }
 
@@ -337,7 +344,9 @@ async fn update_list(
 ) -> AppResult<Json<UserList>> {
     ensure_default_list(&state, &user.id).await?;
     if is_default_list(&state, &user.id, &list_id).await? {
-        return Err(AppError::BadRequest("default list cannot be renamed".into()));
+        return Err(AppError::BadRequest(
+            "default list cannot be renamed".into(),
+        ));
     }
     let name = validate_list_name(&payload.name)?;
     let result = sqlx::query(
@@ -362,7 +371,9 @@ async fn delete_list(
 ) -> AppResult<StatusCode> {
     ensure_default_list(&state, &user.id).await?;
     if is_default_list(&state, &user.id, &list_id).await? {
-        return Err(AppError::BadRequest("default list cannot be deleted".into()));
+        return Err(AppError::BadRequest(
+            "default list cannot be deleted".into(),
+        ));
     }
     let result = sqlx::query("DELETE FROM lists WHERE id = ?1 AND user_id = ?2")
         .bind(list_id)
@@ -496,6 +507,26 @@ struct WatchStateQuery {
 #[derive(Debug, Deserialize)]
 struct ContinueWatchingQuery {
     limit: Option<i64>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct BrowseLayoutRequest {
+    pages: Option<BrowseLayoutPagesRequest>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct BrowseLayoutPagesRequest {
+    home: Option<BrowseLayoutPageRequest>,
+    movies: Option<BrowseLayoutPageRequest>,
+    series: Option<BrowseLayoutPageRequest>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct BrowseLayoutPageRequest {
+    #[serde(default)]
+    order: Vec<String>,
+    #[serde(default)]
+    hidden: Vec<String>,
 }
 
 async fn set_watch_state(
@@ -633,6 +664,36 @@ async fn continue_watching(
         .map(watch_state_from_row)
         .collect::<Result<Vec<_>, _>>()?;
     Ok(Json(json!({ "items": items })))
+}
+
+async fn get_browse_layout(
+    State(state): State<AppState>,
+    user: AuthUser,
+) -> AppResult<Json<BrowseLayout>> {
+    Ok(Json(load_browse_layout(&state, &user.id).await?))
+}
+
+async fn set_browse_layout(
+    State(state): State<AppState>,
+    user: AuthUser,
+    Json(payload): Json<BrowseLayoutRequest>,
+) -> AppResult<Json<BrowseLayout>> {
+    let layout = normalize_browse_layout_request(payload);
+    let layout_json = serde_json::to_string(&layout)?;
+    sqlx::query(
+        r#"
+        INSERT INTO user_settings (user_id, browse_layout_json)
+        VALUES (?1, ?2)
+        ON CONFLICT(user_id) DO UPDATE SET
+            browse_layout_json = excluded.browse_layout_json,
+            updated_at = datetime('now')
+        "#,
+    )
+    .bind(&user.id)
+    .bind(layout_json)
+    .execute(&state.db)
+    .await?;
+    Ok(Json(layout))
 }
 
 async fn catalogs(State(state): State<AppState>, user: AuthUser) -> AppResult<Json<Value>> {
@@ -1079,6 +1140,91 @@ async fn load_watch_data(
         media_id: media_id.to_string(),
         items,
     })
+}
+
+async fn load_browse_layout(state: &AppState, user_id: &str) -> AppResult<BrowseLayout> {
+    let row = sqlx::query("SELECT browse_layout_json FROM user_settings WHERE user_id = ?1")
+        .bind(user_id)
+        .fetch_optional(&state.db)
+        .await?;
+    let Some(row) = row else {
+        return Ok(BrowseLayout::default());
+    };
+
+    let raw: String = row.try_get("browse_layout_json")?;
+    let parsed = serde_json::from_str::<BrowseLayout>(&raw).unwrap_or_default();
+    Ok(normalize_browse_layout(parsed))
+}
+
+fn normalize_browse_layout_request(payload: BrowseLayoutRequest) -> BrowseLayout {
+    let pages = payload.pages.unwrap_or_default();
+    normalize_browse_layout(BrowseLayout {
+        pages: BrowseLayoutPages {
+            home: normalize_browse_layout_page(pages.home.unwrap_or_default()),
+            movies: normalize_browse_layout_page(pages.movies.unwrap_or_default()),
+            series: normalize_browse_layout_page(pages.series.unwrap_or_default()),
+        },
+    })
+}
+
+fn normalize_browse_layout(layout: BrowseLayout) -> BrowseLayout {
+    BrowseLayout {
+        pages: BrowseLayoutPages {
+            home: normalize_browse_layout_page(layout.pages.home),
+            movies: normalize_browse_layout_page(layout.pages.movies),
+            series: normalize_browse_layout_page(layout.pages.series),
+        },
+    }
+}
+
+fn normalize_browse_layout_page<T>(page: T) -> BrowseLayoutPage
+where
+    T: Into<BrowseLayoutPageInput>,
+{
+    let page = page.into();
+    BrowseLayoutPage {
+        order: normalize_row_keys(page.order),
+        hidden: normalize_row_keys(page.hidden),
+    }
+}
+
+#[derive(Default)]
+struct BrowseLayoutPageInput {
+    order: Vec<String>,
+    hidden: Vec<String>,
+}
+
+impl From<BrowseLayoutPage> for BrowseLayoutPageInput {
+    fn from(value: BrowseLayoutPage) -> Self {
+        Self {
+            order: value.order,
+            hidden: value.hidden,
+        }
+    }
+}
+
+impl From<BrowseLayoutPageRequest> for BrowseLayoutPageInput {
+    fn from(value: BrowseLayoutPageRequest) -> Self {
+        Self {
+            order: value.order,
+            hidden: value.hidden,
+        }
+    }
+}
+
+fn normalize_row_keys(keys: Vec<String>) -> Vec<String> {
+    let mut normalized = Vec::new();
+    for key in keys {
+        let key = key.trim();
+        if key.is_empty() {
+            continue;
+        }
+        if normalized.iter().any(|value| value == key) {
+            continue;
+        }
+        normalized.push(key.to_string());
+    }
+    normalized
 }
 
 fn user_from_row(row: &sqlx::sqlite::SqliteRow) -> AppResult<User> {

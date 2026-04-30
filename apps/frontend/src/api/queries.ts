@@ -7,6 +7,7 @@ import type {
   ApiListResponse,
   ApiResponses,
   AuthResponse,
+  BrowseLayout,
   CatalogEntry,
   ContinueWatchingItem,
   ListItem,
@@ -34,6 +35,7 @@ export const queryKeys = {
   subtitles: (type: string, id: string) => ['subtitles', type, id] as const,
   watchData: (type: string, id: string) => ['watch-data', type, id] as const,
   continueWatching: (limit = 20) => ['continue-watching', limit] as const,
+  browseLayout: ['browse-layout'] as const,
 }
 
 export const meQuery = (enabled: boolean) =>
@@ -153,6 +155,11 @@ export const continueWatchingQuery = (limit = 20) =>
     retry: (failureCount, error) => !(error instanceof ApiError && error.status === 404) && failureCount < 3,
   })
 
+export const browseLayoutQuery = queryOptions({
+  queryKey: queryKeys.browseLayout,
+  queryFn: () => apiRequest<BrowseLayout>('/api/settings/browse-layout'),
+})
+
 export const subtitlesQuery = (contentType: string, mediaId: string, enabled = true) =>
   queryOptions({
     queryKey: queryKeys.subtitles(contentType, mediaId),
@@ -249,6 +256,13 @@ export function addListItem(listId: string, media: MediaPreview) {
 
 export function deleteListItem(listId: string, itemId: string) {
   return apiRequest<null>(`/api/lists/${listId}/items/${itemId}`, { method: 'DELETE' })
+}
+
+export function updateBrowseLayout(layout: BrowseLayout) {
+  return apiRequest<BrowseLayout>('/api/settings/browse-layout', {
+    method: 'PUT',
+    body: layout,
+  })
 }
 
 export function setWatchState(payload: WatchStateRequest) {

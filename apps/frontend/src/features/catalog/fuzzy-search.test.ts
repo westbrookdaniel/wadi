@@ -1,4 +1,5 @@
 import type { MediaPreview } from '@/api/types'
+import { describe, expect, it } from 'vitest'
 
 import { rankMediaByQuery } from './fuzzy-search'
 

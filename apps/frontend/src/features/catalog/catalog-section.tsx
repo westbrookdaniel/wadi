@@ -11,10 +11,12 @@ import { MediaRow } from "@/components/media-row";
 export function CatalogSection({
   entry,
   search,
+  showTypeBadge = false,
   onOpen,
 }: {
   entry: CatalogEntry;
   search?: string;
+  showTypeBadge?: boolean;
   onOpen: (media: MediaPreview) => void;
 }) {
   const extras: Record<string, string> = search ? { search } : {};
@@ -27,7 +29,14 @@ export function CatalogSection({
     <section className={contentSection}>
       <div className={sectionHeading}>
         <div>
-          <h2 className="m-0 tracking-normal">{title}</h2>
+          <h2 className="m-0 flex items-center gap-2 tracking-normal">
+            <span>{title}</span>
+            {showTypeBadge ? (
+              <span className="rounded-full border border-border px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                {entry.catalog.type === "series" ? "Series" : "Movies"}
+              </span>
+            ) : null}
+          </h2>
           <p className={mutedText}>{entry.addon_name}</p>
         </div>
       </div>

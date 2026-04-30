@@ -27,6 +27,7 @@ import { cn } from '@/lib/utils'
 import { useAppStore } from '@/store/app-store'
 import { useNavigate } from '@tanstack/react-router'
 import { useToast } from '@/components/ui/toast'
+import { BrowseLayoutSettings } from './browse-layout-settings'
 
 const addonUrlSchema = z.object({
   url: z.url('Enter a valid addon manifest URL.'),
@@ -71,6 +72,10 @@ export function SettingsPage({ user }: { user: User }) {
           Logout
         </Button>
       </header>
+
+      <section className="grid gap-4 border-b border-border pt-2 pb-6">
+        <BrowseLayoutSettings />
+      </section>
 
       <section className="grid gap-4 border-b border-border pt-2 pb-6">
         <div className="flex flex-wrap items-center justify-between gap-3">

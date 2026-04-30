@@ -152,7 +152,6 @@ declare module '@tanstack/react-router' {
 
 function AddAddonRoute() {
   const navigate = useNavigate()
-  const location = useLocation()
   return (
     <ProtectedRoute>
       {() => (

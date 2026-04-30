@@ -164,3 +164,14 @@ export type SubtitleInfo = {
   url?: string
   [key: string]: unknown
 }
+
+export type BrowsePageKey = 'home' | 'movies' | 'series'
+
+export type BrowseLayoutPage = {
+  order: string[]
+  hidden: string[]
+}
+
+export type BrowseLayout = {
+  pages: Record<BrowsePageKey, BrowseLayoutPage>
+}

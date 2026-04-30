@@ -1,43 +1,59 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from '@tanstack/react-query'
 
-import { catalogsQuery, continueWatchingQuery, metaQuery } from "@/api/queries";
-import type { ContinueWatchingItem, MediaPreview } from "@/api/types";
-import { EmptyState, ErrorState, LoadingState } from "@/components/status";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { MediaCard } from "@/features/media/media-card";
-import { contentSection, pageStack, sectionHeading } from "@/lib/styles";
+import { browseLayoutQuery, catalogsQuery, continueWatchingQuery, listItemsQuery, listsQuery } from '@/api/queries'
+import type { MediaPreview } from '@/api/types'
+import { EmptyState, ErrorState, LoadingState } from '@/components/status'
+import { Button } from '@/components/ui/button'
+import { pageStack } from '@/lib/styles'
 
-import { CatalogSection } from "./catalog-section";
-import { MediaRow } from "@/components/media-row";
+import { BrowseSections } from './browse-sections'
+import { buildBrowseRowCandidates, createDefaultBrowseLayout, normalizeBrowseLayout, resolveVisibleBrowseRows } from './browse-layout'
 
 export function HomePage({
   onOpenMedia,
   onOpenSettings,
 }: {
-  onOpenMedia: (media: MediaPreview, preferredVideoId?: string | null) => void;
-  onOpenSettings: () => void;
+  onOpenMedia: (media: MediaPreview, preferredVideoId?: string | null) => void
+  onOpenSettings: () => void
 }) {
-  const catalogs = useQuery(catalogsQuery);
-  const continueWatching = useQuery(continueWatchingQuery(12));
-  const continueItems = continueWatching.data ?? [];
-  const hasContinueWatching = Boolean(continueItems.length);
-  const hasCatalogs = Boolean(catalogs.data?.length);
-  const showSetup =
-    !catalogs.isLoading &&
-    !continueWatching.isLoading &&
-    !hasContinueWatching &&
-    !hasCatalogs;
+  const catalogs = useQuery(catalogsQuery)
+  const continueWatching = useQuery(continueWatchingQuery(12))
+  const lists = useQuery(listsQuery)
+  const browseLayout = useQuery(browseLayoutQuery)
+
+  const listItems = useQueries({
+    queries: (lists.data ?? []).map((list) => listItemsQuery(list.id)),
+  })
+
+  const listItemsByListId = Object.fromEntries(
+    (lists.data ?? []).map((list, index) => [list.id, listItems[index]?.data ?? []]),
+  )
+
+  const candidates = buildBrowseRowCandidates('home', catalogs.data ?? [], lists.data ?? [])
+  const layout = normalizeBrowseLayout(browseLayout.data ?? createDefaultBrowseLayout())
+  const rows = resolveVisibleBrowseRows(candidates, layout.pages.home)
+
+  const continueItems = continueWatching.data ?? []
+  const hasCatalogs = Boolean(catalogs.data?.length)
+  const hasContinueWatching = Boolean(continueItems.length)
+  const hasWatchlistContent = Object.values(listItemsByListId).some((items) => items.length > 0)
+  const listItemsError = listItems.find((query) => query.error)?.error ?? null
+  const isLoading =
+    catalogs.isLoading ||
+    continueWatching.isLoading ||
+    lists.isLoading ||
+    browseLayout.isLoading ||
+    listItems.some((query) => query.isLoading)
+  const showSetup = !isLoading && !hasContinueWatching && !hasCatalogs && !hasWatchlistContent
 
   return (
     <div className={pageStack}>
-      {catalogs.isLoading || continueWatching.isLoading ? (
-        <LoadingState />
-      ) : null}
+      {isLoading ? <LoadingState /> : null}
       {catalogs.error ? <ErrorState error={catalogs.error} /> : null}
-      {continueWatching.error ? (
-        <ErrorState error={continueWatching.error} />
-      ) : null}
+      {continueWatching.error ? <ErrorState error={continueWatching.error} /> : null}
+      {lists.error ? <ErrorState error={lists.error} /> : null}
+      {browseLayout.error ? <ErrorState error={browseLayout.error} /> : null}
+      {listItemsError ? <ErrorState error={listItemsError} /> : null}
 
       {showSetup ? (
         <EmptyState
@@ -51,146 +67,15 @@ export function HomePage({
         />
       ) : null}
 
-      {!showSetup && hasContinueWatching ? (
-        <section className={contentSection}>
-          <div className={sectionHeading}>
-            <div>
-              <h2 className="m-0 tracking-normal">Continue Watching</h2>
-            </div>
-          </div>
-          <MediaRow>
-            {continueItems.map((item) => (
-              <ContinueWatchingCard
-                key={`${item.media_type}-${item.media_id}-${item.video_id ?? "movie"}`}
-                item={item}
-                onOpenMedia={onOpenMedia}
-              />
-            ))}
-          </MediaRow>
-        </section>
+      {!showSetup ? (
+        <BrowseSections
+          page="home"
+          rows={rows}
+          continueItems={continueItems}
+          listItemsByListId={listItemsByListId}
+          onOpenMedia={onOpenMedia}
+        />
       ) : null}
-
-      {!showSetup && catalogs.data?.length
-        ? catalogs.data.map((entry) => (
-            <CatalogSection
-              key={`${entry.addon_id}-${entry.catalog.type}-${entry.catalog.id}`}
-              entry={entry}
-              onOpen={onOpenMedia}
-            />
-          ))
-        : null}
     </div>
-  );
-}
-
-function ContinueWatchingCard({
-  item,
-  onOpenMedia,
-}: {
-  item: ContinueWatchingItem;
-  onOpenMedia: (media: MediaPreview, preferredVideoId?: string | null) => void;
-}) {
-  const meta = useQuery(metaQuery(item.media_type, item.media_id));
-  const media = mediaPreviewFromMeta(item, meta.data);
-
-  if (meta.isLoading || meta.isFetching) {
-    return <ContinueWatchingCardSkeleton />;
-  }
-
-  if (!media) {
-    return (
-      <MediaCard
-        media={{
-          id: item.media_id,
-          type: item.media_type,
-          name: "Unknown title",
-          raw: { id: item.media_id, type: item.media_type },
-        }}
-        progress={{
-          position: item.position_seconds,
-          duration: item.duration_seconds,
-        }}
-      />
-    );
-  }
-
-  return (
-    <MediaCard
-      media={media}
-      onOpen={() => onOpenMedia(media, item.video_id)}
-      watched={item.watched}
-      progress={{
-        position: item.position_seconds,
-        duration: item.duration_seconds,
-      }}
-    />
-  );
-}
-
-function ContinueWatchingCardSkeleton() {
-  return (
-    <article className="media-card-item grid min-w-0 gap-2.5" aria-hidden="true">
-      <div className="relative aspect-[2/3] w-full overflow-hidden rounded-lg border border-border bg-card">
-        <Skeleton className="size-full rounded-none" />
-      </div>
-      <div className="grid min-w-0 gap-2">
-        <Skeleton className="h-4 w-[78%] rounded-full" />
-        <Skeleton className="h-3 w-[56%] rounded-full" />
-      </div>
-    </article>
-  );
-}
-
-function mediaPreviewFromMeta(
-  item: ContinueWatchingItem,
-  data: unknown,
-): MediaPreview | null {
-  const responses =
-    data &&
-    typeof data === "object" &&
-    "responses" in data &&
-    Array.isArray(data.responses)
-      ? data.responses
-      : [];
-
-  for (const response of responses) {
-    if (!response || typeof response !== "object") {
-      continue;
-    }
-
-    const body = "response" in response ? response.response : null;
-    const meta =
-      body &&
-      typeof body === "object" &&
-      "meta" in body &&
-      body.meta &&
-      typeof body.meta === "object"
-        ? (body.meta as Record<string, unknown>)
-        : null;
-
-    if (!meta) {
-      continue;
-    }
-
-    const name = stringValue(meta.name) ?? stringValue(meta.title);
-    if (!name) {
-      continue;
-    }
-
-    return {
-      id: stringValue(meta.id) ?? item.media_id,
-      type: stringValue(meta.type) ?? item.media_type,
-      name,
-      poster: stringValue(meta.poster),
-      releaseInfo: stringValue(meta.releaseInfo) ?? stringValue(meta.year),
-      description: stringValue(meta.description),
-      raw: meta,
-    };
-  }
-
-  return null;
-}
-
-function stringValue(value: unknown) {
-  return typeof value === "string" && value.trim() ? value : undefined;
+  )
 }

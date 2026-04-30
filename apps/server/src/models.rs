@@ -82,3 +82,27 @@ pub struct WatchData {
     pub media_id: String,
     pub items: Vec<WatchState>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct BrowseLayout {
+    #[serde(default)]
+    pub pages: BrowseLayoutPages,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct BrowseLayoutPages {
+    #[serde(default)]
+    pub home: BrowseLayoutPage,
+    #[serde(default)]
+    pub movies: BrowseLayoutPage,
+    #[serde(default)]
+    pub series: BrowseLayoutPage,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct BrowseLayoutPage {
+    #[serde(default)]
+    pub order: Vec<String>,
+    #[serde(default)]
+    pub hidden: Vec<String>,
+}
