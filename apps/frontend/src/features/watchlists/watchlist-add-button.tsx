@@ -80,7 +80,7 @@ export function WatchlistAddButton({ media }: { media: MediaPreview }) {
         onValueChange={(listId) => listId && addMutation.mutate(listId)}
         disabled={!customLists.length || addMutation.isPending}
       >
-        <SelectTrigger className="w-fit max-w-[min(520px,100%)]" size="sm" aria-label="Add to watchlist">
+        <SelectTrigger className="w-fit max-w-[min(520px,100%)] rounded-full border-border bg-background hover:bg-muted" size="sm" aria-label="Add to watchlist">
           <Plus aria-hidden="true" />
           <SelectValue placeholder="Add to" />
         </SelectTrigger>

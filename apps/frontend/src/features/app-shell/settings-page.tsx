@@ -83,6 +83,7 @@ export function SettingsPage({ user }: { user: User }) {
         <Input
           type="search"
           placeholder="Search installed addons"
+          className="h-[52px] rounded-full px-[18px] text-sm md:text-base"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
