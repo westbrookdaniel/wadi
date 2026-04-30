@@ -1,6 +1,6 @@
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { Search } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 
 import { catalogQuery, catalogsQuery } from '@/api/queries'
 import type { MediaPreview } from '@/api/types'
@@ -11,6 +11,8 @@ import { MediaCard } from '@/features/media/media-card'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { mediaGrid, pageStack } from '@/lib/styles'
 import { cn } from '@/lib/utils'
+
+import { rankMediaByQuery } from './fuzzy-search'
 
 export function SearchPage({ onOpenMedia }: { onOpenMedia: (media: MediaPreview) => void }) {
   const [query, setQuery] = useState('')
@@ -26,7 +28,10 @@ export function SearchPage({ onOpenMedia }: { onOpenMedia: (media: MediaPreview)
     ),
   })
 
-  const media = results.flatMap((result) => result.data ?? [])
+  const media = useMemo(
+    () => rankMediaByQuery(results.flatMap((result) => result.data ?? []), debouncedQuery).map((entry) => entry.item),
+    [debouncedQuery, results],
+  )
   const isSearching = results.some((result) => result.isLoading)
 
   return (
