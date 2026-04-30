@@ -52,7 +52,7 @@ export function DetailShell({
               />
             ) : null}
             <div className="grid gap-[18px]">
-              <h2 className="m-0 text-[clamp(2.3rem,6vw,5.6rem)] leading-[0.95] tracking-normal max-[800px]:text-[clamp(2rem,12vw,3.8rem)]">
+              <h2 className="m-0 text-[4rem] text-balance leading-[0.95] tracking-normal max-[800px]:text-[clamp(2rem,12vw,3.8rem)]">
                 {media.name}
               </h2>
               <p className={cn("m-0 max-w-[680px]", mutedText)}>
