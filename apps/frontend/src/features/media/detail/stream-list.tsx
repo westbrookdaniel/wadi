@@ -13,7 +13,13 @@ import { cn } from '@/lib/utils'
 
 import type { PlayableStream } from './types'
 
-const ALL_SOURCES = '__all_sources__'
+const FILTER_ALL = '__all__'
+type StreamRow = {
+  stream: PlayableStream
+  index: number
+  sourceKey: string
+  sourceLabel: string
+}
 
 export function StreamList({
   streams,
@@ -24,33 +30,23 @@ export function StreamList({
   isLoading: boolean
   onPlay: (stream: PlayableStream) => void
 }) {
-  const rows = useMemo(
-    () =>
-      streams.map((stream, index) => ({
-        stream,
-        index,
-        sourceLabel: streamSource(stream),
-      })),
+  const rows = useMemo<StreamRow[]>(
+    () => streams.map((stream, index) => normalizeStreamRow(stream, index)),
     [streams],
   )
-  const sourceOptions = useMemo(
+  const [filterValue, setFilterValue] = useState<string>(FILTER_ALL)
+  const filterOptions = useMemo(() => buildFilterOptions(rows), [rows])
+  const activeFilterValue =
+    filterValue === FILTER_ALL || filterOptions.some((option) => option.value === filterValue)
+      ? filterValue
+      : FILTER_ALL
+  const filteredRows = useMemo(
     () =>
-      Array.from(new Set(rows.map((row) => row.sourceLabel)))
-        .map((source) => ({
-          value: source,
-          label: source,
-          count: rows.filter((row) => row.sourceLabel === source).length,
-        }))
-        .sort((a, b) => a.label.localeCompare(b.label)),
-    [rows],
+      activeFilterValue === FILTER_ALL
+        ? rows
+        : rows.filter((row) => row.sourceKey === activeFilterValue),
+    [activeFilterValue, rows],
   )
-  const [sourceFilter, setSourceFilter] = useState<string>(ALL_SOURCES)
-  const activeSourceFilter =
-    sourceFilter === ALL_SOURCES || sourceOptions.some((source) => source.value === sourceFilter)
-      ? sourceFilter
-      : ALL_SOURCES
-  const filteredRows =
-    activeSourceFilter === ALL_SOURCES ? rows : rows.filter((row) => row.sourceLabel === activeSourceFilter)
 
   if (isLoading) {
     return <StreamListSkeleton />
@@ -62,28 +58,31 @@ export function StreamList({
 
   return (
     <div className="grid min-h-0 gap-3.5">
-      <div className="grid gap-1.5">
+      <div className="grid gap-2">
         <p className={cn("m-0 text-xs font-medium", mutedText)}>Source</p>
-        <Select value={activeSourceFilter} onValueChange={setSourceFilter}>
+        <Select value={activeFilterValue} onValueChange={setFilterValue}>
           <SelectTrigger className="w-full justify-between rounded-lg border border-border bg-card/70 px-2.5 text-sm" aria-label="Source filter">
             <SelectValue placeholder="All sources" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={ALL_SOURCES}>All sources</SelectItem>
-            {sourceOptions.map((source) => (
+            <SelectItem value={FILTER_ALL}>All sources</SelectItem>
+            {filterOptions.map((source) => (
               <SelectItem key={source.value} value={source.value}>
                 {source.label} ({source.count})
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
+        <p className={cn('m-0 text-xs', mutedText)}>
+          Showing {filteredRows.length} of {rows.length} streams
+        </p>
       </div>
 
       {!filteredRows.length ? (
-        <p className={mutedText}>No streams from this source.</p>
+        <p className={mutedText}>No streams match this filter.</p>
       ) : (
         <div className={cn("flex flex-col gap-2.5 overflow-y-auto pr-1 [scrollbar-width:thin]", bottomPagePadding)}>
-          {filteredRows.map(({ stream, index }) => (
+          {filteredRows.map(({ stream, index, sourceLabel }) => (
             <button
               className="grid h-fit cursor-pointer content-between gap-2.5 rounded-lg border border-border bg-card/80 p-3.5 text-left text-card-foreground hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/30 focus-visible:outline-none [&_small]:text-[0.76rem] [&_small]:text-primary [&_span]:text-muted-foreground"
               type="button"
@@ -92,7 +91,7 @@ export function StreamList({
             >
               <p className="font-bold line">{stream.title ?? stream.name ?? `Stream ${index + 1}`}</p>
               <p className="max-w-full break-all">{streamDetail(stream)}</p>
-              <p className="text-xs text-muted-foreground max-w-full break-all">{streamSource(stream)}</p>
+              <p className="text-xs text-muted-foreground max-w-full break-all">{sourceLabel}</p>
             </button>
           ))}
         </div>
@@ -132,6 +131,34 @@ function streamDetail(stream: PlayableStream) {
   ].filter(Boolean)
 
   return parts.length ? parts.join(' • ') : stream.url ? 'Direct browser-playable stream' : 'Addon stream'
+}
+
+function normalizeStreamRow(stream: PlayableStream, index: number): StreamRow {
+  const sourceLabel = streamSource(stream)
+
+  return {
+    stream,
+    index,
+    sourceKey: `source:${sourceLabel.toLowerCase()}`,
+    sourceLabel,
+  }
+}
+
+function buildFilterOptions(rows: StreamRow[]) {
+  const map = new Map<string, { label: string; count: number }>()
+  for (const row of rows) {
+    const value = row.sourceKey
+    const label = row.sourceLabel
+    const existing = map.get(value)
+    if (existing) {
+      existing.count += 1
+    } else {
+      map.set(value, { label, count: 1 })
+    }
+  }
+  return Array.from(map.entries())
+    .map(([value, data]) => ({ value, label: data.label, count: data.count }))
+    .sort((a, b) => a.label.localeCompare(b.label))
 }
 
 function streamSource(stream: PlayableStream) {

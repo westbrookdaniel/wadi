@@ -27,6 +27,8 @@ use crate::{
     stremio::{Manifest, ResourceKind},
 };
 
+const DEFAULT_LIST_NAME: &str = "Saved";
+
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health))
@@ -103,6 +105,7 @@ async fn register(
         }
     }
     result?;
+    ensure_default_list(&state, &id).await?;
 
     let row = sqlx::query("SELECT id, email, created_at FROM users WHERE id = ?1")
         .bind(id)
@@ -290,10 +293,12 @@ struct ListRequest {
 }
 
 async fn list_lists(State(state): State<AppState>, user: AuthUser) -> AppResult<Json<Value>> {
+    ensure_default_list(&state, &user.id).await?;
     let rows = sqlx::query(
-        "SELECT id, name, description, created_at, updated_at FROM lists WHERE user_id = ?1 ORDER BY updated_at DESC",
+        "SELECT id, name, description, created_at, updated_at FROM lists WHERE user_id = ?1 ORDER BY CASE WHEN lower(name) = lower(?2) THEN 0 ELSE 1 END, updated_at DESC",
     )
     .bind(user.id)
+    .bind(DEFAULT_LIST_NAME)
     .fetch_all(&state.db)
     .await?;
     let items = rows
@@ -308,6 +313,7 @@ async fn create_list(
     user: AuthUser,
     Json(payload): Json<ListRequest>,
 ) -> AppResult<(StatusCode, Json<UserList>)> {
+    ensure_default_list(&state, &user.id).await?;
     let name = validate_list_name(&payload.name)?;
     let id = Uuid::new_v4().to_string();
     sqlx::query("INSERT INTO lists (id, user_id, name, description) VALUES (?1, ?2, ?3, ?4)")
@@ -329,6 +335,10 @@ async fn update_list(
     Path(list_id): Path<String>,
     Json(payload): Json<ListRequest>,
 ) -> AppResult<Json<UserList>> {
+    ensure_default_list(&state, &user.id).await?;
+    if is_default_list(&state, &user.id, &list_id).await? {
+        return Err(AppError::BadRequest("default list cannot be renamed".into()));
+    }
     let name = validate_list_name(&payload.name)?;
     let result = sqlx::query(
         "UPDATE lists SET name = ?1, description = ?2, updated_at = datetime('now') WHERE id = ?3 AND user_id = ?4",
@@ -350,6 +360,10 @@ async fn delete_list(
     user: AuthUser,
     Path(list_id): Path<String>,
 ) -> AppResult<StatusCode> {
+    ensure_default_list(&state, &user.id).await?;
+    if is_default_list(&state, &user.id, &list_id).await? {
+        return Err(AppError::BadRequest("default list cannot be deleted".into()));
+    }
     let result = sqlx::query("DELETE FROM lists WHERE id = ?1 AND user_id = ?2")
         .bind(list_id)
         .bind(user.id)
@@ -832,7 +846,44 @@ fn validate_list_name(name: &str) -> AppResult<String> {
     if name.is_empty() {
         return Err(AppError::BadRequest("list name is required".into()));
     }
+    if name.eq_ignore_ascii_case(DEFAULT_LIST_NAME) {
+        return Err(AppError::BadRequest(
+            "list name is reserved for the default list".into(),
+        ));
+    }
     Ok(name.to_string())
+}
+
+async fn ensure_default_list(state: &AppState, user_id: &str) -> AppResult<()> {
+    let default_id = Uuid::new_v4().to_string();
+    sqlx::query(
+        r#"
+        INSERT INTO lists (id, user_id, name, description)
+        SELECT ?1, ?2, ?3, NULL
+        WHERE NOT EXISTS (
+            SELECT 1 FROM lists WHERE user_id = ?2 AND lower(name) = lower(?3)
+        )
+        "#,
+    )
+    .bind(default_id)
+    .bind(user_id)
+    .bind(DEFAULT_LIST_NAME)
+    .execute(&state.db)
+    .await?;
+    Ok(())
+}
+
+async fn is_default_list(state: &AppState, user_id: &str, list_id: &str) -> AppResult<bool> {
+    let row = sqlx::query("SELECT name FROM lists WHERE id = ?1 AND user_id = ?2")
+        .bind(list_id)
+        .bind(user_id)
+        .fetch_optional(&state.db)
+        .await?;
+    let Some(row) = row else {
+        return Err(AppError::NotFound);
+    };
+    let name: String = row.try_get("name")?;
+    Ok(name.eq_ignore_ascii_case(DEFAULT_LIST_NAME))
 }
 
 fn validate_identity_part(value: &str, field: &str) -> AppResult<String> {
@@ -1056,9 +1107,11 @@ fn addon_from_row(row: &sqlx::sqlite::SqliteRow) -> AppResult<AddonRecord> {
 }
 
 fn list_from_row(row: &sqlx::sqlite::SqliteRow) -> AppResult<UserList> {
+    let name: String = row.try_get("name")?;
     Ok(UserList {
         id: row.try_get("id")?,
-        name: row.try_get("name")?,
+        is_default: name.eq_ignore_ascii_case(DEFAULT_LIST_NAME),
+        name,
         description: row.try_get("description")?,
         created_at: row.try_get("created_at")?,
         updated_at: row.try_get("updated_at")?,
