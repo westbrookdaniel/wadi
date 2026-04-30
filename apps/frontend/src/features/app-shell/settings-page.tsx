@@ -340,11 +340,14 @@ function ConfigureAddonDialog({ addon, open, onOpenChange }: { addon: AddonRecor
 }
 
 function AddonAvatar({ manifest, sourceUrl, fallback }: { manifest: AddonManifest; sourceUrl: string; fallback: string }) {
+  const [imageError, setImageError] = useState(false)
   const src = addonImageSrc(manifest, sourceUrl)
-  return src ? (
-    <img src={src} alt="" className="size-7 rounded-sm object-cover" />
+  return src && !imageError ? (
+    <img src={src} alt="" className="size-7 rounded-sm object-cover" onError={() => setImageError(true)} />
   ) : (
-    <span className="grid size-7 place-items-center rounded-sm bg-muted text-xs uppercase">{fallback.slice(0, 1)}</span>
+    <span className="grid size-7 place-items-center rounded-sm bg-muted text-[0.6rem] uppercase tracking-wide text-muted-foreground">
+      {fallback.slice(0, 1)}
+    </span>
   )
 }
 
