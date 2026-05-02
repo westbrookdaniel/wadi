@@ -13,14 +13,12 @@ import {
   previewAddon,
   queryKeys,
 } from '@/api/queries'
-import type { AddonManifest, AddonRecord, ConfigDecl, User } from '@/api/types'
+import type { AddonManifest, AddonRecord, User } from '@/api/types'
+import { useDialogManager } from '@/components/dialogs'
 import { EmptyState, ErrorState, LoadingState } from '@/components/status'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { dangerText, mutedText, pageStack } from '@/lib/styles'
 import { canSubmitForm, fieldError, fieldErrorClass } from '@/lib/form'
 import { cn } from '@/lib/utils'
@@ -213,12 +211,27 @@ export function AddAddonPage() {
 
 function AddonCard({ addon, onDelete }: { addon: AddonRecord; onDelete: () => void }) {
   const { toast } = useToast()
-  const [isOpen, setIsOpen] = useState(false)
+  const { openDialog } = useDialogManager()
+  const queryClient = useQueryClient()
   const fields = addon.manifest.config ?? []
   const hasConfig = fields.length > 0
   const title = addon.manifest.name ?? addon.source_url
   const version = stringValue(addon.manifest.version)
   const description = addon.manifest.description ?? `${addon.transport} addon`
+  const configureMutation = useMutation({
+    mutationFn: (config: Record<string, unknown>) => configureAddon(addon.id, config),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.addons })
+    },
+  })
+
+  const openConfigureDialog = async () => {
+    const result = await openDialog('addonConfigure', { addon })
+    if (result.action !== 'save') {
+      return
+    }
+    configureMutation.mutate(result.config)
+  }
 
   return (
     <Card size="sm" className="bg-card/70">
@@ -243,7 +256,7 @@ function AddonCard({ addon, onDelete }: { addon: AddonRecord; onDelete: () => vo
             <Copy aria-hidden="true" />
           </Button>
           {hasConfig ? (
-            <Button variant="ghost" size="icon" type="button" aria-label="Configure addon" onClick={() => setIsOpen(true)}>
+            <Button variant="ghost" size="icon" type="button" aria-label="Configure addon" onClick={() => void openConfigureDialog()}>
               <Settings aria-hidden="true" />
             </Button>
           ) : null}
@@ -252,96 +265,7 @@ function AddonCard({ addon, onDelete }: { addon: AddonRecord; onDelete: () => vo
           </Button>
         </CardAction>
       </CardHeader>
-      {hasConfig ? <ConfigureAddonDialog addon={addon} open={isOpen} onOpenChange={setIsOpen} /> : null}
     </Card>
-  )
-}
-
-function ConfigureAddonDialog({ addon, open, onOpenChange }: { addon: AddonRecord; open: boolean; onOpenChange: (next: boolean) => void }) {
-  const queryClient = useQueryClient()
-  const fields = addon.manifest.config ?? []
-  const configSchema = z.object(Object.fromEntries(fields.map((field) => [field.key, schemaForField(field)])))
-  const defaultConfig = defaultsFrom(fields, addon.config)
-
-  const configureMutation = useMutation({
-    mutationFn: (config: Record<string, unknown>) => configureAddon(addon.id, normalizeConfig(config)),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.addons })
-      onOpenChange(false)
-    },
-  })
-
-  const configForm = useForm({
-    defaultValues: defaultConfig,
-    validators: {
-      onSubmit: configSchema as never,
-    },
-    onSubmit: ({ value }) => configureMutation.mutate(value),
-  })
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Configure {addon.manifest.name ?? 'addon'}</DialogTitle>
-          <DialogDescription>Update addon configuration values.</DialogDescription>
-        </DialogHeader>
-        <form
-          className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] items-end gap-2.5"
-          onSubmit={(event) => {
-            event.preventDefault()
-            void configForm.handleSubmit()
-          }}
-        >
-          {fields.map((field) => (
-            <configForm.Field name={field.key} key={field.key}>
-              {(formField) => (
-                <div className="grid gap-2">
-                  <Label htmlFor={`${addon.id}-${field.key}`}>{field.title ?? field.key}</Label>
-                  {field.options?.length ? (
-                    <Select
-                      value={String(formField.state.value ?? '')}
-                      onValueChange={(value) => formField.handleChange(value)}
-                    >
-                      <SelectTrigger id={`${addon.id}-${field.key}`} className="w-full" aria-invalid={formField.state.meta.errors.length ? true : undefined}>
-                        <SelectValue placeholder="Default" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__default">Default</SelectItem>
-                        {field.options.map((option) => (
-                          <SelectItem value={option} key={option}>
-                            {option}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <Input
-                      id={`${addon.id}-${field.key}`}
-                      value={String(formField.state.value ?? '')}
-                      type={field.type === 'number' ? 'number' : field.type === 'password' ? 'password' : 'text'}
-                      onBlur={formField.handleBlur}
-                      onChange={(event) => formField.handleChange(event.target.value)}
-                      aria-invalid={formField.state.meta.errors.length ? true : undefined}
-                    />
-                  )}
-                  {fieldError(formField) ? <p className={fieldErrorClass}>{fieldError(formField)}</p> : null}
-                </div>
-              )}
-            </configForm.Field>
-          ))}
-          <DialogFooter>
-            <configForm.Subscribe selector={(state) => ({ canSubmit: state.canSubmit, isSubmitting: state.isSubmitting })}>
-              {(state) => (
-                <Button type="submit" disabled={!canSubmitForm(state, configureMutation.isPending)}>
-                  Save config
-                </Button>
-              )}
-            </configForm.Subscribe>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
   )
 }
 
@@ -404,29 +328,4 @@ function resourceNames(manifest: AddonManifest) {
 
 function stringValue(value: unknown) {
   return typeof value === 'string' && value.trim() ? value : null
-}
-
-function defaultsFrom(fields: ConfigDecl[], config: Record<string, unknown> | null): Record<string, string | number> {
-  return Object.fromEntries(
-    fields.map((field) => {
-      const value = config?.[field.key] ?? field.default ?? ''
-      return [field.key, typeof value === 'number' ? value : String(value)]
-    }),
-  )
-}
-
-function normalizeConfig(config: Record<string, unknown>) {
-  return Object.fromEntries(
-    Object.entries(config).map(([key, value]) => [key, value === '__default' ? '' : value]),
-  )
-}
-
-function schemaForField(field: ConfigDecl) {
-  if (field.options?.length) {
-    return field.required ? z.string().min(1, 'Choose an option.') : z.string()
-  }
-  if (field.type === 'number') {
-    return field.required ? z.coerce.number('Enter a number.') : z.union([z.literal(''), z.coerce.number('Enter a number.')])
-  }
-  return field.required ? z.string().trim().min(1, 'This field is required.') : z.string()
 }

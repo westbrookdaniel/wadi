@@ -3,6 +3,7 @@ import { Check, Heart, Plus } from 'lucide-react'
 
 import { addListItem, createList, deleteListItem, listItemsQuery, listsQuery, queryKeys } from '@/api/queries'
 import type { MediaPreview } from '@/api/types'
+import { useDialogManager } from '@/components/dialogs'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -11,6 +12,7 @@ const CREATE_LIST_VALUE = '__create_list__'
 
 export function WatchlistAddButton({ media }: { media: MediaPreview }) {
   const queryClient = useQueryClient()
+  const { openDialog } = useDialogManager()
   const lists = useQuery(listsQuery)
   const defaultList = (lists.data ?? []).find((list) => list.is_default) ?? null
   const customLists = (lists.data ?? []).filter((list) => !list.is_default)
@@ -32,11 +34,11 @@ export function WatchlistAddButton({ media }: { media: MediaPreview }) {
   })
   const createAndAddMutation = useMutation({
     mutationFn: async () => {
-      const name = window.prompt('New list name')?.trim()
-      if (!name) {
+      const result = await openDialog('watchlistCreate', {})
+      if (result.action !== 'confirm') {
         return null
       }
-      const list = await createList(name)
+      const list = await createList(result.name)
       await addListItem(list.id, media)
       return list.id
     },

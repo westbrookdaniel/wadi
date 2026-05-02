@@ -1,32 +1,25 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useForm } from '@tanstack/react-form'
 import { Plus, Settings, Trash2 } from 'lucide-react'
-import { useEffect, useState } from 'react'
-import { z } from 'zod'
+import { useEffect } from 'react'
 
 import { createList, deleteList, deleteListItem, listItemsQuery, listsQuery, queryKeys, updateList } from '@/api/queries'
 import type { ListItem, MediaPreview } from '@/api/types'
+import { useDialogManager } from '@/components/dialogs'
 import { EmptyState, ErrorState, LoadingState } from '@/components/status'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { MediaCard } from '@/features/media/media-card'
-import { canSubmitForm, fieldError, fieldErrorClass } from '@/lib/form'
 import { contentSection, mediaGrid, pageHeader, pageStack } from '@/lib/styles'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/store/app-store'
 
-const createListSchema = z.object({ name: z.string().trim().min(1, 'Enter a list name.') })
-const renameListSchema = z.object({ name: z.string().trim().min(1, 'Enter a list name.') })
 const CREATE_LIST_VALUE = '__create_list__'
 
 export function WatchlistsPage({ onOpenMedia }: { onOpenMedia: (media: MediaPreview) => void }) {
   const queryClient = useQueryClient()
+  const { openDialog } = useDialogManager()
   const selectedListId = useAppStore((state) => state.selectedListId)
   const setSelectedListId = useAppStore((state) => state.setSelectedListId)
-  const [isCreateOpen, setIsCreateOpen] = useState(false)
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
 
   const lists = useQuery(listsQuery)
   const defaultList = (lists.data ?? []).find((list) => list.is_default) ?? null
@@ -41,10 +34,8 @@ export function WatchlistsPage({ onOpenMedia }: { onOpenMedia: (media: MediaPrev
   }, [defaultList, selectedListId, setSelectedListId])
 
   const createMutation = useMutation({
-    mutationFn: (value: z.infer<typeof createListSchema>) => createList(value.name),
+    mutationFn: ({ name }: { name: string }) => createList(name),
     onSuccess: async (list) => {
-      createForm.reset()
-      setIsCreateOpen(false)
       setSelectedListId(list.id)
       await queryClient.invalidateQueries({ queryKey: queryKeys.lists })
     },
@@ -53,7 +44,6 @@ export function WatchlistsPage({ onOpenMedia }: { onOpenMedia: (media: MediaPrev
   const renameMutation = useMutation({
     mutationFn: ({ listId, name }: { listId: string; name: string }) => updateList(listId, name),
     onSuccess: async () => {
-      setIsSettingsOpen(false)
       await queryClient.invalidateQueries({ queryKey: queryKeys.lists })
     },
   })
@@ -61,7 +51,6 @@ export function WatchlistsPage({ onOpenMedia }: { onOpenMedia: (media: MediaPrev
   const deleteListMutation = useMutation({
     mutationFn: (listId: string) => deleteList(listId),
     onSuccess: async () => {
-      setIsSettingsOpen(false)
       setSelectedListId(defaultList?.id ?? null)
       await queryClient.invalidateQueries({ queryKey: queryKeys.lists })
     },
@@ -74,31 +63,35 @@ export function WatchlistsPage({ onOpenMedia }: { onOpenMedia: (media: MediaPrev
     },
   })
 
-  const createForm = useForm({
-    defaultValues: { name: '' },
-    validators: { onSubmit: createListSchema },
-    onSubmit: ({ value }) => createMutation.mutate(value),
-  })
-
-  const renameForm = useForm({
-    defaultValues: { name: activeList?.name ?? '' },
-    validators: { onSubmit: renameListSchema },
-    onSubmit: ({ value }) => {
-      if (activeList) {
-        renameMutation.mutate({ listId: activeList.id, name: value.name })
-      }
-    },
-  })
-
-  useEffect(() => {
-    if (isSettingsOpen && activeList) {
-      renameForm.reset({ name: activeList.name })
+  const openCreateListDialog = async () => {
+    const result = await openDialog('watchlistCreate', {})
+    if (result.action !== 'confirm') {
+      return
     }
-  }, [activeList, isSettingsOpen, renameForm])
+    createMutation.mutate({ name: result.name })
+  }
+
+  const openListSettingsDialog = async () => {
+    if (!activeList) {
+      return
+    }
+    const result = await openDialog('watchlistSettings', {
+      listId: activeList.id,
+      currentName: activeList.name,
+      canDelete: !activeList.is_default,
+    })
+    if (result.action === 'save') {
+      renameMutation.mutate({ listId: activeList.id, name: result.name })
+      return
+    }
+    if (result.action === 'delete') {
+      deleteListMutation.mutate(activeList.id)
+    }
+  }
 
   const onSelectList = (value: string) => {
     if (value === CREATE_LIST_VALUE) {
-      setIsCreateOpen(true)
+      void openCreateListDialog()
       return
     }
     setSelectedListId(value)
@@ -127,7 +120,7 @@ export function WatchlistsPage({ onOpenMedia }: { onOpenMedia: (media: MediaPrev
             </SelectContent>
           </Select>
           {activeList && !activeList.is_default ? (
-            <Button variant="secondary" size="icon-sm" type="button" aria-label="List settings" onClick={() => setIsSettingsOpen(true)}>
+            <Button variant="secondary" size="icon-sm" type="button" aria-label="List settings" onClick={() => void openListSettingsDialog()}>
               <Settings aria-hidden="true" />
             </Button>
           ) : null}
@@ -163,82 +156,6 @@ export function WatchlistsPage({ onOpenMedia }: { onOpenMedia: (media: MediaPrev
           <EmptyState title="This list is empty" body="Add titles from Movies, Series, or Search." />
         ) : null}
       </section>
-
-      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Create List</DialogTitle>
-          </DialogHeader>
-          <form
-            className="grid gap-3"
-            onSubmit={(event) => {
-              event.preventDefault()
-              void createForm.handleSubmit()
-            }}
-          >
-            <createForm.Field name="name">
-              {(field) => (
-                <div className="grid gap-2">
-                  <Input value={field.state.value} onChange={(event) => field.handleChange(event.target.value)} onBlur={field.handleBlur} />
-                  {fieldError(field) ? <p className={fieldErrorClass}>{fieldError(field)}</p> : null}
-                </div>
-              )}
-            </createForm.Field>
-            <createForm.Subscribe selector={(state) => ({ canSubmit: state.canSubmit, isSubmitting: state.isSubmitting })}>
-              {(state) => (
-                <DialogFooter>
-                  <Button variant="secondary" type="submit" disabled={!canSubmitForm(state, createMutation.isPending)}>
-                    Create
-                  </Button>
-                </DialogFooter>
-              )}
-            </createForm.Subscribe>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>List Settings</DialogTitle>
-            <DialogDescription>Rename this list or delete it.</DialogDescription>
-          </DialogHeader>
-          <form
-            className="grid gap-3"
-            onSubmit={(event) => {
-              event.preventDefault()
-              void renameForm.handleSubmit()
-            }}
-          >
-            <renameForm.Field name="name">
-              {(field) => (
-                <div className="grid gap-2">
-                  <Input value={field.state.value} onChange={(event) => field.handleChange(event.target.value)} onBlur={field.handleBlur} />
-                  {fieldError(field) ? <p className={fieldErrorClass}>{fieldError(field)}</p> : null}
-                </div>
-              )}
-            </renameForm.Field>
-            <DialogFooter className="justify-between">
-              <Button
-                variant="destructive"
-                type="button"
-                onClick={() => activeList && deleteListMutation.mutate(activeList.id)}
-                disabled={!activeList || deleteListMutation.isPending}
-              >
-                <Trash2 aria-hidden="true" />
-                Delete
-              </Button>
-              <renameForm.Subscribe selector={(state) => ({ canSubmit: state.canSubmit, isSubmitting: state.isSubmitting })}>
-                {(state) => (
-                  <Button variant="secondary" type="submit" disabled={!canSubmitForm(state, renameMutation.isPending)}>
-                    Save
-                  </Button>
-                )}
-              </renameForm.Subscribe>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

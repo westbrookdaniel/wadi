@@ -6,6 +6,7 @@ import './index.css'
 import { router } from './router'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { ToastProvider } from '@/components/ui/toast'
+import { DialogManagerProvider } from '@/components/dialogs'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -21,7 +22,9 @@ createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <ToastProvider>
-          <RouterProvider router={router} />
+          <DialogManagerProvider>
+            <RouterProvider router={router} />
+          </DialogManagerProvider>
         </ToastProvider>
       </TooltipProvider>
     </QueryClientProvider>
