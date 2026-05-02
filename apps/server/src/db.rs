@@ -215,71 +215,111 @@ pub async fn migrate(pool: &SqlitePool) -> sqlx::Result<()> {
     .execute(pool)
     .await?;
 
-    sqlx::query("PRAGMA foreign_keys = OFF")
-        .execute(pool)
-        .await?;
-    sqlx::query(
-        r#"
-        CREATE TABLE IF NOT EXISTS lists_v2 (
-            id TEXT PRIMARY KEY NOT NULL,
-            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            profile_id TEXT REFERENCES profiles(id) ON DELETE CASCADE,
-            name TEXT NOT NULL,
-            description TEXT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-            UNIQUE(user_id, profile_id, name)
-        );
-        "#,
-    )
-    .execute(pool)
-    .await?;
-    sqlx::query(
-        r#"
-        INSERT OR REPLACE INTO lists_v2 (id, user_id, profile_id, name, description, created_at, updated_at)
-        SELECT id, user_id, profile_id, name, description, created_at, updated_at FROM lists
-        "#,
-    )
-    .execute(pool)
-    .await?;
-    sqlx::query("DROP TABLE IF EXISTS lists")
-        .execute(pool)
-        .await?;
-    sqlx::query("ALTER TABLE lists_v2 RENAME TO lists")
-        .execute(pool)
-        .await?;
+    let lists_schema: Option<String> =
+        sqlx::query_scalar("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'lists'")
+            .fetch_optional(pool)
+            .await?;
+    let lists_needs_rebuild = lists_schema
+        .as_deref()
+        .map(|sql| !sql.contains("UNIQUE(user_id, profile_id, name)"))
+        .unwrap_or(false);
 
-    sqlx::query(
-        r#"
-        CREATE TABLE IF NOT EXISTS user_settings_v2 (
-            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            profile_id TEXT REFERENCES profiles(id) ON DELETE CASCADE,
-            browse_layout_json TEXT NOT NULL DEFAULT '{}',
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-            PRIMARY KEY (user_id, profile_id)
-        );
-        "#,
+    let user_settings_schema: Option<String> = sqlx::query_scalar(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'user_settings'",
     )
-    .execute(pool)
+    .fetch_optional(pool)
     .await?;
-    sqlx::query(
-        r#"
-        INSERT OR REPLACE INTO user_settings_v2 (user_id, profile_id, browse_layout_json, created_at, updated_at)
-        SELECT user_id, profile_id, browse_layout_json, created_at, updated_at FROM user_settings
-        "#,
-    )
-    .execute(pool)
-    .await?;
-    sqlx::query("DROP TABLE IF EXISTS user_settings")
-        .execute(pool)
-        .await?;
-    sqlx::query("ALTER TABLE user_settings_v2 RENAME TO user_settings")
-        .execute(pool)
-        .await?;
-    sqlx::query("PRAGMA foreign_keys = ON")
-        .execute(pool)
-        .await?;
+    let user_settings_needs_rebuild = user_settings_schema
+        .as_deref()
+        .map(|sql| !sql.contains("PRIMARY KEY (user_id, profile_id)"))
+        .unwrap_or(false);
+
+    if lists_needs_rebuild || user_settings_needs_rebuild {
+        let mut conn = pool.acquire().await?;
+        sqlx::query("PRAGMA foreign_keys = OFF")
+            .execute(&mut *conn)
+            .await?;
+
+        if lists_needs_rebuild {
+            sqlx::query("DROP TABLE IF EXISTS lists_v2")
+                .execute(&mut *conn)
+                .await?;
+            sqlx::query(
+                r#"
+                CREATE TABLE lists_v2 (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    profile_id TEXT REFERENCES profiles(id) ON DELETE CASCADE,
+                    name TEXT NOT NULL,
+                    description TEXT,
+                    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    UNIQUE(user_id, profile_id, name)
+                );
+                "#,
+            )
+            .execute(&mut *conn)
+            .await?;
+            sqlx::query(
+                r#"
+                INSERT OR REPLACE INTO lists_v2 (id, user_id, profile_id, name, description, created_at, updated_at)
+                SELECT id, user_id, profile_id, name, description, created_at, updated_at FROM lists
+                "#,
+            )
+            .execute(&mut *conn)
+            .await?;
+            sqlx::query("DROP TABLE lists").execute(&mut *conn).await?;
+            sqlx::query("ALTER TABLE lists_v2 RENAME TO lists")
+                .execute(&mut *conn)
+                .await?;
+        } else {
+            sqlx::query("DROP TABLE IF EXISTS lists_v2")
+                .execute(&mut *conn)
+                .await?;
+        }
+
+        if user_settings_needs_rebuild {
+            sqlx::query("DROP TABLE IF EXISTS user_settings_v2")
+                .execute(&mut *conn)
+                .await?;
+            sqlx::query(
+                r#"
+                CREATE TABLE user_settings_v2 (
+                    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    profile_id TEXT REFERENCES profiles(id) ON DELETE CASCADE,
+                    browse_layout_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    PRIMARY KEY (user_id, profile_id)
+                );
+                "#,
+            )
+            .execute(&mut *conn)
+            .await?;
+            sqlx::query(
+                r#"
+                INSERT OR REPLACE INTO user_settings_v2 (user_id, profile_id, browse_layout_json, created_at, updated_at)
+                SELECT user_id, profile_id, browse_layout_json, created_at, updated_at FROM user_settings
+                "#,
+            )
+            .execute(&mut *conn)
+            .await?;
+            sqlx::query("DROP TABLE user_settings")
+                .execute(&mut *conn)
+                .await?;
+            sqlx::query("ALTER TABLE user_settings_v2 RENAME TO user_settings")
+                .execute(&mut *conn)
+                .await?;
+        } else {
+            sqlx::query("DROP TABLE IF EXISTS user_settings_v2")
+                .execute(&mut *conn)
+                .await?;
+        }
+
+        sqlx::query("PRAGMA foreign_keys = ON")
+            .execute(&mut *conn)
+            .await?;
+    }
 
     sqlx::query("CREATE INDEX IF NOT EXISTS idx_lists_user ON lists(user_id, profile_id)")
         .execute(pool)

@@ -5,10 +5,10 @@ import { useEffect, type ReactNode } from 'react'
 import type { User } from '@/api/types'
 import { meQuery, profilesQuery, queryKeys, selectProfile } from '@/api/queries'
 import { LoadingState } from '@/components/status'
-import { Button } from '@/components/ui/button'
 import { appBackground } from '@/lib/styles'
 import { cn } from '@/lib/utils'
 import { clearStoredToken, useAppStore } from '@/store/app-store'
+import { ProfileAvatar } from './profile-avatar'
 
 export function ProtectedRoute({ children }: { children: (user: User) => ReactNode }) {
   const token = useAppStore((state) => state.token)
@@ -110,21 +110,23 @@ export function ProtectedRoute({ children }: { children: (user: User) => ReactNo
             <h1 className="m-0 text-[clamp(1.5rem,3vw,2.1rem)] font-[560]">Who&apos;s watching?</h1>
             <p className="m-0 text-sm text-muted-foreground">Choose a profile to continue. This controls your watch history, lists, and layout.</p>
           </header>
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
             {profiles.data.map((profile) => (
-              <Button
+              <button
                 key={profile.id}
                 type="button"
-                variant="secondary"
-                className="h-auto justify-start rounded-xl px-4 py-3 text-left"
+                className="grid justify-items-center gap-2 rounded-xl border border-border bg-card/60 p-3 transition hover:bg-muted/40"
                 disabled={selectProfileMutation.isPending}
                 onClick={() => selectProfileMutation.mutate(profile.id)}
               >
-                <span className="grid gap-0.5">
-                  <span className="text-base">{profile.name}</span>
-                  <span className="text-xs text-muted-foreground">{profile.avatar_key}</span>
-                </span>
-              </Button>
+                <ProfileAvatar
+                  name={profile.name}
+                  avatarKey={profile.avatar_key}
+                  themeColor={profile.theme_color}
+                  className="size-16 text-xl"
+                />
+                <span className="text-sm font-medium">{profile.name}</span>
+              </button>
             ))}
           </div>
         </section>

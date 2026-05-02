@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useForm } from '@tanstack/react-form'
-import { Copy, LogOut, Plus, Settings, Trash2 } from 'lucide-react'
+import { ArrowLeft, Copy, EllipsisVertical, LogOut, Pencil, Plus, Settings, Trash2 } from 'lucide-react'
 import { z } from 'zod'
 
 import {
@@ -18,7 +18,7 @@ import {
   selectProfile,
   updateProfile,
 } from '@/api/queries'
-import type { AddonManifest, AddonRecord, ConfigDecl, Profile, User } from '@/api/types'
+import type { AddonManifest, AddonRecord, ConfigDecl, User } from '@/api/types'
 import { EmptyState, ErrorState, LoadingState } from '@/components/status'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -33,6 +33,7 @@ import { useAppStore } from '@/store/app-store'
 import { useNavigate } from '@tanstack/react-router'
 import { useToast } from '@/components/ui/toast'
 import { BrowseLayoutSettings } from './browse-layout-settings'
+import { ProfileAvatar, PROFILE_AVATAR_OPTIONS } from './profile-avatar'
 
 const addonUrlSchema = z.object({
   url: z.url('Enter a valid addon manifest URL.'),
@@ -40,6 +41,7 @@ const addonUrlSchema = z.object({
 
 const profileSchema = z.object({
   name: z.string().trim().min(1, 'Enter a profile name.').max(32, 'Use 32 characters or fewer.'),
+  avatarKey: z.string().trim().min(1),
 })
 
 export function ProfileSettingsPage() {
@@ -103,7 +105,14 @@ export function AccountSettingsPage({ user }: { user: User }) {
 
   return (
     <div className={cn(pageStack, 'max-w-[980px]')}>
-      <header className="flex min-h-[52px] items-center justify-between gap-[18px]">
+      <header className="grid gap-3">
+        <div>
+          <Button variant="ghost" type="button" className="-ml-2 w-fit" onClick={() => navigate({ to: '/settings' })}>
+            <ArrowLeft aria-hidden="true" />
+            Back to profile settings
+          </Button>
+        </div>
+        <div className="flex min-h-[52px] items-center justify-between gap-[18px]">
         <div className="grid gap-1">
           <h1 className="m-0 text-[clamp(1.2rem,2vw,1.7rem)] font-[520] tracking-normal">Account settings</h1>
           <p className="m-0 text-sm text-muted-foreground">Applies to your account: {user.email}</p>
@@ -112,6 +121,7 @@ export function AccountSettingsPage({ user }: { user: User }) {
           <LogOut aria-hidden="true" />
           Logout
         </Button>
+        </div>
       </header>
 
       <section className="grid gap-4 border-b border-border pt-2 pb-6">
@@ -154,19 +164,25 @@ function ProfileManager() {
   const setActiveProfileId = useAppStore((state) => state.setActiveProfileId)
   const setSelectedListId = useAppStore((state) => state.setSelectedListId)
   const profiles = useQuery(profilesQuery)
+  const [createOpen, setCreateOpen] = useState(false)
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null)
+  const [deletingProfileId, setDeletingProfileId] = useState<string | null>(null)
+  const [openMenuProfileId, setOpenMenuProfileId] = useState<string | null>(null)
 
   const createMutation = useMutation({
-    mutationFn: (name: string) => createProfile(name),
+    mutationFn: ({ name, avatarKey }: { name: string; avatarKey: string }) =>
+      createProfile(name, avatarKey, null),
     onSuccess: async () => {
+      setCreateOpen(false)
       await queryClient.invalidateQueries({ queryKey: queryKeys.profiles })
     },
   })
 
   const updateMutation = useMutation({
-    mutationFn: ({ profile, name }: { profile: Profile; name: string }) =>
-      updateProfile(profile.id, name, profile.avatar_key, profile.theme_color),
+    mutationFn: ({ profileId, name, avatarKey }: { profileId: string; name: string; avatarKey: string }) =>
+      updateProfile(profileId, name, avatarKey, null),
     onSuccess: async () => {
+      setOpenMenuProfileId(null)
       await queryClient.invalidateQueries({ queryKey: queryKeys.profiles })
       setEditingProfileId(null)
     },
@@ -175,6 +191,8 @@ function ProfileManager() {
   const deleteMutation = useMutation({
     mutationFn: deleteProfile,
     onSuccess: async () => {
+      setOpenMenuProfileId(null)
+      setDeletingProfileId(null)
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.profiles }),
         queryClient.invalidateQueries({ queryKey: queryKeys.me }),
@@ -187,6 +205,7 @@ function ProfileManager() {
     onSuccess: async ({ active_profile_id }) => {
       setActiveProfileId(active_profile_id)
       setSelectedListId(null)
+      setOpenMenuProfileId(null)
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.me }),
         queryClient.invalidateQueries({ queryKey: queryKeys.profiles }),
@@ -198,15 +217,10 @@ function ProfileManager() {
       ])
     },
   })
-
-  const createForm = useForm({
-    defaultValues: { name: '' },
-    validators: { onSubmit: profileSchema },
-    onSubmit: ({ value, formApi }) => {
-      createMutation.mutate(value.name)
-      formApi.reset()
-    },
-  })
+  const profileList = profiles.data ?? []
+  const isAtLimit = profileList.length >= 5
+  const editingProfile = profileList.find((value) => value.id === editingProfileId) ?? null
+  const deletingProfile = profileList.find((value) => value.id === deletingProfileId) ?? null
 
   if (profiles.isLoading) {
     return <LoadingState label="Loading profiles" />
@@ -219,113 +233,192 @@ function ProfileManager() {
     <div className="grid gap-3">
       <div>
         <h3 className="m-0 text-[1.05rem] font-[520] tracking-normal">Profiles</h3>
-        <p className="m-0 text-sm text-muted-foreground">Watch history, lists, and layout are isolated per profile.</p>
+        <p className="m-0 text-sm text-muted-foreground">
+          Click an avatar to switch profile. Watch history, lists, and layout are isolated per profile.
+        </p>
       </div>
-      <div className="grid gap-2 sm:grid-cols-2">
-        {(profiles.data ?? []).map((profile) => (
-          <Card key={profile.id} size="sm" className="bg-card/70">
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between gap-2">
-                <span>{profile.name}</span>
-                {profile.id === activeProfileId ? <span className={mutedText}>Active</span> : null}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+        {profileList.map((profile) => {
+          const isActive = profile.id === activeProfileId
+          return (
+            <div key={profile.id} className="grid justify-items-center gap-1 rounded-xl border border-border bg-card/70 p-3">
+              <button
                 type="button"
-                variant="secondary"
-                disabled={selectMutation.isPending || profile.id === activeProfileId}
-                onClick={() => selectMutation.mutate(profile.id)}
+                className={cn(
+                  'grid justify-items-center gap-2 rounded-lg p-1 transition hover:bg-muted/40',
+                  isActive && 'ring-2 ring-primary/60',
+                )}
+                onClick={() => {
+                  if (isActive || selectMutation.isPending) return
+                  selectMutation.mutate(profile.id)
+                }}
+                aria-label={`Switch to ${profile.name}`}
               >
-                Use profile
-              </Button>
-              <Button size="sm" type="button" variant="ghost" onClick={() => setEditingProfileId(profile.id)}>
-                Rename
-              </Button>
-              <Button
-                size="sm"
-                type="button"
-                variant="ghost"
-                className={dangerText}
-                disabled={deleteMutation.isPending}
-                onClick={() => deleteMutation.mutate(profile.id)}
-              >
-                Delete
-              </Button>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <form
-        className="flex flex-wrap items-end gap-2"
-        onSubmit={(event) => {
-          event.preventDefault()
-          void createForm.handleSubmit()
-        }}
-      >
-        <createForm.Field name="name">
-          {(field) => (
-            <div className="grid gap-1">
-              <Label htmlFor={field.name}>New profile</Label>
-              <Input
-                id={field.name}
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(event) => field.handleChange(event.target.value)}
-                placeholder="Profile name"
-                aria-invalid={field.state.meta.errors.length ? true : undefined}
+                <ProfileAvatar
+                  name={profile.name}
+                  avatarKey={profile.avatar_key}
+                  themeColor={profile.theme_color}
+                  className="size-16 text-xl"
+                />
+                <span className="text-sm font-medium">{profile.name}</span>
+              </button>
+              {isActive ? <span className={cn(mutedText, 'text-xs')}>Current</span> : <span className="h-[18px]" aria-hidden="true" />}
+              <ProfileActionsMenu
+                open={openMenuProfileId === profile.id}
+                onToggle={() =>
+                  setOpenMenuProfileId((current) => (current === profile.id ? null : profile.id))
+                }
+                onEdit={() => {
+                  setOpenMenuProfileId(null)
+                  setEditingProfileId(profile.id)
+                }}
+                onDelete={() => {
+                  setOpenMenuProfileId(null)
+                  setDeletingProfileId(profile.id)
+                }}
               />
             </div>
+          )
+        })}
+        <button
+          type="button"
+          className={cn(
+            'grid justify-items-center gap-2 rounded-xl border border-dashed border-border bg-card/50 p-3 transition hover:bg-muted/40',
+            isAtLimit && 'cursor-not-allowed opacity-55',
           )}
-        </createForm.Field>
-        <Button type="submit" disabled={createMutation.isPending || (profiles.data?.length ?? 0) >= 5}>
-          Create profile
-        </Button>
-      </form>
-      {(profiles.data?.length ?? 0) >= 5 ? <p className="m-0 text-sm text-muted-foreground">Profile limit reached (5).</p> : null}
+          onClick={() => !isAtLimit && setCreateOpen(true)}
+          disabled={isAtLimit}
+          aria-label="Add profile"
+        >
+          <span className="grid size-16 place-items-center rounded-full border border-dashed border-border bg-muted/40">
+            <Plus aria-hidden="true" />
+          </span>
+          <span className="text-sm font-medium">Add profile</span>
+        </button>
+      </div>
+      {isAtLimit ? <p className="m-0 text-sm text-muted-foreground">Profile limit reached (5).</p> : null}
 
-      <Dialog open={Boolean(editingProfileId)} onOpenChange={(open) => !open && setEditingProfileId(null)}>
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Rename profile</DialogTitle>
-            <DialogDescription>This changes the display name for this profile.</DialogDescription>
+            <DialogTitle>Add profile</DialogTitle>
+            <DialogDescription>Create a new profile with its own history, lists, and layout.</DialogDescription>
           </DialogHeader>
-          {editingProfileId ? (
-            <RenameProfileForm
-              profile={(profiles.data ?? []).find((value) => value.id === editingProfileId) ?? null}
+          <ProfileEditorForm
+            submitLabel="Create profile"
+            isPending={createMutation.isPending}
+            initialName=""
+            initialAvatarKey={PROFILE_AVATAR_OPTIONS[0].key}
+            onSubmit={(value) => createMutation.mutate(value)}
+          />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(editingProfile)} onOpenChange={(open) => !open && setEditingProfileId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit profile</DialogTitle>
+            <DialogDescription>Update profile name or avatar.</DialogDescription>
+          </DialogHeader>
+          {editingProfile ? (
+            <ProfileEditorForm
+              submitLabel="Save changes"
               isPending={updateMutation.isPending}
-              onSubmit={(profile, name) => updateMutation.mutate({ profile, name })}
+              initialName={editingProfile.name}
+              initialAvatarKey={editingProfile.avatar_key}
+              onSubmit={(value) =>
+                updateMutation.mutate({
+                  profileId: editingProfile.id,
+                  name: value.name,
+                  avatarKey: value.avatarKey,
+                })
+              }
             />
           ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(deletingProfile)} onOpenChange={(open) => !open && setDeletingProfileId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete profile?</DialogTitle>
+            <DialogDescription>
+              {deletingProfile
+                ? `Are you sure you want to delete "${deletingProfile.name}"? This will remove that profile's lists and watch history.`
+                : 'Are you sure you want to delete this profile?'}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="secondary" type="button" onClick={() => setDeletingProfileId(null)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className={dangerText}
+              disabled={deleteMutation.isPending || !deletingProfile}
+              onClick={() => deletingProfile && deleteMutation.mutate(deletingProfile.id)}
+            >
+              Delete profile
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
   )
 }
 
-function RenameProfileForm({
-  profile,
+function ProfileActionsMenu({
+  open,
+  onToggle,
+  onEdit,
+  onDelete,
+}: {
+  open: boolean
+  onToggle: () => void
+  onEdit: () => void
+  onDelete: () => void
+}) {
+  return (
+    <div className="relative grid justify-items-center">
+      <Button variant="ghost" size="icon" type="button" aria-label="Profile actions" onClick={onToggle}>
+        <EllipsisVertical aria-hidden="true" />
+      </Button>
+      {open ? (
+        <div className="absolute top-full z-20 mt-1 grid min-w-[138px] gap-1 rounded-lg border border-border bg-popover p-1 shadow-lg">
+          <Button variant="ghost" type="button" className="justify-start" onClick={onEdit}>
+            <Pencil aria-hidden="true" />
+            Edit
+          </Button>
+          <Button variant="ghost" type="button" className={cn('justify-start', dangerText)} onClick={onDelete}>
+            <Trash2 aria-hidden="true" />
+            Delete
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function ProfileEditorForm({
+  initialName,
+  initialAvatarKey,
+  submitLabel,
   isPending,
   onSubmit,
 }: {
-  profile: Profile | null
+  initialName: string
+  initialAvatarKey: string
+  submitLabel: string
   isPending: boolean
-  onSubmit: (profile: Profile, name: string) => void
+  onSubmit: (value: { name: string; avatarKey: string }) => void
 }) {
   const form = useForm({
-    defaultValues: { name: profile?.name ?? '' },
+    defaultValues: { name: initialName, avatarKey: initialAvatarKey },
     validators: { onSubmit: profileSchema },
     onSubmit: ({ value }) => {
-      if (!profile) return
-      onSubmit(profile, value.name)
+      onSubmit(value)
     },
   })
-
-  if (!profile) {
-    return null
-  }
 
   return (
     <form
@@ -334,7 +427,7 @@ function RenameProfileForm({
         event.preventDefault()
         void form.handleSubmit()
       }}
-    >
+      >
       <form.Field name="name">
         {(field) => (
           <div className="grid gap-2">
@@ -350,9 +443,40 @@ function RenameProfileForm({
           </div>
         )}
       </form.Field>
+      <form.Field name="avatarKey">
+        {(field) => (
+          <div className="grid gap-2">
+            <Label>Avatar</Label>
+            <div className="grid grid-cols-3 gap-2">
+              {PROFILE_AVATAR_OPTIONS.map((option) => {
+                const selected = field.state.value === option.key
+                return (
+                  <button
+                    key={option.key}
+                    type="button"
+                    className={cn(
+                      'grid justify-items-center gap-1 rounded-lg border border-border p-2 transition hover:bg-muted/40',
+                      selected && 'ring-2 ring-primary/60',
+                    )}
+                    onClick={() => field.handleChange(option.key)}
+                  >
+                    <ProfileAvatar
+                      name={initialName || 'P'}
+                      avatarKey={option.key}
+                      themeColor={null}
+                      className="size-12 text-base"
+                    />
+                    <span className="text-xs text-muted-foreground">{option.key}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
+      </form.Field>
       <DialogFooter>
         <Button type="submit" disabled={isPending}>
-          Save
+          {submitLabel}
         </Button>
       </DialogFooter>
     </form>
