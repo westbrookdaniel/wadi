@@ -1,11 +1,13 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Heart, Plus } from 'lucide-react'
+import { Check, Heart, Plus } from 'lucide-react'
 
-import { addListItem, deleteListItem, listItemsQuery, listsQuery, queryKeys } from '@/api/queries'
+import { addListItem, createList, deleteListItem, listItemsQuery, listsQuery, queryKeys } from '@/api/queries'
 import type { MediaPreview } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+
+const CREATE_LIST_VALUE = '__create_list__'
 
 export function WatchlistAddButton({ media }: { media: MediaPreview }) {
   const queryClient = useQueryClient()
@@ -28,10 +30,37 @@ export function WatchlistAddButton({ media }: { media: MediaPreview }) {
       await queryClient.invalidateQueries({ queryKey: queryKeys.listItems(values.listId) })
     },
   })
+  const createAndAddMutation = useMutation({
+    mutationFn: async () => {
+      const name = window.prompt('New list name')?.trim()
+      if (!name) {
+        return null
+      }
+      const list = await createList(name)
+      await addListItem(list.id, media)
+      return list.id
+    },
+    onSuccess: async (listId) => {
+      if (!listId) {
+        return
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.lists }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.listItems(listId) }),
+      ])
+    },
+  })
 
   const defaultItems = listItems[(lists.data ?? []).findIndex((list) => list.id === defaultList?.id)]?.data ?? []
   const savedDefaultItem = defaultItems.find((item) => item.media_type === media.type && item.media_id === media.id) ?? null
   const isSaved = Boolean(savedDefaultItem)
+  const itemsByListId = Object.fromEntries(
+    (lists.data ?? []).map((list, index) => [list.id, listItems[index]?.data ?? []]),
+  ) as Record<string, NonNullable<(typeof listItems)[number]['data']>>
+  const customAddedLists = customLists.filter((list) =>
+    (itemsByListId[list.id] ?? []).some((item) => item.media_type === media.type && item.media_id === media.id),
+  )
+  const customAddedCount = customAddedLists.length
 
   const toggleDefault = () => {
     if (!defaultList) {
@@ -42,6 +71,16 @@ export function WatchlistAddButton({ media }: { media: MediaPreview }) {
       return
     }
     addMutation.mutate(defaultList.id)
+  }
+  const handleAddToSelect = (value: string) => {
+    if (!value) {
+      return
+    }
+    if (value === CREATE_LIST_VALUE) {
+      createAndAddMutation.mutate()
+      return
+    }
+    addMutation.mutate(value)
   }
 
   if (lists.isLoading) {
@@ -77,17 +116,38 @@ export function WatchlistAddButton({ media }: { media: MediaPreview }) {
 
       <Select
         value=""
-        onValueChange={(listId) => listId && addMutation.mutate(listId)}
-        disabled={!customLists.length || addMutation.isPending}
+        onValueChange={handleAddToSelect}
+        disabled={addMutation.isPending || createAndAddMutation.isPending}
       >
         <SelectTrigger className="w-fit max-w-[min(520px,100%)] rounded-full border-border bg-background hover:bg-muted" size="sm" aria-label="Add to watchlist">
-          <Plus aria-hidden="true" />
-          <SelectValue placeholder="Add to" />
+          {customAddedCount > 0 ? <Check aria-hidden="true" /> : <Plus aria-hidden="true" />}
+          <SelectValue
+            placeholder={
+              customAddedCount === 0
+                ? 'Add to'
+                : customAddedCount === 1
+                  ? customAddedLists[0]?.name
+                  : `${customAddedCount} lists`
+            }
+          />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent side="top" align="start" position="popper">
+          <SelectItem value={CREATE_LIST_VALUE}>
+            <span className="flex items-center gap-2">
+              <Plus aria-hidden="true" />
+              New list
+            </span>
+          </SelectItem>
           {customLists.map((list) => (
             <SelectItem value={list.id} key={list.id}>
-              {list.name}
+              <span className="flex items-center gap-2">
+                {(itemsByListId[list.id] ?? []).some((item) => item.media_type === media.type && item.media_id === media.id) ? (
+                  <Check aria-hidden="true" />
+                ) : (
+                  <span className="size-4" aria-hidden="true" />
+                )}
+                {list.name}
+              </span>
             </SelectItem>
           ))}
         </SelectContent>
