@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { useLocation } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -10,8 +11,11 @@ import {
 import { appBackground, pagePadding } from "@/lib/styles";
 import { cn } from "@/lib/utils";
 import { useDynamicBackdropColor } from "@/hooks/use-dynamic-backdrop-color";
+import { profilesQuery } from "@/api/queries";
+import { useAppStore } from "@/store/app-store";
 
 import { navItems, type NavPath } from "./nav-items";
+import { ProfileAvatar } from "./profile-avatar";
 
 export function AppShell({
   activePath,
@@ -30,6 +34,10 @@ export function AppShell({
 }) {
   const location = useLocation();
   const backdrop = useDynamicBackdropColor(location.pathname);
+  const token = useAppStore((state) => state.token);
+  const activeProfileId = useAppStore((state) => state.activeProfileId);
+  const profiles = useQuery({ ...profilesQuery, enabled: Boolean(token) });
+  const activeProfile = (profiles.data ?? []).find((value) => value.id === activeProfileId) ?? null;
 
   return (
     <div
@@ -48,6 +56,7 @@ export function AppShell({
           <nav className="grid gap-3 max-[800px]:flex max-[800px]:gap-2">
             {navItems.map(({ path, label: itemLabel, icon: Icon }) => {
               const isActive = activePath === path;
+              const showProfileIcon = path === "/settings" && activeProfile;
 
               return (
                 <Tooltip key={path}>
@@ -66,7 +75,16 @@ export function AppShell({
                       onClick={() => onNavigate(path)}
                       title={itemLabel}
                     >
-                      <Icon aria-hidden="true" />
+                      {showProfileIcon ? (
+                        <ProfileAvatar
+                          name={activeProfile.name}
+                          avatarKey={activeProfile.avatar_key}
+                          themeColor={activeProfile.theme_color}
+                          className="size-7 text-sm shadow-none"
+                        />
+                      ) : (
+                        <Icon aria-hidden="true" />
+                      )}
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="right" className="max-[800px]:hidden">

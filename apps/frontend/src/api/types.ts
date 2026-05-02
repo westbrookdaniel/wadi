@@ -3,12 +3,24 @@ export type Page = 'home' | 'search' | 'watchlists' | 'movies' | 'series' | 'set
 export type User = {
   id: string
   email: string
+  active_profile_id: string
   created_at?: string
 }
 
 export type AuthResponse = {
   token: string
   user: User
+  active_profile_id: string
+}
+
+export type Profile = {
+  id: string
+  user_id: string
+  name: string
+  avatar_key: string
+  theme_color: string | null
+  created_at: string
+  updated_at: string
 }
 
 export type ApiListResponse<T> = {

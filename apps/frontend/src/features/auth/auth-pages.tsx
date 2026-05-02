@@ -29,12 +29,14 @@ const authSchema = z
 export function AuthPage({ mode, onModeChange }: { mode: AuthMode; onModeChange: (mode: AuthMode) => void }) {
   const queryClient = useQueryClient()
   const setToken = useAppStore((state) => state.setToken)
+  const setActiveProfileId = useAppStore((state) => state.setActiveProfileId)
 
   const mutation = useMutation({
     mutationFn: (value: z.infer<typeof authSchema>) =>
       mode === 'login' ? login(value.email, value.password) : register(value.email, value.password),
     onSuccess: async (data) => {
       setToken(data.token)
+      setActiveProfileId(data.active_profile_id ?? data.user.active_profile_id)
       await queryClient.invalidateQueries({ queryKey: queryKeys.me })
     },
   })

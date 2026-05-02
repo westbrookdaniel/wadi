@@ -12,6 +12,7 @@ import type {
   ContinueWatchingItem,
   ListItem,
   MediaPreview,
+  Profile,
   StreamInfo,
   SubtitleInfo,
   User,
@@ -36,6 +37,7 @@ export const queryKeys = {
   watchData: (type: string, id: string) => ['watch-data', type, id] as const,
   continueWatching: (limit = 20) => ['continue-watching', limit] as const,
   browseLayout: ['browse-layout'] as const,
+  profiles: ['profiles'] as const,
 }
 
 export const meQuery = (enabled: boolean) =>
@@ -160,6 +162,14 @@ export const browseLayoutQuery = queryOptions({
   queryFn: () => apiRequest<BrowseLayout>('/api/settings/browse-layout'),
 })
 
+export const profilesQuery = queryOptions({
+  queryKey: queryKeys.profiles,
+  queryFn: async () => {
+    const data = await apiRequest<ApiListResponse<Profile>>('/api/profiles')
+    return data.items
+  },
+})
+
 export const subtitlesQuery = (contentType: string, mediaId: string, enabled = true) =>
   queryOptions({
     queryKey: queryKeys.subtitles(contentType, mediaId),
@@ -195,6 +205,39 @@ export function register(email: string, password: string) {
 
 export function logout() {
   return apiRequest<null>('/api/auth/logout', { method: 'POST' })
+}
+
+export function createProfile(name: string, avatarKey?: string, themeColor?: string | null) {
+  return apiRequest<Profile>('/api/profiles', {
+    method: 'POST',
+    body: {
+      name,
+      avatar_key: avatarKey ?? 'avatar-1',
+      theme_color: themeColor ?? null,
+    },
+  })
+}
+
+export function updateProfile(profileId: string, name: string, avatarKey?: string, themeColor?: string | null) {
+  return apiRequest<Profile>(`/api/profiles/${profileId}`, {
+    method: 'PUT',
+    body: {
+      name,
+      avatar_key: avatarKey ?? 'avatar-1',
+      theme_color: themeColor ?? null,
+    },
+  })
+}
+
+export function deleteProfile(profileId: string) {
+  return apiRequest<null>(`/api/profiles/${profileId}`, { method: 'DELETE' })
+}
+
+export function selectProfile(profileId: string) {
+  return apiRequest<{ active_profile_id: string }>('/api/profiles/select', {
+    method: 'POST',
+    body: { profile_id: profileId },
+  })
 }
 
 export function installAddon(url: string) {

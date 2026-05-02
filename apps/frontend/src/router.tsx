@@ -15,7 +15,7 @@ import type { MediaPreview } from '@/api/types'
 import { AppShell } from '@/features/app-shell/app-shell'
 import type { NavPath } from '@/features/app-shell/nav-items'
 import { ProtectedRoute } from '@/features/app-shell/protected-route'
-import { AddAddonPage, SettingsPage } from '@/features/app-shell/settings-page'
+import { AccountSettingsPage, AddAddonPage, ProfileSettingsPage } from '@/features/app-shell/settings-page'
 import { AuthPage } from '@/features/auth/auth-pages'
 import { CatalogPage } from '@/features/catalog/catalog-page'
 import { HomePage } from '@/features/catalog/home-page'
@@ -114,12 +114,18 @@ const seriesRoute = createRoute({
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings',
-  component: SettingsRoute,
+  component: ProfileSettingsRoute,
+})
+
+const accountSettingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/settings/account',
+  component: AccountSettingsRoute,
 })
 
 const addAddonRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/settings/add-addon',
+  path: '/settings/account/add-addon',
   component: AddAddonRoute,
 })
 
@@ -145,6 +151,7 @@ const routeTree = rootRoute.addChildren([
   moviesRoute,
   seriesRoute,
   settingsRoute,
+  accountSettingsRoute,
   addAddonRoute,
   mediaRoute,
 ])
@@ -188,19 +195,36 @@ function AuthRoute({ mode }: { mode: 'login' | 'register' }) {
   )
 }
 
-function SettingsRoute() {
+function ProfileSettingsRoute() {
   const navigate = useNavigate()
-  const location = useLocation()
+
+  return (
+    <ProtectedRoute>
+      {() => (
+        <AppShell
+          activePath="/settings"
+          label="settings page"
+          onNavigate={(path) => navigate({ to: path })}
+        >
+          <ProfileSettingsPage />
+        </AppShell>
+      )}
+    </ProtectedRoute>
+  )
+}
+
+function AccountSettingsRoute() {
+  const navigate = useNavigate()
 
   return (
     <ProtectedRoute>
       {(user) => (
         <AppShell
-          activePath={location.pathname}
-          label="settings page"
+          activePath="/settings"
+          label="account settings page"
           onNavigate={(path) => navigate({ to: path })}
         >
-          <SettingsPage user={user} />
+          <AccountSettingsPage user={user} />
         </AppShell>
       )}
     </ProtectedRoute>
