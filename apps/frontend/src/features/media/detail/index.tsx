@@ -13,12 +13,19 @@ export function MediaDetailPage({
   media,
   listAction,
   preferredVideoId,
+  preferredSeason,
+  onSeriesSelectionChange,
   onBack,
   onPlay,
 }: {
   media: MediaPreview | null
   listAction?: React.ReactNode
   preferredVideoId?: string | null
+  preferredSeason?: string
+  onSeriesSelectionChange?: (selection: {
+    season: number | null
+    episodeId: string | null
+  }) => void
   onBack: () => void
   onPlay: (stream: PlayableStream, target: PlaybackTarget) => void
 }) {
@@ -32,6 +39,8 @@ export function MediaDetailPage({
         media={media}
         listAction={listAction}
         preferredVideoId={preferredVideoId}
+        preferredSeason={preferredSeason}
+        onSelectionChange={onSeriesSelectionChange}
         onBack={onBack}
         onPlay={onPlay}
       />

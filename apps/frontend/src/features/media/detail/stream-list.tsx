@@ -1,5 +1,7 @@
+import { useQuery } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 
+import { addonsQuery } from '@/api/queries'
 import {
   Select,
   SelectContent,
@@ -30,9 +32,20 @@ export function StreamList({
   isLoading: boolean
   onPlay: (stream: PlayableStream) => void
 }) {
+  const addons = useQuery(addonsQuery)
+  const sourceLabelsById = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const addon of addons.data ?? []) {
+      map.set(addon.id, addon.manifest.name ?? addon.source_url ?? addon.id)
+    }
+    return map
+  }, [addons.data])
   const rows = useMemo<StreamRow[]>(
-    () => streams.map((stream, index) => normalizeStreamRow(stream, index)),
-    [streams],
+    () =>
+      streams.map((stream, index) =>
+        normalizeStreamRow(stream, index, sourceLabelsById),
+      ),
+    [sourceLabelsById, streams],
   )
   const [filterValue, setFilterValue] = useState<string>(FILTER_ALL)
   const filterOptions = useMemo(() => buildFilterOptions(rows), [rows])
@@ -133,14 +146,18 @@ function streamDetail(stream: PlayableStream) {
   return parts.length ? parts.join(' • ') : stream.url ? 'Direct browser-playable stream' : 'Addon stream'
 }
 
-function normalizeStreamRow(stream: PlayableStream, index: number): StreamRow {
-  const sourceLabel = streamSource(stream)
+function normalizeStreamRow(
+  stream: PlayableStream,
+  index: number,
+  sourceLabelsById: Map<string, string>,
+): StreamRow {
+  const source = streamSource(stream, sourceLabelsById)
 
   return {
     stream,
     index,
-    sourceKey: `source:${sourceLabel.toLowerCase()}`,
-    sourceLabel,
+    sourceKey: source.key,
+    sourceLabel: source.label,
   }
 }
 
@@ -161,20 +178,36 @@ function buildFilterOptions(rows: StreamRow[]) {
     .sort((a, b) => a.label.localeCompare(b.label))
 }
 
-function streamSource(stream: PlayableStream) {
+function streamSource(
+  stream: PlayableStream,
+  sourceLabelsById: Map<string, string>,
+) {
+  if (stream.addon_id) {
+    return {
+      key: `addon:${stream.addon_id}`,
+      label: sourceLabelsById.get(stream.addon_id) ?? stream.addon_id,
+    }
+  }
+
   if (stream.url) {
-    return new URL(stream.url).hostname
+    try {
+      const hostname = new URL(stream.url).hostname
+      return { key: `url:${hostname}`, label: hostname }
+    } catch {
+      // Ignore invalid URLs and fall through.
+    }
   }
 
   if (stream.externalUrl) {
     try {
-      return new URL(stream.externalUrl).hostname
+      const hostname = new URL(stream.externalUrl).hostname
+      return { key: `external:${hostname}`, label: hostname }
     } catch {
-      return 'External stream'
+      return { key: 'external:unknown', label: 'External stream' }
     }
   }
 
-  return stream.addon_id ?? 'Unknown source'
+  return { key: 'unknown', label: 'Unknown source' }
 }
 
 function stringValue(value: unknown) {

@@ -25,12 +25,19 @@ export function SeriesDetailPage({
   media,
   listAction,
   preferredVideoId,
+  preferredSeason,
+  onSelectionChange,
   onBack,
   onPlay,
 }: {
   media: MediaPreview;
   listAction?: React.ReactNode;
   preferredVideoId?: string | null;
+  preferredSeason?: string;
+  onSelectionChange?: (selection: {
+    season: number | null;
+    episodeId: string | null;
+  }) => void;
   onBack: () => void;
   onPlay: (stream: PlayableStream, target: PlaybackTarget) => void;
 }) {
@@ -38,6 +45,8 @@ export function SeriesDetailPage({
   const preferredEpisode = episodes.find(
     (episode) => episode.id === preferredVideoId,
   );
+  const preferredSeasonFromSearch =
+    preferredSeason === undefined ? undefined : parseSeasonValue(preferredSeason);
   const [selectedSeasonOverride, setSelectedSeasonOverride] = useState<
     number | null
   >(null);
@@ -45,6 +54,7 @@ export function SeriesDetailPage({
   const selectedSeason =
     selectedSeasonOverride ??
     preferredEpisode?.season ??
+    preferredSeasonFromSearch ??
     defaultSeason(seasons) ??
     null;
   const visibleEpisodes = episodes.filter(
@@ -72,7 +82,29 @@ export function SeriesDetailPage({
 
   const selectEpisode = (episode: Episode) => {
     setSelectedEpisodeIdOverride(episode.id);
+    setSelectedSeasonOverride(episode.season);
+    onSelectionChange?.({ season: episode.season, episodeId: episode.id });
     setStepOverride("streams");
+  };
+
+  const onSeasonChange = (season: number | null) => {
+    setSelectedSeasonOverride(season);
+    setSelectedEpisodeIdOverride((currentEpisodeId) => {
+      if (!currentEpisodeId) {
+        return null;
+      }
+      const currentEpisode = episodes.find(
+        (episode) => episode.id === currentEpisodeId,
+      );
+      return currentEpisode?.season === season ? currentEpisodeId : null;
+    });
+    const currentEpisode = episodes.find(
+      (episode) => episode.id === selectedEpisodeId,
+    );
+    onSelectionChange?.({
+      season,
+      episodeId: currentEpisode?.season === season ? currentEpisode.id : null,
+    });
   };
 
   return (
@@ -98,9 +130,6 @@ export function SeriesDetailPage({
               <ChevronLeft aria-hidden="true" />
               Change Episode
             </Button>
-            <p className={cn("m-0", mutedText)}>
-              {episodeLabel(selectedEpisode)}
-            </p>
             <StreamList
               streams={streams.data ?? []}
               isLoading={streams.isLoading}
@@ -120,17 +149,12 @@ export function SeriesDetailPage({
             selectedSeason={selectedSeason}
             visibleEpisodes={visibleEpisodes}
             watchData={watchData.data}
-            onSeasonChange={setSelectedSeasonOverride}
+            onSeasonChange={onSeasonChange}
             onSelectEpisode={selectEpisode}
           />
         )
       }
     >
-      {selectedEpisode ? (
-        <p className={cn("m-0 max-w-[680px]", mutedText)}>
-          {episodeLabel(selectedEpisode)}
-        </p>
-      ) : null}
       {listAction}
     </DetailShell>
   );
@@ -268,9 +292,6 @@ function EpisodeButton({
           <strong className="block overflow-hidden text-ellipsis whitespace-nowrap">
             {episode.title}
           </strong>
-          <span className={cn("block text-[0.8rem]", mutedText)}>
-            {episodeMetaLabel(episode)}
-          </span>
           {watchState?.position_seconds ? (
             <span className={cn("block text-[0.8rem]", mutedText)}>
               {formatWatchDuration(watchState.position_seconds)}
@@ -389,18 +410,6 @@ export function episodeLabel(
   return parts.length ? parts.join(" • ") : "Episode";
 }
 
-function episodeCardLabel(episode: Pick<Episode, "episode">) {
-  return episode.episode === null ? "Episode" : `E${episode.episode}`;
-}
-
-function episodeMetaLabel(episode: Pick<Episode, "episode" | "released">) {
-  const parts = [
-    episodeCardLabel(episode),
-    formatReleaseDate(episode.released),
-  ].filter(Boolean);
-  return parts.length ? parts.join(" • ") : "Details unavailable";
-}
-
 function stringValue(value: unknown) {
   return typeof value === "string" && value.trim() ? value : undefined;
 }
@@ -414,21 +423,6 @@ function numberValue(value: unknown) {
     return Number.isFinite(number) ? number : null;
   }
   return null;
-}
-
-function formatReleaseDate(value?: string) {
-  if (!value) {
-    return null;
-  }
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return null;
-  }
-  return new Intl.DateTimeFormat("en-US", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  }).format(date);
 }
 
 function formatWatchDuration(duration: number) {

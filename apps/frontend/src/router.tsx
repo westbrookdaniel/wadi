@@ -27,6 +27,11 @@ import {
   type PlaybackTarget,
   type PlayableStream,
 } from '@/features/media/detail'
+import {
+  nextSeriesSearchState,
+  preferredEpisodeIdFromSearch,
+  type SeriesSearchState,
+} from '@/features/media/detail/series-url-state'
 import { WatchlistsPage } from '@/features/watchlists/watchlists-page'
 import { WatchlistAddButton } from '@/features/watchlists/watchlist-add-button'
 import { useAppStore } from '@/store/app-store'
@@ -123,6 +128,8 @@ const mediaRoute = createRoute({
   path: '/media/$type/$id',
   validateSearch: (search: Record<string, unknown>) => ({
     videoId: stringSearchParam(search.videoId),
+    episode: stringSearchParam(search.episode),
+    season: stringSearchParam(search.season),
     from: stringSearchParam(search.from),
   }),
   component: MediaRoute,
@@ -222,6 +229,8 @@ function BrowseRoute({
       search: {
         from: location.pathname,
         videoId: preferredVideoId || undefined,
+        episode: undefined,
+        season: undefined,
       },
     })
   }
@@ -244,7 +253,7 @@ function BrowseRoute({
 function MediaRoute() {
   const navigate = useNavigate()
   const { type, id } = mediaRoute.useParams()
-  const { videoId, from } = mediaRoute.useSearch()
+  const { videoId, episode, season, from } = mediaRoute.useSearch()
   const [selectedStream, setSelectedStream] = useState<PlayableStream | null>(null)
   const [selectedPlaybackTarget, setSelectedPlaybackTarget] = useState<PlaybackTarget | null>(null)
   const routeMedia = useQuery(metaQuery(type, id, true))
@@ -256,6 +265,23 @@ function MediaRoute() {
   const playStream = (stream: PlayableStream, target: PlaybackTarget) => {
     setSelectedPlaybackTarget(target)
     setSelectedStream(stream)
+  }
+
+  const updateSeriesSelection = ({
+    season: nextSeason,
+    episodeId,
+  }: {
+    season: number | null
+    episodeId: string | null
+  }) => {
+    navigate({
+      to: '/media/$type/$id',
+      params: { type, id },
+      search: (previous) => ({
+        ...nextSeriesSearchState(previous as SeriesSearchState, nextSeason, episodeId),
+      }),
+      replace: true,
+    })
   }
 
   return (
@@ -283,7 +309,9 @@ function MediaRoute() {
           ) : (
             <MediaDetailPage
               media={displayMedia}
-              preferredVideoId={videoId}
+              preferredVideoId={preferredEpisodeIdFromSearch({ episode, videoId })}
+              preferredSeason={season}
+              onSeriesSelectionChange={updateSeriesSelection}
               onBack={() => navigate({ to: backPath })}
               onPlay={playStream}
               listAction={<WatchlistAddButton media={displayMedia} />}
