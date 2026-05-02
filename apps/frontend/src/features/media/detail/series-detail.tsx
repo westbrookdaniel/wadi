@@ -141,7 +141,14 @@ export function SeriesDetailPage({
                 onPlay(stream, {
                   mediaType: media.type,
                   mediaId: media.id,
+                  overrideMediaId: media.id,
                   videoId: selectedEpisode.id,
+                  seriesEpisodes: episodes,
+                  episodeContext: {
+                    season: selectedEpisode.season,
+                    episode: selectedEpisode.episode,
+                    title: selectedEpisode.title,
+                  },
                 })
               }
             />

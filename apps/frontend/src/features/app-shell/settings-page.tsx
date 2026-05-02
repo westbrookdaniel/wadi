@@ -5,7 +5,6 @@ import {
   ArrowLeft,
   Copy,
   Ellipsis,
-  EllipsisVertical,
   LogOut,
   Pencil,
   Plus,
@@ -25,10 +24,17 @@ import {
   profilesQuery,
   previewAddon,
   queryKeys,
+  playerDefaultsQuery,
   selectProfile,
+  updatePlayerDefaults,
   updateProfile,
 } from "@/api/queries";
-import type { AddonManifest, AddonRecord, ConfigDecl, User } from "@/api/types";
+import type {
+  AddonManifest,
+  AddonRecord,
+  PlayerOverride,
+  User,
+} from "@/api/types";
 import { EmptyState, ErrorState, LoadingState } from "@/components/status";
 import { Button } from "@/components/ui/button";
 import {
@@ -62,6 +68,7 @@ import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app-store";
 import { useNavigate } from "@tanstack/react-router";
 import { useToast } from "@/components/ui/toast";
+import { useDialogManager } from "@/components/dialogs";
 import { BrowseLayoutSettings } from "./browse-layout-settings";
 import { ProfileAvatar, PROFILE_AVATAR_OPTIONS } from "./profile-avatar";
 
@@ -78,7 +85,7 @@ const profileSchema = z.object({
   avatarKey: z.string().trim().min(1),
 });
 
-export function ProfileSettingsPage() {
+export function ProfileSettingsPage(_props?: { user?: Pick<User, "id" | "email"> }) {
   const navigate = useNavigate();
 
   return (
@@ -100,6 +107,10 @@ export function ProfileSettingsPage() {
         <BrowseLayoutSettings />
       </section>
 
+      <section className="grid gap-4 pt-2 pb-6">
+        <PlaybackSubtitleDefaultsSection />
+      </section>
+
       <section className="grid gap-3 rounded-xl border border-border bg-card/60 p-4">
         <h3 className="m-0 text-[1.05rem] font-[520] tracking-normal">
           Account settings
@@ -116,6 +127,253 @@ export function ProfileSettingsPage() {
           </Button>
         </div>
       </section>
+    </div>
+  );
+}
+
+function PlaybackSubtitleDefaultsSection() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const prefs = useQuery(playerDefaultsQuery);
+  const [draft, setDraft] = useState<PlayerOverride | null>(null);
+
+  const saveMutation = useMutation({
+    mutationFn: (payload: PlayerOverride) => updatePlayerDefaults(payload),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.playerDefaults });
+      toast({ title: "Playback defaults updated." });
+    },
+  });
+
+  const data = draft ?? prefs.data;
+
+  if (prefs.isLoading) {
+    return (
+      <div className="grid gap-3 rounded-xl border border-border bg-card/60 p-4">
+        <h3 className="m-0 text-[1.05rem] font-[520] tracking-normal">
+          Playback & subtitles defaults
+        </h3>
+        <p className="m-0 text-sm text-muted-foreground">Loading defaults…</p>
+      </div>
+    );
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  const updateDraft = <K extends keyof PlayerOverride>(
+    key: K,
+    value: PlayerOverride[K],
+  ) => {
+    setDraft((current) => ({ ...(current ?? data), [key]: value }));
+  };
+
+  const onSave = () => {
+    saveMutation.mutate(draft ?? data);
+  };
+
+  return (
+    <div className="grid gap-4 rounded-xl border border-border bg-card/60 p-4">
+      <h3 className="m-0 text-[1.05rem] font-[520] tracking-normal">
+        Playback & subtitles defaults
+      </h3>
+      <p className="m-0 text-sm text-muted-foreground">
+        Applied to this profile when a title has no per-title override.
+      </p>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Label className="grid gap-1.5">
+          Subtitles default
+          <Select
+            value={data.subtitles_enabled ? "on" : "off"}
+            onValueChange={(value) => updateDraft("subtitles_enabled", value === "on")}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="on">On</SelectItem>
+              <SelectItem value="off">Off</SelectItem>
+            </SelectContent>
+          </Select>
+        </Label>
+
+        <Label className="grid gap-1.5">
+          Subtitle language
+          <Input
+            value={data.subtitle_language ?? ""}
+            onChange={(event) =>
+              updateDraft("subtitle_language", event.target.value.trim() || null)
+            }
+            placeholder="eng"
+          />
+        </Label>
+
+        <Label className="grid gap-1.5">
+          Subtitle size
+          <Input
+            type="number"
+            value={String(data.subtitle_size)}
+            onChange={(event) =>
+              updateDraft("subtitle_size", Number(event.target.value) || 1)
+            }
+            min={0.5}
+            max={3}
+            step={0.05}
+          />
+        </Label>
+
+        <Label className="grid gap-1.5">
+          Subtitle delay (seconds)
+          <Input
+            type="number"
+            value={String(data.subtitle_delay_seconds)}
+            onChange={(event) =>
+              updateDraft("subtitle_delay_seconds", Number(event.target.value) || 0)
+            }
+            min={-30}
+            max={30}
+            step={0.1}
+          />
+        </Label>
+
+        <Label className="grid gap-1.5">
+          Subtitle vertical position
+          <Input
+            type="number"
+            value={String(data.subtitle_position)}
+            onChange={(event) =>
+              updateDraft("subtitle_position", Number(event.target.value) || 0)
+            }
+            min={-1}
+            max={1}
+            step={0.05}
+          />
+        </Label>
+
+        <Label className="grid gap-1.5">
+          Playback speed
+          <Input
+            type="number"
+            value={String(data.playback_speed)}
+            onChange={(event) =>
+              updateDraft("playback_speed", Number(event.target.value) || 1)
+            }
+            min={0.25}
+            max={3}
+            step={0.25}
+          />
+        </Label>
+
+        <Label className="grid gap-1.5">
+          Subtitle text color
+          <Input
+            value={data.subtitle_text_color}
+            onChange={(event) => updateDraft("subtitle_text_color", event.target.value)}
+          />
+        </Label>
+
+        <Label className="grid gap-1.5">
+          Subtitle background color
+          <Input
+            value={data.subtitle_background_color}
+            onChange={(event) =>
+              updateDraft("subtitle_background_color", event.target.value)
+            }
+          />
+        </Label>
+
+        <Label className="grid gap-1.5">
+          Subtitle outline color
+          <Input
+            value={data.subtitle_outline_color}
+            onChange={(event) => updateDraft("subtitle_outline_color", event.target.value)}
+          />
+        </Label>
+
+        <Label className="grid gap-1.5">
+          Subtitle outline style
+          <Input
+            value={data.subtitle_outline_style}
+            onChange={(event) =>
+              updateDraft("subtitle_outline_style", event.target.value || "outline")
+            }
+          />
+        </Label>
+
+        <Label className="grid gap-1.5">
+          Subtitle font family
+          <Input
+            value={data.subtitle_font_family}
+            onChange={(event) =>
+              updateDraft("subtitle_font_family", event.target.value || "sans-serif")
+            }
+          />
+        </Label>
+
+        <Label className="grid gap-1.5">
+          Subtitle background opacity
+          <Input
+            type="number"
+            value={String(data.subtitle_background_opacity)}
+            onChange={(event) =>
+              updateDraft(
+                "subtitle_background_opacity",
+                Number(event.target.value) || 0,
+              )
+            }
+            min={0}
+            max={1}
+            step={0.05}
+          />
+        </Label>
+
+        <Label className="grid gap-1.5">
+          Subtitle offset X
+          <Input
+            type="number"
+            value={String(data.subtitle_offset_x)}
+            onChange={(event) =>
+              updateDraft("subtitle_offset_x", Number(event.target.value) || 0)
+            }
+            min={-100}
+            max={100}
+            step={1}
+          />
+        </Label>
+
+        <Label className="grid gap-1.5">
+          Subtitle offset Y
+          <Input
+            type="number"
+            value={String(data.subtitle_offset_y)}
+            onChange={(event) =>
+              updateDraft("subtitle_offset_y", Number(event.target.value) || 0)
+            }
+            min={-100}
+            max={100}
+            step={1}
+          />
+        </Label>
+
+        <Label className="grid gap-1.5">
+          Preferred audio language
+          <Input
+            value={data.preferred_audio_language ?? ""}
+            onChange={(event) =>
+              updateDraft("preferred_audio_language", event.target.value.trim() || null)
+            }
+            placeholder="eng"
+          />
+        </Label>
+      </div>
+
+      <div className="flex justify-end">
+        <Button type="button" onClick={onSave} disabled={saveMutation.isPending}>
+          Save playback defaults
+        </Button>
+      </div>
     </div>
   );
 }
@@ -232,6 +490,13 @@ export function AccountSettingsPage({ user }: { user: User }) {
       </section>
     </div>
   );
+}
+
+export function SettingsPage(props: { user?: Pick<User, "id" | "email"> }) {
+  if (props.user) {
+    return <AccountSettingsPage user={{ ...props.user, active_profile_id: "" }} />;
+  }
+  return <ProfileSettingsPage />;
 }
 
 function ProfileManager() {
@@ -765,13 +1030,21 @@ function AddonCard({
   addon: AddonRecord;
   onDelete: () => void;
 }) {
+  const queryClient = useQueryClient();
+  const { openDialog } = useDialogManager();
   const { toast } = useToast();
-  const [isOpen, setIsOpen] = useState(false);
   const fields = addon.manifest.config ?? [];
   const hasConfig = fields.length > 0;
   const title = addon.manifest.name ?? addon.source_url;
   const version = stringValue(addon.manifest.version);
   const description = addon.manifest.description ?? `${addon.transport} addon`;
+  const configureMutation = useMutation({
+    mutationFn: (config: Record<string, unknown>) =>
+      configureAddon(addon.id, config),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.addons });
+    },
+  });
 
   return (
     <Card size="sm" className="bg-card/70">
@@ -805,7 +1078,13 @@ function AddonCard({
               size="icon"
               type="button"
               aria-label="Configure addon"
-              onClick={() => setIsOpen(true)}
+              onClick={async () => {
+                const result = await openDialog("addonConfigure", { addon });
+                if (result.action !== "save") {
+                  return;
+                }
+                configureMutation.mutate(result.config);
+              }}
             >
               <Settings aria-hidden="true" />
             </Button>
@@ -822,145 +1101,7 @@ function AddonCard({
           </Button>
         </CardAction>
       </CardHeader>
-      {hasConfig ? (
-        <ConfigureAddonDialog
-          addon={addon}
-          open={isOpen}
-          onOpenChange={setIsOpen}
-        />
-      ) : null}
     </Card>
-  );
-}
-
-function ConfigureAddonDialog({
-  addon,
-  open,
-  onOpenChange,
-}: {
-  addon: AddonRecord;
-  open: boolean;
-  onOpenChange: (next: boolean) => void;
-}) {
-  const queryClient = useQueryClient();
-  const fields = addon.manifest.config ?? [];
-  const configSchema = z.object(
-    Object.fromEntries(
-      fields.map((field) => [field.key, schemaForField(field)]),
-    ),
-  );
-  const defaultConfig = defaultsFrom(fields, addon.config);
-
-  const configureMutation = useMutation({
-    mutationFn: (config: Record<string, unknown>) =>
-      configureAddon(addon.id, normalizeConfig(config)),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.addons });
-      onOpenChange(false);
-    },
-  });
-
-  const configForm = useForm({
-    defaultValues: defaultConfig,
-    validators: {
-      onSubmit: configSchema as never,
-    },
-    onSubmit: ({ value }) => configureMutation.mutate(value),
-  });
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Configure {addon.manifest.name ?? "addon"}</DialogTitle>
-          <DialogDescription>
-            Update addon configuration values.
-          </DialogDescription>
-        </DialogHeader>
-        <form
-          className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] items-end gap-2.5"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void configForm.handleSubmit();
-          }}
-        >
-          {fields.map((field) => (
-            <configForm.Field name={field.key} key={field.key}>
-              {(formField) => (
-                <div className="grid gap-2">
-                  <Label htmlFor={`${addon.id}-${field.key}`}>
-                    {field.title ?? field.key}
-                  </Label>
-                  {field.options?.length ? (
-                    <Select
-                      value={String(formField.state.value ?? "")}
-                      onValueChange={(value) => formField.handleChange(value)}
-                    >
-                      <SelectTrigger
-                        id={`${addon.id}-${field.key}`}
-                        className="w-full"
-                        aria-invalid={
-                          formField.state.meta.errors.length ? true : undefined
-                        }
-                      >
-                        <SelectValue placeholder="Default" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__default">Default</SelectItem>
-                        {field.options.map((option) => (
-                          <SelectItem value={option} key={option}>
-                            {option}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <Input
-                      id={`${addon.id}-${field.key}`}
-                      value={String(formField.state.value ?? "")}
-                      type={
-                        field.type === "number"
-                          ? "number"
-                          : field.type === "password"
-                            ? "password"
-                            : "text"
-                      }
-                      onBlur={formField.handleBlur}
-                      onChange={(event) =>
-                        formField.handleChange(event.target.value)
-                      }
-                      aria-invalid={
-                        formField.state.meta.errors.length ? true : undefined
-                      }
-                    />
-                  )}
-                  {fieldError(formField) ? (
-                    <p className={fieldErrorClass}>{fieldError(formField)}</p>
-                  ) : null}
-                </div>
-              )}
-            </configForm.Field>
-          ))}
-          <DialogFooter>
-            <configForm.Subscribe
-              selector={(state) => ({
-                canSubmit: state.canSubmit,
-                isSubmitting: state.isSubmitting,
-              })}
-            >
-              {(state) => (
-                <Button
-                  type="submit"
-                  disabled={!canSubmitForm(state, configureMutation.isPending)}
-                >
-                  Save config
-                </Button>
-              )}
-            </configForm.Subscribe>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
   );
 }
 
@@ -1044,39 +1185,4 @@ function resourceNames(manifest: AddonManifest) {
 
 function stringValue(value: unknown) {
   return typeof value === "string" && value.trim() ? value : null;
-}
-
-function defaultsFrom(
-  fields: ConfigDecl[],
-  config: Record<string, unknown> | null,
-): Record<string, string | number> {
-  return Object.fromEntries(
-    fields.map((field) => {
-      const value = config?.[field.key] ?? field.default ?? "";
-      return [field.key, typeof value === "number" ? value : String(value)];
-    }),
-  );
-}
-
-function normalizeConfig(config: Record<string, unknown>) {
-  return Object.fromEntries(
-    Object.entries(config).map(([key, value]) => [
-      key,
-      value === "__default" ? "" : value,
-    ]),
-  );
-}
-
-function schemaForField(field: ConfigDecl) {
-  if (field.options?.length) {
-    return field.required ? z.string().min(1, "Choose an option.") : z.string();
-  }
-  if (field.type === "number") {
-    return field.required
-      ? z.coerce.number("Enter a number.")
-      : z.union([z.literal(""), z.coerce.number("Enter a number.")]);
-  }
-  return field.required
-    ? z.string().trim().min(1, "This field is required.")
-    : z.string();
 }

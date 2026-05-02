@@ -35,7 +35,15 @@ export function MovieDetailPage({
         <StreamList
           streams={streams.data ?? []}
           isLoading={streams.isLoading}
-          onPlay={(stream) => onPlay(stream, { mediaType: media.type, mediaId: media.id, videoId: null })}
+          onPlay={(stream) =>
+            onPlay(stream, {
+              mediaType: media.type,
+              mediaId: media.id,
+              overrideMediaId: media.id,
+              videoId: null,
+              episodeContext: null,
+            })
+          }
         />
       }
     >

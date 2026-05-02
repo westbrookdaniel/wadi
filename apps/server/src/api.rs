@@ -24,7 +24,8 @@ use crate::{
     error::{AppError, AppResult},
     models::{
         AddonPreview, AddonRecord, AuthUser, BrowseLayout, BrowseLayoutPage, BrowseLayoutPages,
-        ListItem, Profile, User, UserList, WatchData, WatchState,
+        ListItem, PlayerOverride, PlayerPreferences, Profile, User, UserList, WatchData,
+        WatchState,
     },
     stremio::{Manifest, ResourceKind},
     AppState,
@@ -77,6 +78,14 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/api/settings/browse-layout",
             get(get_browse_layout).put(set_browse_layout),
+        )
+        .route(
+            "/api/settings/player-defaults",
+            get(get_player_defaults).put(set_player_defaults),
+        )
+        .route(
+            "/api/settings/player-override/{media_type}/{media_id}",
+            get(get_player_override).put(set_player_override),
         )
         .with_state(state)
 }
@@ -696,6 +705,26 @@ struct BrowseLayoutPageRequest {
     hidden: Vec<String>,
 }
 
+#[derive(Debug, Deserialize, Default)]
+struct PlayerPreferencesRequest {
+    subtitles_enabled: Option<bool>,
+    subtitle_language: Option<String>,
+    subtitle_delay_seconds: Option<f64>,
+    subtitle_size: Option<f64>,
+    subtitle_position: Option<f64>,
+    subtitle_text_color: Option<String>,
+    subtitle_background_color: Option<String>,
+    subtitle_background_opacity: Option<f64>,
+    subtitle_outline_color: Option<String>,
+    subtitle_outline_style: Option<String>,
+    subtitle_font_family: Option<String>,
+    subtitle_offset_x: Option<f64>,
+    subtitle_offset_y: Option<f64>,
+    playback_speed: Option<f64>,
+    preferred_audio_language: Option<String>,
+    preferred_audio_track_id: Option<String>,
+}
+
 async fn set_watch_state(
     State(state): State<AppState>,
     user: AuthUser,
@@ -870,6 +899,85 @@ async fn set_browse_layout(
     .execute(&state.db)
     .await?;
     Ok(Json(layout))
+}
+
+async fn get_player_defaults(
+    State(state): State<AppState>,
+    user: AuthUser,
+) -> AppResult<Json<PlayerPreferences>> {
+    Ok(Json(
+        load_player_defaults(&state, &user.id, &user.profile_id).await?,
+    ))
+}
+
+async fn set_player_defaults(
+    State(state): State<AppState>,
+    user: AuthUser,
+    Json(payload): Json<PlayerPreferencesRequest>,
+) -> AppResult<Json<PlayerPreferences>> {
+    let defaults = normalize_player_defaults(payload)?;
+    let settings_json = serde_json::to_string(&defaults)?;
+    sqlx::query(
+        r#"
+        INSERT INTO user_settings (user_id, profile_id, player_prefs_json)
+        VALUES (?1, ?2, ?3)
+        ON CONFLICT(user_id, profile_id) DO UPDATE SET
+            player_prefs_json = excluded.player_prefs_json,
+            updated_at = datetime('now')
+        "#,
+    )
+    .bind(&user.id)
+    .bind(&user.profile_id)
+    .bind(settings_json)
+    .execute(&state.db)
+    .await?;
+
+    Ok(Json(defaults))
+}
+
+async fn get_player_override(
+    State(state): State<AppState>,
+    user: AuthUser,
+    Path((media_type, media_id)): Path<(String, String)>,
+) -> AppResult<Json<PlayerOverride>> {
+    let media_type = validate_identity_part(&media_type, "media_type")?;
+    let media_id = validate_identity_part(&media_id, "media_id")?;
+    Ok(Json(
+        load_player_override(&state, &user.id, &user.profile_id, &media_type, &media_id).await?,
+    ))
+}
+
+async fn set_player_override(
+    State(state): State<AppState>,
+    user: AuthUser,
+    Path((media_type, media_id)): Path<(String, String)>,
+    Json(payload): Json<PlayerPreferencesRequest>,
+) -> AppResult<Json<PlayerOverride>> {
+    let media_type = validate_identity_part(&media_type, "media_type")?;
+    let media_id = validate_identity_part(&media_id, "media_id")?;
+    let override_settings = normalize_player_override(payload)?;
+    let override_json = serde_json::to_string(&override_settings)?;
+    let id = Uuid::new_v4().to_string();
+
+    sqlx::query(
+        r#"
+        INSERT INTO player_overrides (id, user_id, profile_id, media_type, media_id, settings_json)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+        ON CONFLICT(user_id, profile_id, media_type, media_id) DO UPDATE SET
+            settings_json = excluded.settings_json,
+            updated_at = datetime('now')
+        "#,
+    )
+    .bind(id)
+    .bind(&user.id)
+    .bind(&user.profile_id)
+    .bind(&media_type)
+    .bind(&media_id)
+    .bind(override_json)
+    .execute(&state.db)
+    .await?;
+
+    Ok(Json(override_settings))
 }
 
 async fn catalogs(State(state): State<AppState>, user: AuthUser) -> AppResult<Json<Value>> {
@@ -1467,6 +1575,190 @@ async fn load_browse_layout(
     let raw: String = row.try_get("browse_layout_json")?;
     let parsed = serde_json::from_str::<BrowseLayout>(&raw).unwrap_or_default();
     Ok(normalize_browse_layout(parsed))
+}
+
+async fn load_player_defaults(
+    state: &AppState,
+    user_id: &str,
+    profile_id: &str,
+) -> AppResult<PlayerPreferences> {
+    let row = sqlx::query(
+        "SELECT player_prefs_json FROM user_settings WHERE user_id = ?1 AND profile_id = ?2",
+    )
+    .bind(user_id)
+    .bind(profile_id)
+    .fetch_optional(&state.db)
+    .await?;
+
+    let Some(row) = row else {
+        return Ok(PlayerPreferences::default());
+    };
+
+    let raw: String = row.try_get("player_prefs_json")?;
+    let parsed = serde_json::from_str::<PlayerPreferences>(&raw)
+        .map(normalize_player_preferences)
+        .unwrap_or_default();
+    Ok(parsed)
+}
+
+async fn load_player_override(
+    state: &AppState,
+    user_id: &str,
+    profile_id: &str,
+    media_type: &str,
+    media_id: &str,
+) -> AppResult<PlayerOverride> {
+    let row = sqlx::query(
+        r#"
+        SELECT settings_json
+        FROM player_overrides
+        WHERE user_id = ?1 AND profile_id = ?2 AND media_type = ?3 AND media_id = ?4
+        "#,
+    )
+    .bind(user_id)
+    .bind(profile_id)
+    .bind(media_type)
+    .bind(media_id)
+    .fetch_optional(&state.db)
+    .await?;
+
+    let Some(row) = row else {
+        return Ok(PlayerOverride::default());
+    };
+
+    let raw: String = row.try_get("settings_json")?;
+    let parsed = serde_json::from_str::<PlayerOverride>(&raw)
+        .map(normalize_player_override_model)
+        .unwrap_or_default();
+    Ok(parsed)
+}
+
+fn normalize_player_defaults(payload: PlayerPreferencesRequest) -> AppResult<PlayerPreferences> {
+    Ok(normalize_player_preferences(PlayerPreferences {
+        subtitles_enabled: payload.subtitles_enabled.unwrap_or(true),
+        subtitle_language: normalize_optional_string(payload.subtitle_language),
+        subtitle_delay_seconds: payload.subtitle_delay_seconds.unwrap_or(0.0),
+        subtitle_size: payload.subtitle_size.unwrap_or(1.0),
+        subtitle_position: payload.subtitle_position.unwrap_or(0.0),
+        subtitle_text_color: payload
+            .subtitle_text_color
+            .and_then(normalize_color)
+            .unwrap_or_else(|| "#FFFFFF".to_string()),
+        subtitle_background_color: payload
+            .subtitle_background_color
+            .and_then(normalize_color)
+            .unwrap_or_else(|| "#000000".to_string()),
+        subtitle_background_opacity: payload.subtitle_background_opacity.unwrap_or(0.4),
+        subtitle_outline_color: payload
+            .subtitle_outline_color
+            .and_then(normalize_color)
+            .unwrap_or_else(|| "#000000".to_string()),
+        subtitle_outline_style: payload
+            .subtitle_outline_style
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("outline")
+            .to_string(),
+        subtitle_font_family: payload
+            .subtitle_font_family
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("sans-serif")
+            .to_string(),
+        subtitle_offset_x: payload.subtitle_offset_x.unwrap_or(0.0),
+        subtitle_offset_y: payload.subtitle_offset_y.unwrap_or(0.0),
+        playback_speed: payload.playback_speed.unwrap_or(1.0),
+        preferred_audio_language: normalize_optional_string(payload.preferred_audio_language),
+        preferred_audio_track_id: normalize_optional_string(payload.preferred_audio_track_id),
+    }))
+}
+
+fn normalize_player_override(payload: PlayerPreferencesRequest) -> AppResult<PlayerOverride> {
+    Ok(normalize_player_override_model(PlayerOverride {
+        subtitles_enabled: payload.subtitles_enabled,
+        subtitle_language: normalize_optional_string(payload.subtitle_language),
+        subtitle_delay_seconds: payload.subtitle_delay_seconds,
+        subtitle_size: payload.subtitle_size,
+        subtitle_position: payload.subtitle_position,
+        subtitle_text_color: payload.subtitle_text_color.and_then(normalize_color),
+        subtitle_background_color: payload.subtitle_background_color.and_then(normalize_color),
+        subtitle_background_opacity: payload.subtitle_background_opacity,
+        subtitle_outline_color: payload.subtitle_outline_color.and_then(normalize_color),
+        subtitle_outline_style: payload.subtitle_outline_style.and_then(|value| {
+            let value = value.trim().to_string();
+            (!value.is_empty()).then_some(value)
+        }),
+        subtitle_font_family: payload.subtitle_font_family.and_then(|value| {
+            let value = value.trim().to_string();
+            (!value.is_empty()).then_some(value)
+        }),
+        subtitle_offset_x: payload.subtitle_offset_x,
+        subtitle_offset_y: payload.subtitle_offset_y,
+        playback_speed: payload.playback_speed,
+        preferred_audio_language: normalize_optional_string(payload.preferred_audio_language),
+        preferred_audio_track_id: normalize_optional_string(payload.preferred_audio_track_id),
+    }))
+}
+
+fn normalize_player_preferences(mut value: PlayerPreferences) -> PlayerPreferences {
+    value.subtitle_delay_seconds = value.subtitle_delay_seconds.clamp(-30.0, 30.0);
+    value.subtitle_size = value.subtitle_size.clamp(0.5, 3.0);
+    value.subtitle_position = value.subtitle_position.clamp(-1.0, 1.0);
+    value.subtitle_background_opacity = value.subtitle_background_opacity.clamp(0.0, 1.0);
+    value.subtitle_offset_x = value.subtitle_offset_x.clamp(-100.0, 100.0);
+    value.subtitle_offset_y = value.subtitle_offset_y.clamp(-100.0, 100.0);
+    value.playback_speed = value.playback_speed.clamp(0.25, 3.0);
+    value.subtitle_text_color =
+        normalize_color(value.subtitle_text_color).unwrap_or_else(|| "#FFFFFF".to_string());
+    value.subtitle_background_color =
+        normalize_color(value.subtitle_background_color).unwrap_or_else(|| "#000000".to_string());
+    value.subtitle_outline_color =
+        normalize_color(value.subtitle_outline_color).unwrap_or_else(|| "#000000".to_string());
+    value.subtitle_outline_style = value.subtitle_outline_style.trim().to_string();
+    if value.subtitle_outline_style.is_empty() {
+        value.subtitle_outline_style = "outline".to_string();
+    }
+    value.subtitle_font_family = value.subtitle_font_family.trim().to_string();
+    if value.subtitle_font_family.is_empty() {
+        value.subtitle_font_family = "sans-serif".to_string();
+    }
+    value
+}
+
+fn normalize_player_override_model(mut value: PlayerOverride) -> PlayerOverride {
+    value.subtitle_delay_seconds = value.subtitle_delay_seconds.map(|v| v.clamp(-30.0, 30.0));
+    value.subtitle_size = value.subtitle_size.map(|v| v.clamp(0.5, 3.0));
+    value.subtitle_position = value.subtitle_position.map(|v| v.clamp(-1.0, 1.0));
+    value.subtitle_background_opacity = value.subtitle_background_opacity.map(|v| v.clamp(0.0, 1.0));
+    value.subtitle_offset_x = value.subtitle_offset_x.map(|v| v.clamp(-100.0, 100.0));
+    value.subtitle_offset_y = value.subtitle_offset_y.map(|v| v.clamp(-100.0, 100.0));
+    value.playback_speed = value.playback_speed.map(|v| v.clamp(0.25, 3.0));
+    value.subtitle_text_color = value.subtitle_text_color.and_then(normalize_color);
+    value.subtitle_background_color = value.subtitle_background_color.and_then(normalize_color);
+    value.subtitle_outline_color = value.subtitle_outline_color.and_then(normalize_color);
+    value
+}
+
+fn normalize_color(value: String) -> Option<String> {
+    let value = value.trim();
+    if value.is_empty() {
+        return None;
+    }
+    let prefixed = if value.starts_with('#') {
+        value.to_string()
+    } else {
+        format!("#{value}")
+    };
+    let hex = prefixed.trim_start_matches('#');
+    if hex.len() != 6 && hex.len() != 8 {
+        return None;
+    }
+    if !hex.chars().all(|ch| ch.is_ascii_hexdigit()) {
+        return None;
+    }
+    Some(format!("#{hex}").to_uppercase())
 }
 
 fn normalize_browse_layout_request(payload: BrowseLayoutRequest) -> BrowseLayout {

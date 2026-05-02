@@ -1,9 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft,
+  Cast,
+  Captions,
+  Clapperboard,
+  Languages,
   Maximize,
   Pause,
   Play,
+  Timer,
   Volume1,
   Volume2,
   VolumeX,
@@ -22,14 +27,28 @@ import {
   AudioBufferSink,
   CanvasSink,
   Input,
+  type InputAudioTrack,
   UrlSource,
   type WrappedAudioBuffer,
   type WrappedCanvas,
 } from 'mediabunny'
 
-import { defaultWatchState, findWatchState, queryKeys, updateWatchProgress, watchDataQuery } from '@/api/queries'
-import type { MediaPreview, WatchState } from '@/api/types'
+import {
+  defaultWatchState,
+  findWatchState,
+  playerDefaultsQuery,
+  playerOverrideQuery,
+  queryKeys,
+  streamsQuery,
+  subtitlesQuery,
+  updatePlayerOverride,
+  updateWatchProgress,
+  watchDataQuery,
+} from '@/api/queries'
+import type { MediaPreview, PlayerOverride, SubtitleInfo, WatchState } from '@/api/types'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
   Tooltip,
   TooltipContent,
@@ -40,8 +59,9 @@ import { cn } from '@/lib/utils'
 import { stateBlock } from '@/lib/styles'
 import { useAppStore } from '@/store/app-store'
 
+import { getChromecastTransport } from './chromecast'
 import { buildStreamProxyUrl } from './stream-playback'
-import type { PlaybackTarget, PlayableStream } from './types'
+import type { Episode, PlaybackTarget, PlayableStream } from './types'
 
 type PlayerStatus = 'idle' | 'loading' | 'ready' | 'error'
 
@@ -56,6 +76,24 @@ type PlayerState = {
   muted: boolean
   hasVideo: boolean
   hasAudio: boolean
+  playbackSpeed: number
+  audioTracks: Array<{
+    id: string
+    label: string
+    language: string
+  }>
+  selectedAudioTrackId: string | null
+}
+
+type CastStateData = {
+  paused?: boolean
+  currentTime?: number
+  duration?: number
+  volume?: number
+  muted?: boolean
+  playbackSpeed?: number
+  selectedAudioTrackId?: string | null
+  selectedSubtitlesTrackId?: string | null
 }
 
 const initialPlayerState: PlayerState = {
@@ -69,6 +107,9 @@ const initialPlayerState: PlayerState = {
   muted: false,
   hasVideo: false,
   hasAudio: false,
+  playbackSpeed: 1,
+  audioTracks: [],
+  selectedAudioTrackId: null,
 }
 
 export function MediaPlayerPage({
@@ -83,40 +124,164 @@ export function MediaPlayerPage({
   onBack: () => void
 }) {
   const queryClient = useQueryClient()
-  const streamUrl = stream.url
+  const [activeStream, setActiveStream] = useState(stream)
+  const [activeTarget, setActiveTarget] = useState(target)
+  const streamUrl = activeStream.url
   const token = useAppStore((state) => state.token)
   const proxiedStreamUrl = streamUrl ? buildStreamProxyUrl(streamUrl) : undefined
-  const watchData = useQuery(watchDataQuery(target.mediaType, target.mediaId, Boolean(target.mediaType && target.mediaId)))
+  const watchData = useQuery(
+    watchDataQuery(
+      activeTarget.mediaType,
+      activeTarget.mediaId,
+      Boolean(activeTarget.mediaType && activeTarget.mediaId),
+    ),
+  )
   const watchState =
-    findWatchState(watchData.data, target.videoId) ??
-    defaultWatchState(target.mediaType, target.mediaId, target.videoId)
+    findWatchState(watchData.data, activeTarget.videoId) ??
+    defaultWatchState(activeTarget.mediaType, activeTarget.mediaId, activeTarget.videoId)
+  const subtitleTracks = useQuery(
+    subtitlesQuery(activeTarget.mediaType, activeTarget.mediaId, Boolean(activeTarget.mediaId)),
+  )
+  const playerDefaults = useQuery(playerDefaultsQuery)
+  const overrideMediaId = activeTarget.overrideMediaId ?? activeTarget.mediaId
+  const playerOverride = useQuery(
+    playerOverrideQuery(activeTarget.mediaType, overrideMediaId, Boolean(overrideMediaId)),
+  )
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const playerRef = useRef<HTMLDivElement | null>(null)
   const lastSavedRef = useRef(0)
   const progressMutateRef = useRef<((payload: { position: number; duration?: number | null }) => void) | null>(null)
+  const castTransport = useMemo(() => getChromecastTransport(), [])
+  const [castConnected, setCastConnected] = useState(false)
+  const [castReady, setCastReady] = useState(false)
+  const [castUnavailableReason, setCastUnavailableReason] = useState<string | null>(null)
+  const [castState, setCastState] = useState<CastStateData>({})
+  const [episodeSheetOpen, setEpisodeSheetOpen] = useState(false)
+  const [selectedSwapSeason, setSelectedSwapSeason] = useState<number | null>(activeTarget.episodeContext?.season ?? null)
+  const [pendingEpisode, setPendingEpisode] = useState<Episode | null>(null)
+  const episodeStreams = useQuery(
+    streamsQuery(
+      activeTarget.mediaType,
+      pendingEpisode?.id ?? "",
+      Boolean(pendingEpisode),
+    ),
+  )
+
+  useEffect(() => {
+    setActiveStream(stream)
+    setActiveTarget(target)
+    setSelectedSwapSeason(target.episodeContext?.season ?? null)
+  }, [stream, target])
+
+  const mergedPrefs = useMemo(() => {
+    const defaults = playerDefaults.data
+    const override = playerOverride.data
+    if (!defaults) {
+      return null
+    }
+    return {
+      ...defaults,
+      ...(override ?? {}),
+    }
+  }, [playerDefaults.data, playerOverride.data])
+
+  const [selectedSubtitleId, setSelectedSubtitleId] = useState<string | null>(null)
+  const [subtitleEnabled, setSubtitleEnabled] = useState(true)
+  const [subtitleDelay, setSubtitleDelay] = useState(0)
+  const [subtitleSize, setSubtitleSize] = useState(1)
+  const [subtitlePosition, setSubtitlePosition] = useState(0)
+  const [subtitleTextColor, setSubtitleTextColor] = useState("#FFFFFF")
+  const [subtitleBackgroundColor, setSubtitleBackgroundColor] = useState("#000000")
+  const [subtitleBackgroundOpacity, setSubtitleBackgroundOpacity] = useState(0.4)
+  const [subtitleOutlineColor, setSubtitleOutlineColor] = useState("#000000")
+  const [subtitleOutlineStyle, setSubtitleOutlineStyle] = useState("outline")
+  const [subtitleFontFamily, setSubtitleFontFamily] = useState("sans-serif")
+  const [subtitleOffsetX, setSubtitleOffsetX] = useState(0)
+  const [subtitleOffsetY, setSubtitleOffsetY] = useState(0)
+  const [playbackSpeed, setPlaybackSpeed] = useState(1)
+  const [preferredAudioLanguage, setPreferredAudioLanguage] = useState<string | null>(null)
+  const [selectedAudioTrackId, setSelectedAudioTrackId] = useState<string | null>(null)
+  const [subtitleMenuOpen, setSubtitleMenuOpen] = useState(false)
+  const [subtitleCues, setSubtitleCues] = useState<SubtitleCue[]>([])
+  const [subtitleText, setSubtitleText] = useState("")
+  const [preferredSubtitleLanguage, setPreferredSubtitleLanguage] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!mergedPrefs) {
+      return
+    }
+    setSubtitleEnabled(mergedPrefs.subtitles_enabled)
+    setPreferredSubtitleLanguage(mergedPrefs.subtitle_language ?? null)
+    setSelectedSubtitleId(null)
+    setSubtitleDelay(mergedPrefs.subtitle_delay_seconds)
+    setSubtitleSize(mergedPrefs.subtitle_size)
+    setSubtitlePosition(mergedPrefs.subtitle_position)
+    setSubtitleTextColor(mergedPrefs.subtitle_text_color)
+    setSubtitleBackgroundColor(mergedPrefs.subtitle_background_color)
+    setSubtitleBackgroundOpacity(mergedPrefs.subtitle_background_opacity)
+    setSubtitleOutlineColor(mergedPrefs.subtitle_outline_color)
+    setSubtitleOutlineStyle(mergedPrefs.subtitle_outline_style)
+    setSubtitleFontFamily(mergedPrefs.subtitle_font_family)
+    setSubtitleOffsetX(mergedPrefs.subtitle_offset_x)
+    setSubtitleOffsetY(mergedPrefs.subtitle_offset_y)
+    setPlaybackSpeed(mergedPrefs.playback_speed)
+    setPreferredAudioLanguage(mergedPrefs.preferred_audio_language)
+    setSelectedAudioTrackId(mergedPrefs.preferred_audio_track_id)
+  }, [mergedPrefs, activeTarget.mediaType, overrideMediaId])
+
+  const streamSubtitleList = useMemo(
+    () =>
+      (subtitleTracks.data ?? [])
+        .filter((track) => typeof track.url === "string")
+        .map((track, index) => ({
+          id: subtitleIdentity(track, index),
+          language: track.lang ?? "und",
+          url: track.url as string,
+          source: (track as { addon_id?: string }).addon_id ?? "subtitles",
+        })),
+    [subtitleTracks.data],
+  )
+
+  useEffect(() => {
+    if (!streamSubtitleList.length) {
+      setSelectedSubtitleId(null)
+      return
+    }
+
+    setSelectedSubtitleId((current) => {
+      if (current && streamSubtitleList.some((track) => track.id === current)) {
+        return current
+      }
+      if (!preferredSubtitleLanguage) {
+        return current ?? streamSubtitleList[0]?.id ?? null
+      }
+      const preferred = streamSubtitleList.find((track) => track.language === preferredSubtitleLanguage)
+      return preferred?.id ?? current ?? streamSubtitleList[0]?.id ?? null
+    })
+  }, [preferredSubtitleLanguage, streamSubtitleList])
 
   const progress = useMutation({
     mutationFn: (payload: { position: number; duration?: number | null }) =>
       updateWatchProgress({
-        media_type: target.mediaType,
-        media_id: target.mediaId,
-        video_id: target.videoId,
+        media_type: activeTarget.mediaType,
+        media_id: activeTarget.mediaId,
+        video_id: activeTarget.videoId,
         position_seconds: Math.max(0, Math.floor(payload.position)),
         duration_seconds: payload.duration ? Math.floor(payload.duration) : null,
       }),
     onSuccess: (state) => {
-      queryClient.setQueryData(queryKeys.watchData(target.mediaType, target.mediaId), (existing: { items?: WatchState[] } | undefined) => {
+      queryClient.setQueryData(queryKeys.watchData(activeTarget.mediaType, activeTarget.mediaId), (existing: { items?: WatchState[] } | undefined) => {
         if (!existing) {
-          return { media_type: target.mediaType, media_id: target.mediaId, items: [state] }
+          return { media_type: activeTarget.mediaType, media_id: activeTarget.mediaId, items: [state] }
         }
         const items = existing.items ?? []
-        const index = items.findIndex((item) => (item.video_id ?? null) === target.videoId)
+        const index = items.findIndex((item) => (item.video_id ?? null) === activeTarget.videoId)
         return {
           ...existing,
           items: index >= 0 ? items.map((item, itemIndex) => (itemIndex === index ? state : item)) : [...items, state],
         }
       })
-      queryClient.invalidateQueries({ queryKey: queryKeys.watchData(target.mediaType, target.mediaId) })
+      queryClient.invalidateQueries({ queryKey: queryKeys.watchData(activeTarget.mediaType, activeTarget.mediaId) })
       queryClient.invalidateQueries({ queryKey: queryKeys.continueWatching(20) })
       queryClient.invalidateQueries({ queryKey: queryKeys.continueWatching(12) })
     },
@@ -140,33 +305,348 @@ export function MediaPlayerPage({
     authToken: token,
     savedPosition: watchState.position_seconds,
     watched: watchState.watched,
+    preferredAudioLanguage,
+    selectedAudioTrackId,
+    initialPlaybackSpeed: playbackSpeed,
     onProgressCommit: saveProgress,
   })
 
   useEffect(() => {
-    if (player.state.status !== 'ready') {
+    player.setPlaybackSpeed(playbackSpeed)
+  }, [player, playbackSpeed])
+
+  useEffect(() => {
+    if (!selectedAudioTrackId) {
       return
     }
-    if (Math.abs(player.state.currentTime - lastSavedRef.current) >= 15) {
-      saveProgress(player.state.currentTime, player.state.duration)
+    player.setAudioTrack(selectedAudioTrackId)
+  }, [player, selectedAudioTrackId])
+
+  const overrideMutation = useMutation({
+    mutationFn: (payload: PlayerOverride) =>
+      updatePlayerOverride(activeTarget.mediaType, overrideMediaId, payload),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.playerOverride(activeTarget.mediaType, overrideMediaId),
+      })
+    },
+  })
+  const saveOverrideTimerRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    if (!overrideMediaId) {
+      return
     }
-  }, [player.state.currentTime, player.state.duration, player.state.status, saveProgress])
+    if (saveOverrideTimerRef.current !== null) {
+      window.clearTimeout(saveOverrideTimerRef.current)
+    }
+    saveOverrideTimerRef.current = window.setTimeout(() => {
+      const selectedSubtitleLanguage =
+        streamSubtitleList.find((track) => track.id === selectedSubtitleId)?.language
+        ?? preferredSubtitleLanguage
+        ?? null
+      const payload: PlayerOverride = {
+        subtitles_enabled: subtitleEnabled,
+        subtitle_language: selectedSubtitleLanguage,
+        subtitle_delay_seconds: subtitleDelay,
+        subtitle_size: subtitleSize,
+        subtitle_position: subtitlePosition,
+        subtitle_text_color: subtitleTextColor,
+        subtitle_background_color: subtitleBackgroundColor,
+        subtitle_background_opacity: subtitleBackgroundOpacity,
+        subtitle_outline_color: subtitleOutlineColor,
+        subtitle_outline_style: subtitleOutlineStyle,
+        subtitle_font_family: subtitleFontFamily,
+        subtitle_offset_x: subtitleOffsetX,
+        subtitle_offset_y: subtitleOffsetY,
+        playback_speed: playbackSpeed,
+        preferred_audio_language: preferredAudioLanguage,
+        preferred_audio_track_id: selectedAudioTrackId,
+      }
+      overrideMutation.mutate(payload)
+    }, 450)
+    return () => {
+      if (saveOverrideTimerRef.current !== null) {
+        window.clearTimeout(saveOverrideTimerRef.current)
+      }
+    }
+  }, [
+    activeTarget.mediaType,
+    overrideMediaId,
+    overrideMutation,
+    playbackSpeed,
+    preferredAudioLanguage,
+    preferredSubtitleLanguage,
+    selectedAudioTrackId,
+    selectedSubtitleId,
+    streamSubtitleList,
+    subtitleBackgroundColor,
+    subtitleBackgroundOpacity,
+    subtitleDelay,
+    subtitleEnabled,
+    subtitleFontFamily,
+    subtitleOffsetX,
+    subtitleOffsetY,
+    subtitleOutlineColor,
+    subtitleOutlineStyle,
+    subtitlePosition,
+    subtitleSize,
+    subtitleTextColor,
+  ])
+
+  useEffect(() => {
+    const receiverAppId = import.meta.env.VITE_CHROMECAST_RECEIVER_APP_ID as string | undefined
+    if (!receiverAppId) {
+      setCastReady(false)
+      setCastUnavailableReason("Set VITE_CHROMECAST_RECEIVER_APP_ID to enable casting")
+      return
+    }
+    setCastUnavailableReason(null)
+    let alive = true
+    castTransport
+      .setOptions(receiverAppId)
+      .then(() => {
+        if (alive) {
+          setCastReady(true)
+          setCastUnavailableReason(null)
+        }
+      })
+      .catch(() => {
+        if (alive) {
+          setCastReady(false)
+          setCastUnavailableReason("Unable to initialize Chromecast")
+        }
+      })
+    const onCastStateChanged = () => {
+      const value = castTransport.getCastState()
+      setCastConnected(value === window.cast?.framework?.CastState?.CONNECTED)
+    }
+    const onMessage = (message: unknown) => {
+      if (!message || typeof message !== "object" || !("event" in message)) {
+        return
+      }
+      const castMessage = message as { event: string; args?: unknown[] }
+      if (castMessage.event === "propChanged" || castMessage.event === "propValue") {
+        const [name, value] = castMessage.args ?? []
+        if (typeof name === "string") {
+          setCastState((current) => ({ ...current, [name]: value } as CastStateData))
+        }
+      }
+    }
+    castTransport.on("cast_state_changed", onCastStateChanged)
+    castTransport.on("message", onMessage)
+    onCastStateChanged()
+    return () => {
+      alive = false
+      castTransport.off("cast_state_changed", onCastStateChanged)
+      castTransport.off("message", onMessage)
+    }
+  }, [castTransport])
+
+  useEffect(() => {
+    if (!castConnected || !activeStream.url) {
+      return
+    }
+    const tracks = (subtitleTracks.data ?? []).map((track, index) => ({
+      id: subtitleIdentity(track, index),
+      lang: track.lang ?? "und",
+      url: track.url,
+    }))
+    void castTransport.sendMessage({
+      type: "command",
+      commandName: "load",
+      commandArgs: {
+        stream: {
+          url: activeStream.url,
+          subtitles: tracks,
+        },
+        autoplay: true,
+        time: player.state.currentTime,
+      },
+    })
+    const propsToObserve = [
+      "stream",
+      "loaded",
+      "paused",
+      "time",
+      "duration",
+      "volume",
+      "muted",
+      "playbackSpeed",
+      "selectedSubtitlesTrackId",
+      "selectedAudioTrackId",
+    ]
+    propsToObserve.forEach((propName) => {
+      void castTransport.sendMessage({ type: "observeProp", propName })
+    })
+  }, [activeStream.url, castConnected, castTransport, player.state.currentTime, subtitleTracks.data])
+
+  useEffect(() => {
+    if (!castConnected) {
+      return
+    }
+    void castTransport.sendMessage({ type: "setProp", propName: "playbackSpeed", propValue: playbackSpeed })
+    void castTransport.sendMessage({
+      type: "setProp",
+      propName: "selectedSubtitlesTrackId",
+      propValue: subtitleEnabled ? selectedSubtitleId : null,
+    })
+    void castTransport.sendMessage({
+      type: "setProp",
+      propName: "selectedAudioTrackId",
+      propValue: selectedAudioTrackId,
+    })
+  }, [castConnected, castTransport, playbackSpeed, selectedAudioTrackId, selectedSubtitleId, subtitleEnabled])
+
+  const activeSubtitleTrack = useMemo(
+    () => streamSubtitleList.find((track) => track.id === selectedSubtitleId),
+    [selectedSubtitleId, streamSubtitleList],
+  )
+
+  useEffect(() => {
+    let cancelled = false
+    if (!activeSubtitleTrack || !subtitleEnabled) {
+      setSubtitleCues([])
+      return
+    }
+    void fetch(activeSubtitleTrack.url)
+      .then((response) => response.text())
+      .then((text) => {
+        if (cancelled) {
+          return
+        }
+        setSubtitleCues(parseSubtitleText(text))
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSubtitleCues([])
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [activeSubtitleTrack, subtitleEnabled])
+
+  useEffect(() => {
+    if (!subtitleEnabled || !subtitleCues.length) {
+      setSubtitleText("")
+      return
+    }
+    const baseTime = castConnected
+      ? Number(castState.currentTime ?? 0)
+      : player.state.currentTime
+    const time = baseTime + subtitleDelay
+    const cue = subtitleCues.find((candidate) => time >= candidate.start && time <= candidate.end)
+    setSubtitleText(cue?.text ?? "")
+  }, [castConnected, castState.currentTime, player.state.currentTime, subtitleCues, subtitleDelay, subtitleEnabled])
+
+  useEffect(() => {
+    if (!pendingEpisode || !episodeStreams.data?.length) {
+      return
+    }
+    const nextStream = episodeStreams.data[0] as PlayableStream
+    setActiveTarget((current) => ({
+      ...current,
+      videoId: pendingEpisode.id,
+      episodeContext: {
+        season: pendingEpisode.season,
+        episode: pendingEpisode.episode,
+        title: pendingEpisode.title,
+      },
+    }))
+    setActiveStream(nextStream)
+    setPendingEpisode(null)
+    setEpisodeSheetOpen(false)
+  }, [episodeStreams.data, pendingEpisode])
+
+  const onTogglePlay = useCallback(() => {
+    if (castConnected) {
+      const paused = !(castState.paused === true)
+      void castTransport.sendMessage({ type: "setProp", propName: "paused", propValue: paused })
+      return
+    }
+    player.toggle()
+  }, [castConnected, castState.paused, castTransport, player])
+
+  const onSeek = useCallback((seconds: number) => {
+    if (castConnected) {
+      void castTransport.sendMessage({ type: "setProp", propName: "time", propValue: seconds })
+      return
+    }
+    player.seek(seconds, true)
+  }, [castConnected, castTransport, player])
+
+  const onVolume = useCallback((volume: number) => {
+    if (castConnected) {
+      void castTransport.sendMessage({ type: "setProp", propName: "volume", propValue: volume })
+      return
+    }
+    player.setVolume(volume)
+  }, [castConnected, castTransport, player])
+
+  const onToggleMute = useCallback(() => {
+    if (castConnected) {
+      const muted = !(castState.muted === true)
+      void castTransport.sendMessage({ type: "setProp", propName: "muted", propValue: muted })
+      return
+    }
+    player.toggleMute()
+  }, [castConnected, castState.muted, castTransport, player])
+
+  const onChangeSpeed = useCallback((speed: number) => {
+    setPlaybackSpeed(speed)
+    if (castConnected) {
+      void castTransport.sendMessage({ type: "setProp", propName: "playbackSpeed", propValue: speed })
+      return
+    }
+    player.setPlaybackSpeed(speed)
+  }, [castConnected, castTransport, player])
+
+  const effectiveState: PlayerState = castConnected
+    ? {
+      ...player.state,
+      currentTime: Number(castState.currentTime ?? player.state.currentTime),
+      duration: Number(castState.duration ?? player.state.duration),
+      muted: Boolean(castState.muted ?? player.state.muted),
+      volume: Number(castState.volume ?? player.state.volume),
+      playing:
+          castState.paused === undefined
+            ? player.state.playing
+            : !(castState.paused as boolean),
+      playbackSpeed: Number(castState.playbackSpeed ?? player.state.playbackSpeed),
+      selectedAudioTrackId:
+          (castState.selectedAudioTrackId as string | null | undefined) ?? player.state.selectedAudioTrackId,
+    }
+    : player.state
+
+  useEffect(() => {
+    if (effectiveState.status !== 'ready') {
+      return
+    }
+    if (Math.abs(effectiveState.currentTime - lastSavedRef.current) >= 15) {
+      saveProgress(effectiveState.currentTime, effectiveState.duration)
+    }
+  }, [effectiveState.currentTime, effectiveState.duration, effectiveState.status, saveProgress])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (player.state.status !== 'ready') {
+      if (effectiveState.status !== 'ready') {
         return
       }
       if (event.code === 'Space' || event.code === 'KeyK') {
-        player.toggle()
+        onTogglePlay()
       } else if (event.code === 'ArrowLeft') {
-        player.seek(Math.max(player.state.currentTime - 5, 0), true)
+        onSeek(Math.max(effectiveState.currentTime - 5, 0))
       } else if (event.code === 'ArrowRight') {
-        player.seek(Math.min(player.state.currentTime + 5, player.state.duration), true)
+        onSeek(Math.min(effectiveState.currentTime + 5, effectiveState.duration))
       } else if (event.code === 'KeyM') {
-        player.toggleMute()
+        onToggleMute()
       } else if (event.code === 'KeyF') {
         toggleFullscreen(playerRef.current)
+      } else if (event.code === 'Comma') {
+        onChangeSpeed(Math.max(playbackSpeed - 0.25, 0.25))
+      } else if (event.code === 'Period') {
+        onChangeSpeed(Math.min(playbackSpeed + 0.25, 3))
       } else {
         return
       }
@@ -175,7 +655,7 @@ export function MediaPlayerPage({
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [player])
+  }, [effectiveState.currentTime, effectiveState.duration, effectiveState.status, onChangeSpeed, onSeek, onToggleMute, onTogglePlay, playbackSpeed])
 
   if (!streamUrl) {
     return (
@@ -251,22 +731,144 @@ export function MediaPlayerPage({
           <PlayerChrome
             playerRef={playerRef}
             mediaName={media.name}
-            state={player.state}
-            warning={player.state.warning}
+            state={effectiveState}
+            warning={effectiveState.warning}
+            episodeContext={activeTarget.episodeContext ?? null}
+            hasEpisodeSwapper={Boolean(activeTarget.seriesEpisodes?.length)}
+            onOpenEpisodeSwapper={() => setEpisodeSheetOpen(true)}
+            subtitleMenuOpen={subtitleMenuOpen}
+            onToggleSubtitleMenu={() => setSubtitleMenuOpen((value) => !value)}
+            subtitleTracks={streamSubtitleList}
+            selectedSubtitleId={selectedSubtitleId}
+            onSelectSubtitle={(id) => {
+              setSelectedSubtitleId(id)
+              if (castConnected) {
+                void castTransport.sendMessage({
+                  type: "setProp",
+                  propName: "selectedSubtitlesTrackId",
+                  propValue: subtitleEnabled ? id : null,
+                })
+              }
+            }}
+            subtitlesEnabled={subtitleEnabled}
+            onToggleSubtitles={() => {
+              setSubtitleEnabled((value) => {
+                const next = !value
+                if (castConnected) {
+                  void castTransport.sendMessage({
+                    type: "setProp",
+                    propName: "selectedSubtitlesTrackId",
+                    propValue: next ? selectedSubtitleId : null,
+                  })
+                }
+                return next
+              })
+            }}
+            subtitleDelay={subtitleDelay}
+            onSubtitleDelayChange={setSubtitleDelay}
+            subtitleSize={subtitleSize}
+            onSubtitleSizeChange={setSubtitleSize}
+            subtitlePosition={subtitlePosition}
+            onSubtitlePositionChange={setSubtitlePosition}
+            subtitleTextColor={subtitleTextColor}
+            onSubtitleTextColorChange={setSubtitleTextColor}
+            subtitleBackgroundColor={subtitleBackgroundColor}
+            onSubtitleBackgroundColorChange={setSubtitleBackgroundColor}
+            subtitleBackgroundOpacity={subtitleBackgroundOpacity}
+            onSubtitleBackgroundOpacityChange={setSubtitleBackgroundOpacity}
+            subtitleOutlineColor={subtitleOutlineColor}
+            onSubtitleOutlineColorChange={setSubtitleOutlineColor}
+            subtitleOutlineStyle={subtitleOutlineStyle}
+            onSubtitleOutlineStyleChange={setSubtitleOutlineStyle}
+            subtitleFontFamily={subtitleFontFamily}
+            onSubtitleFontFamilyChange={setSubtitleFontFamily}
+            subtitleOffsetX={subtitleOffsetX}
+            onSubtitleOffsetXChange={setSubtitleOffsetX}
+            subtitleOffsetY={subtitleOffsetY}
+            onSubtitleOffsetYChange={setSubtitleOffsetY}
+            playbackSpeed={playbackSpeed}
+            onPlaybackSpeedChange={onChangeSpeed}
+            castReady={castReady}
+            castConnected={castConnected}
+            castUnavailableReason={castUnavailableReason}
+            onCastToggle={() => {
+              if (castConnected) {
+                castTransport.endCurrentSession(true)
+              } else {
+                void castTransport.requestSession()
+              }
+            }}
             onBack={() => {
-              saveProgress(player.state.currentTime, player.state.duration)
+              saveProgress(effectiveState.currentTime, effectiveState.duration)
               onBack()
             }}
-            onTogglePlay={player.toggle}
-            onSeek={(seconds) => player.seek(seconds, true)}
-            onVolumeChange={player.setVolume}
-            onToggleMute={player.toggleMute}
+            onTogglePlay={onTogglePlay}
+            onSeek={onSeek}
+            onVolumeChange={onVolume}
+            onToggleMute={onToggleMute}
+            onSelectAudioTrack={(id) => {
+              setSelectedAudioTrackId(id)
+              if (castConnected) {
+                void castTransport.sendMessage({ type: "setProp", propName: "selectedAudioTrackId", propValue: id })
+              } else {
+                player.setAudioTrack(id)
+              }
+            }}
           />
 
+          {subtitleText ? (
+            <div
+              className="pointer-events-none absolute inset-x-6 z-[6] text-center"
+              style={{
+                bottom: `${Math.max(12, (12 + subtitlePosition * 100 + subtitleOffsetY))}px`,
+                transform: `translateX(${subtitleOffsetX}px)`,
+                fontSize: `${subtitleSize}rem`,
+                color: subtitleTextColor,
+                fontFamily: subtitleFontFamily,
+                textShadow:
+                  subtitleOutlineStyle === "shadow"
+                    ? `0 0 8px ${subtitleOutlineColor}`
+                    : `1px 1px 0 ${subtitleOutlineColor}, -1px -1px 0 ${subtitleOutlineColor}, -1px 1px 0 ${subtitleOutlineColor}, 1px -1px 0 ${subtitleOutlineColor}`,
+              }}
+            >
+              <span
+                style={{
+                  backgroundColor: hexToRgba(subtitleBackgroundColor, subtitleBackgroundOpacity),
+                  padding: "0.2em 0.45em",
+                  borderRadius: 4,
+                }}
+              >
+                {subtitleText}
+              </span>
+            </div>
+          ) : null}
+
+          <Dialog open={episodeSheetOpen} onOpenChange={setEpisodeSheetOpen}>
+            <DialogContent
+              showCloseButton={false}
+              className="top-0 right-0 left-auto h-svh max-h-none w-[min(430px,100vw)] translate-x-0 translate-y-0 rounded-none p-5"
+            >
+              <DialogTitle className="flex items-center gap-2">
+                <Clapperboard className="size-4" />
+                Choose episode
+              </DialogTitle>
+              <EpisodeSwapper
+                episodes={activeTarget.seriesEpisodes ?? []}
+                selectedEpisodeId={activeTarget.videoId}
+                selectedSeason={selectedSwapSeason}
+                onSeasonChange={setSelectedSwapSeason}
+                onSelectEpisode={setPendingEpisode}
+              />
+              {pendingEpisode && episodeStreams.isLoading ? (
+                <p className="text-sm text-muted-foreground">Loading streams for {pendingEpisode.title}…</p>
+              ) : null}
+            </DialogContent>
+          </Dialog>
+
           <span className="absolute size-px overflow-hidden whitespace-nowrap [clip:rect(0,0,0,0)]" aria-live="polite">
-            {player.state.status === 'loading' ? 'Loading stream' : null}
-            {player.state.status === 'ready' ? `Playing ${media.name}, ${formatDuration(player.state.duration)}` : null}
-            {player.state.error ? `Playback error: ${player.state.error}` : null}
+            {effectiveState.status === 'loading' ? 'Loading stream' : null}
+            {effectiveState.status === 'ready' ? `Playing ${media.name}, ${formatDuration(effectiveState.duration)}` : null}
+            {effectiveState.error ? `Playback error: ${effectiveState.error}` : null}
           </span>
         </div>
       </div>
@@ -279,41 +881,129 @@ function PlayerChrome({
   mediaName,
   state,
   warning,
+  episodeContext,
+  hasEpisodeSwapper,
+  onOpenEpisodeSwapper,
+  subtitleMenuOpen,
+  onToggleSubtitleMenu,
+  subtitleTracks,
+  selectedSubtitleId,
+  onSelectSubtitle,
+  subtitlesEnabled,
+  onToggleSubtitles,
+  subtitleDelay,
+  onSubtitleDelayChange,
+  subtitleSize,
+  onSubtitleSizeChange,
+  subtitlePosition,
+  onSubtitlePositionChange,
+  subtitleTextColor,
+  onSubtitleTextColorChange,
+  subtitleBackgroundColor,
+  onSubtitleBackgroundColorChange,
+  subtitleBackgroundOpacity,
+  onSubtitleBackgroundOpacityChange,
+  subtitleOutlineColor,
+  onSubtitleOutlineColorChange,
+  subtitleOutlineStyle,
+  onSubtitleOutlineStyleChange,
+  subtitleFontFamily,
+  onSubtitleFontFamilyChange,
+  subtitleOffsetX,
+  onSubtitleOffsetXChange,
+  subtitleOffsetY,
+  onSubtitleOffsetYChange,
+  playbackSpeed,
+  onPlaybackSpeedChange,
+  castReady,
+  castConnected,
+  castUnavailableReason,
+  onCastToggle,
   onBack,
   onTogglePlay,
   onSeek,
   onVolumeChange,
   onToggleMute,
+  onSelectAudioTrack,
 }: {
   playerRef: RefObject<HTMLDivElement | null>
   mediaName: string
   state: PlayerState
   warning: string | null
+  episodeContext: PlaybackTarget["episodeContext"]
+  hasEpisodeSwapper: boolean
+  onOpenEpisodeSwapper: () => void
+  subtitleMenuOpen: boolean
+  onToggleSubtitleMenu: () => void
+  subtitleTracks: Array<{ id: string; language: string; source: string }>
+  selectedSubtitleId: string | null
+  onSelectSubtitle: (id: string | null) => void
+  subtitlesEnabled: boolean
+  onToggleSubtitles: () => void
+  subtitleDelay: number
+  onSubtitleDelayChange: (value: number) => void
+  subtitleSize: number
+  onSubtitleSizeChange: (value: number) => void
+  subtitlePosition: number
+  onSubtitlePositionChange: (value: number) => void
+  subtitleTextColor: string
+  onSubtitleTextColorChange: (value: string) => void
+  subtitleBackgroundColor: string
+  onSubtitleBackgroundColorChange: (value: string) => void
+  subtitleBackgroundOpacity: number
+  onSubtitleBackgroundOpacityChange: (value: number) => void
+  subtitleOutlineColor: string
+  onSubtitleOutlineColorChange: (value: string) => void
+  subtitleOutlineStyle: string
+  onSubtitleOutlineStyleChange: (value: string) => void
+  subtitleFontFamily: string
+  onSubtitleFontFamilyChange: (value: string) => void
+  subtitleOffsetX: number
+  onSubtitleOffsetXChange: (value: number) => void
+  subtitleOffsetY: number
+  onSubtitleOffsetYChange: (value: number) => void
+  playbackSpeed: number
+  onPlaybackSpeedChange: (value: number) => void
+  castReady: boolean
+  castConnected: boolean
+  castUnavailableReason: string | null
+  onCastToggle: () => void
   onBack: () => void
   onTogglePlay: () => void
   onSeek: (seconds: number) => void
   onVolumeChange: (volume: number) => void
   onToggleMute: () => void
+  onSelectAudioTrack: (id: string | null) => void
 }) {
   const disabled = state.status !== 'ready'
   const actualVolume = state.muted ? 0 : state.volume
   const VolumeIcon = state.muted || state.volume === 0 ? VolumeX : state.volume < 0.5 ? Volume1 : Volume2
 
   return (
-    <div className="player-chrome pointer-events-none absolute inset-x-0 top-0 bottom-0 z-[5] flex translate-y-1 flex-col justify-between bg-linear-to-b from-black/58 via-transparent to-black/72 opacity-0 transition-[opacity,transform] duration-200">
+    <div className="player-chrome pointer-events-none absolute inset-x-0 top-0 bottom-0 z-[5] flex translate-y-1 flex-col justify-between opacity-0 transition-[opacity,transform] duration-200">
       <div className="pointer-events-auto flex items-start justify-between gap-3 p-4 sm:p-6">
-        <TooltipButton label="Back">
-          <Button
-            variant="ghost"
-            size="icon-lg"
-            className="size-11 rounded-full border-0 bg-black/55 text-white hover:bg-black/78 focus-visible:bg-black/78 focus-visible:ring-white/30 [&_svg]:size-[22px]"
-            type="button"
-            onClick={onBack}
-            aria-label="Back"
-          >
-            <ArrowLeft aria-hidden="true" />
-          </Button>
-        </TooltipButton>
+        <div className="flex min-w-0 items-center gap-3">
+          <TooltipButton label="Back">
+            <Button
+              variant="ghost"
+              size="icon-lg"
+              className="size-11 rounded-full border-0 bg-black/55 text-white hover:bg-black/78 focus-visible:bg-black/78 focus-visible:ring-white/30 [&_svg]:size-[22px]"
+              type="button"
+              onClick={onBack}
+              aria-label="Back"
+            >
+              <ArrowLeft aria-hidden="true" />
+            </Button>
+          </TooltipButton>
+          {episodeContext ? (
+            <div className="rounded-md bg-black/55 px-2.5 py-1.5 text-xs text-white/90">
+              <div className="font-medium">
+                {formatEpisodeBadge(episodeContext.season, episodeContext.episode)}
+              </div>
+              <div className="max-w-[46vw] truncate text-white/75">{episodeContext.title}</div>
+            </div>
+          ) : null}
+        </div>
 
         {warning ? (
           <p className="max-w-[min(520px,60vw)] rounded-md bg-black/62 px-3 py-2 text-right text-xs font-medium text-white/78">
@@ -331,7 +1021,8 @@ function PlayerChrome({
           onChange={onSeek}
         />
 
-        <div className="flex min-h-11 items-center gap-3 rounded-md bg-black/50 px-3 py-2 backdrop-blur-sm max-[620px]:grid max-[620px]:grid-cols-[auto_1fr_auto]">
+        <div className="grid gap-2 rounded-md bg-black/50 px-3 py-2 backdrop-blur-sm">
+          <div className="flex min-h-11 items-center gap-2 max-[620px]:grid max-[620px]:grid-cols-[auto_1fr_auto]">
           <TooltipButton label={state.playing ? 'Pause' : 'Play'}>
             <Button
               variant="ghost"
@@ -374,7 +1065,47 @@ function PlayerChrome({
             />
           </div>
 
-          <div className="ml-auto max-[620px]:col-start-3 max-[620px]:row-start-1">
+            <div className="ml-auto flex items-center gap-1 max-[620px]:col-start-3 max-[620px]:row-start-1">
+              <TooltipButton label={castUnavailableReason ?? (castConnected ? "Stop casting" : "Cast")}>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className={cn(
+                    "rounded-full text-white hover:bg-white/14 focus-visible:ring-white/30",
+                    !castReady && "opacity-50",
+                  )}
+                  type="button"
+                  onClick={onCastToggle}
+                  disabled={!castReady}
+                  aria-label={castConnected ? "Stop casting" : "Cast"}
+                >
+                  <Cast aria-hidden="true" />
+                </Button>
+              </TooltipButton>
+              {hasEpisodeSwapper ? (
+                <TooltipButton label="Swap episode">
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    className="rounded-full text-white hover:bg-white/14 focus-visible:ring-white/30"
+                    type="button"
+                    onClick={onOpenEpisodeSwapper}
+                  >
+                    <Clapperboard aria-hidden="true" />
+                  </Button>
+                </TooltipButton>
+              ) : null}
+              <TooltipButton label="Subtitles">
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="rounded-full text-white hover:bg-white/14 focus-visible:ring-white/30"
+                  type="button"
+                  onClick={onToggleSubtitleMenu}
+                >
+                  <Captions aria-hidden="true" />
+                </Button>
+              </TooltipButton>
             <TooltipButton label="Fullscreen">
               <Button
                 variant="ghost"
@@ -387,7 +1118,95 @@ function PlayerChrome({
                 <Maximize aria-hidden="true" />
               </Button>
             </TooltipButton>
+            </div>
           </div>
+
+          <div className="grid grid-cols-2 gap-2 text-xs text-white/85">
+            <Select value={String(playbackSpeed)} onValueChange={(value) => onPlaybackSpeedChange(Number(value))}>
+              <SelectTrigger aria-label="Playback speed" className="h-8 bg-black/40 text-white">
+                <Timer className="mr-1 size-3.5" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((speed) => (
+                  <SelectItem value={String(speed)} key={speed}>
+                    {speed}x
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={state.selectedAudioTrackId ?? "__none"} onValueChange={(value) => onSelectAudioTrack(value === "__none" ? null : value)}>
+              <SelectTrigger aria-label="Audio track" className="h-8 bg-black/40 text-white">
+                <Languages className="mr-1 size-3.5" />
+                <SelectValue placeholder="Audio track" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none">Default audio</SelectItem>
+                {state.audioTracks.map((track) => (
+                  <SelectItem value={track.id} key={track.id}>
+                    {track.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {subtitleMenuOpen ? (
+            <div className="grid gap-2 rounded-md bg-black/35 p-2 text-xs">
+              <div className="grid grid-cols-2 gap-2">
+                <Button type="button" variant="secondary" className="h-8" onClick={onToggleSubtitles}>
+                  {subtitlesEnabled ? "Subtitles On" : "Subtitles Off"}
+                </Button>
+                <Select value={selectedSubtitleId ?? "__off"} onValueChange={(value) => onSelectSubtitle(value === "__off" ? null : value)}>
+                  <SelectTrigger className="h-8 bg-black/40 text-white">
+                    <SelectValue placeholder="Language" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__off">No subtitles</SelectItem>
+                    {subtitleTracks.map((track) => (
+                      <SelectItem value={track.id} key={track.id}>
+                        {track.language} ({track.source})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <LabeledNumberInput label="Delay" value={subtitleDelay} step={0.1} min={-30} max={30} onChange={onSubtitleDelayChange} />
+                <LabeledNumberInput label="Size" value={subtitleSize} step={0.05} min={0.5} max={3} onChange={onSubtitleSizeChange} />
+                <LabeledNumberInput label="Position" value={subtitlePosition} step={0.05} min={-1} max={1} onChange={onSubtitlePositionChange} />
+                <LabeledNumberInput label="Bg Opacity" value={subtitleBackgroundOpacity} step={0.05} min={0} max={1} onChange={onSubtitleBackgroundOpacityChange} />
+                <LabeledNumberInput label="Offset X" value={subtitleOffsetX} step={1} min={-100} max={100} onChange={onSubtitleOffsetXChange} />
+                <LabeledNumberInput label="Offset Y" value={subtitleOffsetY} step={1} min={-100} max={100} onChange={onSubtitleOffsetYChange} />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <input value={subtitleTextColor} onChange={(event) => onSubtitleTextColorChange(event.target.value)} className="h-8 rounded border border-white/20 bg-black/40 px-2 text-white" aria-label="Subtitle text color" />
+                <input value={subtitleBackgroundColor} onChange={(event) => onSubtitleBackgroundColorChange(event.target.value)} className="h-8 rounded border border-white/20 bg-black/40 px-2 text-white" aria-label="Subtitle background color" />
+                <input value={subtitleOutlineColor} onChange={(event) => onSubtitleOutlineColorChange(event.target.value)} className="h-8 rounded border border-white/20 bg-black/40 px-2 text-white" aria-label="Subtitle outline color" />
+                <Select value={subtitleOutlineStyle} onValueChange={onSubtitleOutlineStyleChange}>
+                  <SelectTrigger className="h-8 bg-black/40 text-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="outline">Outline</SelectItem>
+                    <SelectItem value="shadow">Shadow</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={subtitleFontFamily} onValueChange={onSubtitleFontFamilyChange}>
+                  <SelectTrigger className="h-8 bg-black/40 text-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="sans-serif">Sans</SelectItem>
+                    <SelectItem value="serif">Serif</SelectItem>
+                    <SelectItem value="monospace">Monospace</SelectItem>
+                    <SelectItem value="system-ui">System</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
@@ -480,12 +1299,210 @@ function ProgressScrubber({
   )
 }
 
+function LabeledNumberInput({
+  label,
+  value,
+  min,
+  max,
+  step,
+  onChange,
+}: {
+  label: string
+  value: number
+  min: number
+  max: number
+  step: number
+  onChange: (value: number) => void
+}) {
+  return (
+    <label className="grid gap-1 text-[11px] text-white/75">
+      <span>{label}</span>
+      <input
+        type="number"
+        value={Number.isFinite(value) ? String(value) : "0"}
+        min={min}
+        max={max}
+        step={step}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="h-8 rounded border border-white/20 bg-black/40 px-2 text-white"
+      />
+    </label>
+  )
+}
+
+function EpisodeSwapper({
+  episodes,
+  selectedSeason,
+  selectedEpisodeId,
+  onSeasonChange,
+  onSelectEpisode,
+}: {
+  episodes: Episode[]
+  selectedSeason: number | null
+  selectedEpisodeId: string | null
+  onSeasonChange: (season: number | null) => void
+  onSelectEpisode: (episode: Episode) => void
+}) {
+  const seasons = useMemo(
+    () => Array.from(new Set(episodes.map((episode) => episode.season))),
+    [episodes],
+  )
+  const activeSeason = selectedSeason ?? seasons[0] ?? null
+  const visible = useMemo(
+    () => episodes.filter((episode) => episode.season === activeSeason),
+    [activeSeason, episodes],
+  )
+
+  return (
+    <div className="grid min-h-0 gap-3">
+      <Select
+        value={activeSeason === null ? "__none" : String(activeSeason)}
+        onValueChange={(value) => onSeasonChange(value === "__none" ? null : Number(value))}
+      >
+        <SelectTrigger>
+          <SelectValue placeholder="Season" />
+        </SelectTrigger>
+        <SelectContent>
+          {seasons.map((season) => (
+            <SelectItem key={String(season)} value={season === null ? "__none" : String(season)}>
+              {season === null ? "Extras" : season === 0 ? "Special" : `Season ${season}`}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <div className="grid max-h-[70svh] gap-2 overflow-y-auto pr-1 [scrollbar-width:thin]">
+        {visible.map((episode) => (
+          <button
+            key={episode.id}
+            type="button"
+            onClick={() => onSelectEpisode(episode)}
+            className={cn(
+              "rounded-md border border-white/20 bg-black/30 px-3 py-2 text-left text-sm text-white/90",
+              selectedEpisodeId === episode.id && "border-white/40 bg-black/50",
+            )}
+          >
+            <div className="font-medium">{episode.title}</div>
+            <div className="text-xs text-white/65">
+              {formatEpisodeBadge(episode.season, episode.episode)}
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function formatEpisodeBadge(season: number | null, episode: number | null) {
+  const seasonLabel = season === null ? "EX" : `S${String(Math.max(season, 0)).padStart(2, "0")}`
+  const episodeLabel = episode === null ? "E--" : `E${String(Math.max(episode, 0)).padStart(2, "0")}`
+  return `${seasonLabel}${episodeLabel}`
+}
+
+type SubtitleCue = {
+  start: number
+  end: number
+  text: string
+}
+
+function parseSubtitleText(text: string): SubtitleCue[] {
+  const normalized = text.replace(/\r\n/g, "\n")
+  if (normalized.startsWith("WEBVTT")) {
+    return parseVtt(normalized)
+  }
+  return parseSrt(normalized)
+}
+
+function parseSrt(text: string): SubtitleCue[] {
+  return text
+    .split(/\n\n+/)
+    .map((block) => block.trim())
+    .filter(Boolean)
+    .flatMap((block) => {
+      const lines = block.split("\n")
+      const timing = lines.find((line) => line.includes("-->"))
+      if (!timing) {
+        return []
+      }
+      const [startRaw, endRaw] = timing.split("-->").map((value) => value.trim())
+      const start = parseTimestamp(startRaw)
+      const end = parseTimestamp(endRaw)
+      if (!Number.isFinite(start) || !Number.isFinite(end)) {
+        return []
+      }
+      const textLines = lines.slice(lines.indexOf(timing) + 1).join("\n").trim()
+      if (!textLines) {
+        return []
+      }
+      return [{ start, end, text: textLines }]
+    })
+}
+
+function parseVtt(text: string): SubtitleCue[] {
+  return text
+    .split(/\n\n+/)
+    .map((block) => block.trim())
+    .filter((block) => block.includes("-->"))
+    .flatMap((block) => {
+      const lines = block.split("\n")
+      const timing = lines.find((line) => line.includes("-->"))
+      if (!timing) {
+        return []
+      }
+      const [startRaw, endRawWithSettings] = timing.split("-->").map((value) => value.trim())
+      const endRaw = endRawWithSettings.split(" ")[0] ?? endRawWithSettings
+      const start = parseTimestamp(startRaw)
+      const end = parseTimestamp(endRaw)
+      if (!Number.isFinite(start) || !Number.isFinite(end)) {
+        return []
+      }
+      const textLines = lines.slice(lines.indexOf(timing) + 1).join("\n").trim()
+      if (!textLines) {
+        return []
+      }
+      return [{ start, end, text: textLines }]
+    })
+}
+
+function parseTimestamp(value: string) {
+  const normalized = value.replace(",", ".")
+  const parts = normalized.split(":")
+  if (parts.length < 2 || parts.length > 3) {
+    return NaN
+  }
+  const secondsWithMs = Number(parts[parts.length - 1])
+  const minutes = Number(parts[parts.length - 2])
+  const hours = parts.length === 3 ? Number(parts[0]) : 0
+  if (![hours, minutes, secondsWithMs].every(Number.isFinite)) {
+    return NaN
+  }
+  return hours * 3600 + minutes * 60 + secondsWithMs
+}
+
+function subtitleIdentity(track: SubtitleInfo, index: number) {
+  return track.id ?? `${track.lang ?? "und"}-${index}`
+}
+
+function hexToRgba(hex: string, opacity: number) {
+  const safe = hex.replace("#", "")
+  const full = safe.length === 3
+    ? safe.split("").map((char) => `${char}${char}`).join("")
+    : safe
+  const red = Number.parseInt(full.slice(0, 2), 16)
+  const green = Number.parseInt(full.slice(2, 4), 16)
+  const blue = Number.parseInt(full.slice(4, 6), 16)
+  const alpha = Math.max(0, Math.min(opacity, 1))
+  return `rgba(${Number.isFinite(red) ? red : 0}, ${Number.isFinite(green) ? green : 0}, ${Number.isFinite(blue) ? blue : 0}, ${alpha})`
+}
+
 function useMediabunnyPlayer({
   canvasRef,
   url,
   authToken,
   savedPosition,
   watched,
+  preferredAudioLanguage,
+  selectedAudioTrackId,
+  initialPlaybackSpeed,
   onProgressCommit,
 }: {
   canvasRef: RefObject<HTMLCanvasElement | null>
@@ -493,6 +1510,9 @@ function useMediabunnyPlayer({
   authToken: string | null
   savedPosition: number
   watched: boolean
+  preferredAudioLanguage: string | null
+  selectedAudioTrackId: string | null
+  initialPlaybackSpeed: number
   onProgressCommit: (position: number, duration: number) => void
 }) {
   const [state, setState] = useState<PlayerState>(initialPlayerState)
@@ -518,6 +1538,7 @@ function useMediabunnyPlayer({
   const renderIntervalRef = useRef<number | null>(null)
   const renderRef = useRef<(requestNextFrame?: boolean) => void>(() => undefined)
   const onProgressCommitRef = useRef(onProgressCommit)
+  const playbackRateRef = useRef(Math.max(0.25, Math.min(initialPlaybackSpeed || 1, 3)))
 
   useEffect(() => {
     onProgressCommitRef.current = onProgressCommit
@@ -540,7 +1561,8 @@ function useMediabunnyPlayer({
       if (!audioContext || audioContextStartTime === null) {
         return playbackTimeAtStartRef.current
       }
-      return audioContext.currentTime - audioContextStartTime + playbackTimeAtStartRef.current
+      const elapsed = audioContext.currentTime - audioContextStartTime
+      return elapsed * playbackRateRef.current + playbackTimeAtStartRef.current
     }
     return playbackTimeAtStartRef.current
   }, [])
@@ -638,8 +1660,10 @@ function useMediabunnyPlayer({
 
       const node = audioContext.createBufferSource()
       node.buffer = buffer
+      node.playbackRate.value = playbackRateRef.current
       node.connect(gainNode)
-      const startTimestamp = audioContextStartTimeRef.current! + timestamp - playbackTimeAtStartRef.current
+      const startTimestamp = audioContextStartTimeRef.current!
+        + (timestamp - playbackTimeAtStartRef.current) / playbackRateRef.current
 
       if (startTimestamp >= audioContext.currentTime) {
         node.start(startTimestamp)
@@ -794,13 +1818,22 @@ function useMediabunnyPlayer({
         })
         inputRef.current = input
 
-        const [duration, videoTrackResult, audioTrackResult] = await Promise.all([
+        const [duration, videoTrackResult, audioTracksResult] = await Promise.all([
           input.computeDuration(),
           input.getPrimaryVideoTrack(),
-          input.getPrimaryAudioTrack(),
+          input.getAudioTracks(),
         ])
         let videoTrack = videoTrackResult
-        let audioTrack = audioTrackResult
+        const audioTracks = audioTracksResult.filter((track): track is InputAudioTrack => Boolean(track))
+        let audioTrack: InputAudioTrack | null =
+          audioTracks.find((track) => String(track.id) === selectedAudioTrackId)
+          ?? audioTracks.find((track) =>
+            preferredAudioLanguage
+              ? track.languageCode.toLowerCase() === preferredAudioLanguage.toLowerCase()
+              : false,
+          )
+          ?? audioTracks[0]
+          ?? null
         let warning = ''
 
         if (videoTrack) {
@@ -870,6 +1903,13 @@ function useMediabunnyPlayer({
           playing: false,
           hasVideo: Boolean(videoTrack),
           hasAudio: Boolean(audioTrack),
+          playbackSpeed: playbackRateRef.current,
+          selectedAudioTrackId: audioTrack ? String(audioTrack.id) : null,
+          audioTracks: audioTracks.map((track) => ({
+            id: String(track.id),
+            label: track.name ?? `${track.languageCode.toUpperCase()} • ${track.codec ?? "audio"}`,
+            language: track.languageCode,
+          })),
         })
         await startVideoIterator()
 
@@ -899,7 +1939,18 @@ function useMediabunnyPlayer({
       canceled = true
       dispose(true)
     }
-  }, [authToken, canvasRef, dispose, play, render, startVideoIterator, updateState, url])
+  }, [
+    authToken,
+    canvasRef,
+    dispose,
+    play,
+    preferredAudioLanguage,
+    render,
+    selectedAudioTrackId,
+    startVideoIterator,
+    updateState,
+    url,
+  ])
 
   useEffect(() => {
     if (state.status !== 'ready' || hasRestoredRef.current || savedPosition <= 0 || watched) {
@@ -923,6 +1974,26 @@ function useMediabunnyPlayer({
     updateState({ muted })
   }, [updateState])
 
+  const setPlaybackSpeed = useCallback((speed: number) => {
+    const nextSpeed = Math.max(0.25, Math.min(speed, 3))
+    if (playingRef.current) {
+      const audioContext = audioContextRef.current
+      if (audioContext) {
+        playbackTimeAtStartRef.current = getPlaybackTime()
+        audioContextStartTimeRef.current = audioContext.currentTime
+      }
+    }
+    playbackRateRef.current = nextSpeed
+    queuedAudioNodesRef.current.forEach((node) => {
+      node.playbackRate.value = nextSpeed
+    })
+    updateState({ playbackSpeed: nextSpeed })
+  }, [getPlaybackTime, updateState])
+
+  const setAudioTrack = useCallback((id: string | null) => {
+    updateState({ selectedAudioTrackId: id })
+  }, [updateState])
+
   const toggle = useCallback(() => {
     if (playingRef.current) {
       pause(true)
@@ -937,9 +2008,11 @@ function useMediabunnyPlayer({
     pause,
     seek,
     setVolume,
+    setAudioTrack,
+    setPlaybackSpeed,
     toggleMute,
     toggle,
-  }), [pause, play, seek, setVolume, state, toggle, toggleMute])
+  }), [pause, play, seek, setAudioTrack, setPlaybackSpeed, setVolume, state, toggle, toggleMute])
 }
 
 function setGain(gainNode: GainNode | null, volume: number, muted: boolean) {

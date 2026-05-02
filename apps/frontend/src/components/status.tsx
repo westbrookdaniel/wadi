@@ -1,6 +1,6 @@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
-import { contentSection, sectionHeading, stateBlock } from "@/lib/styles";
+import { stateBlock } from "@/lib/styles";
 import { MediaRow } from "./media-row";
 
 export function LoadingState({ label = "Loading" }: { label?: string }) {

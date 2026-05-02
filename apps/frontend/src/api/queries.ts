@@ -12,6 +12,8 @@ import type {
   ContinueWatchingItem,
   ListItem,
   MediaPreview,
+  PlayerOverride,
+  PlayerPreferences,
   Profile,
   StreamInfo,
   SubtitleInfo,
@@ -38,6 +40,8 @@ export const queryKeys = {
   continueWatching: (limit = 20) => ['continue-watching', limit] as const,
   browseLayout: ['browse-layout'] as const,
   profiles: ['profiles'] as const,
+  playerDefaults: ['player-defaults'] as const,
+  playerOverride: (mediaType: string, mediaId: string) => ['player-override', mediaType, mediaId] as const,
 }
 
 export const meQuery = (enabled: boolean) =>
@@ -169,6 +173,21 @@ export const profilesQuery = queryOptions({
     return data.items
   },
 })
+
+export const playerDefaultsQuery = queryOptions({
+  queryKey: queryKeys.playerDefaults,
+  queryFn: () => apiRequest<PlayerPreferences>('/api/settings/player-defaults'),
+})
+
+export const playerOverrideQuery = (mediaType: string, mediaId: string, enabled = true) =>
+  queryOptions({
+    queryKey: queryKeys.playerOverride(mediaType, mediaId),
+    queryFn: () =>
+      apiRequest<PlayerOverride>(
+        `/api/settings/player-override/${encodeURIComponent(mediaType)}/${encodeURIComponent(mediaId)}`,
+      ),
+    enabled,
+  })
 
 export const subtitlesQuery = (contentType: string, mediaId: string, enabled = true) =>
   queryOptions({
@@ -313,6 +332,23 @@ export function setWatchState(payload: WatchStateRequest) {
     method: 'PUT',
     body: payload,
   })
+}
+
+export function updatePlayerDefaults(payload: PlayerOverride) {
+  return apiRequest<PlayerPreferences>('/api/settings/player-defaults', {
+    method: 'PUT',
+    body: payload,
+  })
+}
+
+export function updatePlayerOverride(mediaType: string, mediaId: string, payload: PlayerOverride) {
+  return apiRequest<PlayerOverride>(
+    `/api/settings/player-override/${encodeURIComponent(mediaType)}/${encodeURIComponent(mediaId)}`,
+    {
+      method: 'PUT',
+      body: payload,
+    },
+  )
 }
 
 export function updateWatchProgress(payload: WatchProgressRequest) {

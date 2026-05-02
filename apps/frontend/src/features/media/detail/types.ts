@@ -6,6 +6,13 @@ export type PlaybackTarget = {
   mediaType: string
   mediaId: string
   videoId: string | null
+  overrideMediaId?: string
+  seriesEpisodes?: Episode[]
+  episodeContext?: {
+    season: number | null
+    episode: number | null
+    title: string
+  } | null
 }
 
 export type Episode = {

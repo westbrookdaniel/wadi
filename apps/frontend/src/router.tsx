@@ -252,6 +252,7 @@ function BrowseRoute({
       },
       search: {
         from: location.pathname,
+        videoId: undefined,
         episode: preferredVideoId || undefined,
         season: undefined,
       },
@@ -301,6 +302,7 @@ function MediaRoute() {
       to: '/media/$type/$id',
       params: { type, id },
       search: (previous) => ({
+        videoId: undefined,
         ...nextSeriesSearchState(previous as SeriesSearchState, nextSeason, episodeId),
       }),
       replace: true,
