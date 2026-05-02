@@ -1,11 +1,14 @@
 import { create } from 'zustand'
 
 const TOKEN_KEY = 'wadi.auth.token'
+const PROFILE_KEY = 'wadi.auth.profile_id'
 
 type AppStore = {
   token: string | null
+  activeProfileId: string | null
   selectedListId: string | null
   setToken: (token: string | null) => void
+  setActiveProfileId: (profileId: string | null) => void
   setSelectedListId: (listId: string | null) => void
 }
 
@@ -19,20 +22,31 @@ const readStoredToken = () => {
 
 export const useAppStore = create<AppStore>((set) => ({
   token: readStoredToken(),
+  activeProfileId: typeof window === 'undefined' ? null : window.localStorage.getItem(PROFILE_KEY),
   selectedListId: null,
   setToken: (token) => {
     if (token) {
       window.localStorage.setItem(TOKEN_KEY, token)
     } else {
       window.localStorage.removeItem(TOKEN_KEY)
+      window.localStorage.removeItem(PROFILE_KEY)
     }
 
     set({ token })
+  },
+  setActiveProfileId: (activeProfileId) => {
+    if (activeProfileId) {
+      window.localStorage.setItem(PROFILE_KEY, activeProfileId)
+    } else {
+      window.localStorage.removeItem(PROFILE_KEY)
+    }
+    set({ activeProfileId })
   },
   setSelectedListId: (selectedListId) => set({ selectedListId }),
 }))
 
 export function clearStoredToken() {
   window.localStorage.removeItem(TOKEN_KEY)
-  useAppStore.setState({ token: null })
+  window.localStorage.removeItem(PROFILE_KEY)
+  useAppStore.setState({ token: null, activeProfileId: null })
 }

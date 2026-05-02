@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 use crate::{
     error::{AppError, AppResult},
-    models::{AuthResponse, AuthUser, User},
+    models::{AuthResponse, AuthUser, Profile, User},
     AppState,
 };
 
@@ -43,25 +43,34 @@ pub fn token_hash(token: &str) -> String {
     hex::encode(Sha256::digest(token.as_bytes()))
 }
 
-pub async fn create_session(state: &AppState, user: User) -> AppResult<AuthResponse> {
+pub async fn create_session(
+    state: &AppState,
+    user: User,
+    profile: Profile,
+) -> AppResult<AuthResponse> {
     let token = new_token();
     let token_hash = token_hash(&token);
     let expires_at = Utc::now() + Duration::days(state.config.session_ttl_days);
 
     sqlx::query(
         r#"
-        INSERT INTO sessions (id, user_id, token_hash, expires_at)
-        VALUES (?1, ?2, ?3, ?4)
+        INSERT INTO sessions (id, user_id, profile_id, token_hash, expires_at)
+        VALUES (?1, ?2, ?3, ?4, ?5)
         "#,
     )
     .bind(Uuid::new_v4().to_string())
     .bind(&user.id)
+    .bind(&profile.id)
     .bind(token_hash)
     .bind(expires_at.to_rfc3339())
     .execute(&state.db)
     .await?;
 
-    Ok(AuthResponse { token, user })
+    Ok(AuthResponse {
+        token,
+        user,
+        active_profile_id: profile.id,
+    })
 }
 
 impl FromRequestParts<AppState> for AuthUser {
@@ -84,7 +93,7 @@ impl FromRequestParts<AppState> for AuthUser {
             let hash = token_hash(&token);
             let row = sqlx::query(
                 r#"
-                SELECT users.id, users.email
+                SELECT users.id, users.email, sessions.profile_id
                 FROM sessions
                 JOIN users ON users.id = sessions.user_id
                 WHERE sessions.token_hash = ?1 AND sessions.expires_at > datetime('now')
@@ -98,6 +107,7 @@ impl FromRequestParts<AppState> for AuthUser {
             Ok(AuthUser {
                 id: row.try_get("id")?,
                 email: row.try_get("email")?,
+                profile_id: row.try_get("profile_id")?,
             })
         }
     }

@@ -6,14 +6,19 @@ import { z } from 'zod'
 
 import {
   addonsQuery,
+  createProfile,
+  deleteProfile,
   configureAddon,
   deleteAddon,
   installAddon,
   logout,
+  profilesQuery,
   previewAddon,
   queryKeys,
+  selectProfile,
+  updateProfile,
 } from '@/api/queries'
-import type { AddonManifest, AddonRecord, ConfigDecl, User } from '@/api/types'
+import type { AddonManifest, AddonRecord, ConfigDecl, Profile, User } from '@/api/types'
 import { EmptyState, ErrorState, LoadingState } from '@/components/status'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -33,7 +38,40 @@ const addonUrlSchema = z.object({
   url: z.url('Enter a valid addon manifest URL.'),
 })
 
-export function SettingsPage({ user }: { user: User }) {
+const profileSchema = z.object({
+  name: z.string().trim().min(1, 'Enter a profile name.').max(32, 'Use 32 characters or fewer.'),
+})
+
+export function ProfileSettingsPage() {
+  const navigate = useNavigate()
+
+  return (
+    <div className={cn(pageStack, 'max-w-[980px]')}>
+      <header className="grid gap-1">
+        <h1 className="m-0 text-[clamp(1.2rem,2vw,1.7rem)] font-[520] tracking-normal">Profile settings</h1>
+        <p className="m-0 text-sm text-muted-foreground">Applies to this profile.</p>
+      </header>
+
+      <section className="grid gap-4 border-b border-border pt-2 pb-6">
+        <ProfileManager />
+      </section>
+
+      <section className="grid gap-4 border-b border-border pt-2 pb-6">
+        <BrowseLayoutSettings />
+      </section>
+
+      <section className="grid gap-3 rounded-xl border border-border bg-card/60 p-4">
+        <h3 className="m-0 text-[1.05rem] font-[520] tracking-normal">Account settings</h3>
+        <p className="m-0 text-sm text-muted-foreground">Applies to your whole account, including addons and sign-out.</p>
+        <div>
+          <Button type="button" onClick={() => navigate({ to: '/settings/account' })}>Open account settings</Button>
+        </div>
+      </section>
+    </div>
+  )
+}
+
+export function AccountSettingsPage({ user }: { user: User }) {
   const queryClient = useQueryClient()
   const setToken = useAppStore((state) => state.setToken)
   const navigate = useNavigate()
@@ -66,7 +104,10 @@ export function SettingsPage({ user }: { user: User }) {
   return (
     <div className={cn(pageStack, 'max-w-[980px]')}>
       <header className="flex min-h-[52px] items-center justify-between gap-[18px]">
-        <h1 className="m-0 text-[clamp(1.2rem,2vw,1.7rem)] font-[520] tracking-normal">{user.email}</h1>
+        <div className="grid gap-1">
+          <h1 className="m-0 text-[clamp(1.2rem,2vw,1.7rem)] font-[520] tracking-normal">Account settings</h1>
+          <p className="m-0 text-sm text-muted-foreground">Applies to your account: {user.email}</p>
+        </div>
         <Button variant="secondary" type="button" onClick={() => logoutMutation.mutate()}>
           <LogOut aria-hidden="true" />
           Logout
@@ -74,13 +115,9 @@ export function SettingsPage({ user }: { user: User }) {
       </header>
 
       <section className="grid gap-4 border-b border-border pt-2 pb-6">
-        <BrowseLayoutSettings />
-      </section>
-
-      <section className="grid gap-4 border-b border-border pt-2 pb-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="m-0 text-[1.05rem] font-[520] tracking-normal">Installed addons</h2>
-          <Button type="button" onClick={() => navigate({ to: '/settings/add-addon' })}>
+          <Button type="button" onClick={() => navigate({ to: '/settings/account/add-addon' })}>
             <Plus aria-hidden="true" />
             Add addon
           </Button>
@@ -111,6 +148,217 @@ export function SettingsPage({ user }: { user: User }) {
   )
 }
 
+function ProfileManager() {
+  const queryClient = useQueryClient()
+  const activeProfileId = useAppStore((state) => state.activeProfileId)
+  const setActiveProfileId = useAppStore((state) => state.setActiveProfileId)
+  const setSelectedListId = useAppStore((state) => state.setSelectedListId)
+  const profiles = useQuery(profilesQuery)
+  const [editingProfileId, setEditingProfileId] = useState<string | null>(null)
+
+  const createMutation = useMutation({
+    mutationFn: (name: string) => createProfile(name),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.profiles })
+    },
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: ({ profile, name }: { profile: Profile; name: string }) =>
+      updateProfile(profile.id, name, profile.avatar_key, profile.theme_color),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.profiles })
+      setEditingProfileId(null)
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteProfile,
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.profiles }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.me }),
+      ])
+    },
+  })
+
+  const selectMutation = useMutation({
+    mutationFn: selectProfile,
+    onSuccess: async ({ active_profile_id }) => {
+      setActiveProfileId(active_profile_id)
+      setSelectedListId(null)
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.me }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.profiles }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.lists }),
+        queryClient.invalidateQueries({ queryKey: ['list-items'] }),
+        queryClient.invalidateQueries({ queryKey: ['watch-data'] }),
+        queryClient.invalidateQueries({ queryKey: ['continue-watching'] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.browseLayout }),
+      ])
+    },
+  })
+
+  const createForm = useForm({
+    defaultValues: { name: '' },
+    validators: { onSubmit: profileSchema },
+    onSubmit: ({ value, formApi }) => {
+      createMutation.mutate(value.name)
+      formApi.reset()
+    },
+  })
+
+  if (profiles.isLoading) {
+    return <LoadingState label="Loading profiles" />
+  }
+  if (profiles.error) {
+    return <ErrorState error={profiles.error} />
+  }
+
+  return (
+    <div className="grid gap-3">
+      <div>
+        <h3 className="m-0 text-[1.05rem] font-[520] tracking-normal">Profiles</h3>
+        <p className="m-0 text-sm text-muted-foreground">Watch history, lists, and layout are isolated per profile.</p>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {(profiles.data ?? []).map((profile) => (
+          <Card key={profile.id} size="sm" className="bg-card/70">
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between gap-2">
+                <span>{profile.name}</span>
+                {profile.id === activeProfileId ? <span className={mutedText}>Active</span> : null}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                type="button"
+                variant="secondary"
+                disabled={selectMutation.isPending || profile.id === activeProfileId}
+                onClick={() => selectMutation.mutate(profile.id)}
+              >
+                Use profile
+              </Button>
+              <Button size="sm" type="button" variant="ghost" onClick={() => setEditingProfileId(profile.id)}>
+                Rename
+              </Button>
+              <Button
+                size="sm"
+                type="button"
+                variant="ghost"
+                className={dangerText}
+                disabled={deleteMutation.isPending}
+                onClick={() => deleteMutation.mutate(profile.id)}
+              >
+                Delete
+              </Button>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <form
+        className="flex flex-wrap items-end gap-2"
+        onSubmit={(event) => {
+          event.preventDefault()
+          void createForm.handleSubmit()
+        }}
+      >
+        <createForm.Field name="name">
+          {(field) => (
+            <div className="grid gap-1">
+              <Label htmlFor={field.name}>New profile</Label>
+              <Input
+                id={field.name}
+                value={field.state.value}
+                onBlur={field.handleBlur}
+                onChange={(event) => field.handleChange(event.target.value)}
+                placeholder="Profile name"
+                aria-invalid={field.state.meta.errors.length ? true : undefined}
+              />
+            </div>
+          )}
+        </createForm.Field>
+        <Button type="submit" disabled={createMutation.isPending || (profiles.data?.length ?? 0) >= 5}>
+          Create profile
+        </Button>
+      </form>
+      {(profiles.data?.length ?? 0) >= 5 ? <p className="m-0 text-sm text-muted-foreground">Profile limit reached (5).</p> : null}
+
+      <Dialog open={Boolean(editingProfileId)} onOpenChange={(open) => !open && setEditingProfileId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rename profile</DialogTitle>
+            <DialogDescription>This changes the display name for this profile.</DialogDescription>
+          </DialogHeader>
+          {editingProfileId ? (
+            <RenameProfileForm
+              profile={(profiles.data ?? []).find((value) => value.id === editingProfileId) ?? null}
+              isPending={updateMutation.isPending}
+              onSubmit={(profile, name) => updateMutation.mutate({ profile, name })}
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+function RenameProfileForm({
+  profile,
+  isPending,
+  onSubmit,
+}: {
+  profile: Profile | null
+  isPending: boolean
+  onSubmit: (profile: Profile, name: string) => void
+}) {
+  const form = useForm({
+    defaultValues: { name: profile?.name ?? '' },
+    validators: { onSubmit: profileSchema },
+    onSubmit: ({ value }) => {
+      if (!profile) return
+      onSubmit(profile, value.name)
+    },
+  })
+
+  if (!profile) {
+    return null
+  }
+
+  return (
+    <form
+      className="grid gap-3"
+      onSubmit={(event) => {
+        event.preventDefault()
+        void form.handleSubmit()
+      }}
+    >
+      <form.Field name="name">
+        {(field) => (
+          <div className="grid gap-2">
+            <Label htmlFor={field.name}>Name</Label>
+            <Input
+              id={field.name}
+              value={field.state.value}
+              onBlur={field.handleBlur}
+              onChange={(event) => field.handleChange(event.target.value)}
+              aria-invalid={field.state.meta.errors.length ? true : undefined}
+            />
+            {fieldError(field) ? <p className={fieldErrorClass}>{fieldError(field)}</p> : null}
+          </div>
+        )}
+      </form.Field>
+      <DialogFooter>
+        <Button type="submit" disabled={isPending}>
+          Save
+        </Button>
+      </DialogFooter>
+    </form>
+  )
+}
+
 export function AddAddonPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -130,7 +378,7 @@ export function AddAddonPage() {
         queryClient.invalidateQueries({ queryKey: queryKeys.catalogs }),
       ])
       toast({ title: preview?.installed_addon_id ? 'Addon updated' : 'Addon installed' })
-      navigate({ to: '/settings' })
+      navigate({ to: '/settings/account' })
     },
   })
 
@@ -200,7 +448,7 @@ export function AddAddonPage() {
               <Button type="button" onClick={() => installMutation.mutate(preview.source_url)} disabled={installMutation.isPending}>
                 {preview.installed_addon_id ? 'Update addon' : 'Install addon'}
               </Button>
-              <Button variant="secondary" type="button" onClick={() => navigate({ to: '/settings' })}>
+              <Button variant="secondary" type="button" onClick={() => navigate({ to: '/settings/account' })}>
                 Cancel
               </Button>
             </div>

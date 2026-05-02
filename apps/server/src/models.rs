@@ -8,16 +8,29 @@ pub struct User {
     pub created_at: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Profile {
+    pub id: String,
+    pub user_id: String,
+    pub name: String,
+    pub avatar_key: String,
+    pub theme_color: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
 #[derive(Debug, Clone)]
 pub struct AuthUser {
     pub id: String,
     pub email: String,
+    pub profile_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthResponse {
     pub token: String,
     pub user: User,
+    pub active_profile_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

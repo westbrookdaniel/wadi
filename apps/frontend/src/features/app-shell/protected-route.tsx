@@ -1,17 +1,48 @@
 import { Navigate } from '@tanstack/react-router'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, type ReactNode } from 'react'
 
 import type { User } from '@/api/types'
-import { meQuery } from '@/api/queries'
+import { meQuery, profilesQuery, queryKeys, selectProfile } from '@/api/queries'
 import { LoadingState } from '@/components/status'
+import { Button } from '@/components/ui/button'
 import { appBackground } from '@/lib/styles'
 import { cn } from '@/lib/utils'
 import { clearStoredToken, useAppStore } from '@/store/app-store'
 
 export function ProtectedRoute({ children }: { children: (user: User) => ReactNode }) {
   const token = useAppStore((state) => state.token)
+  const activeProfileId = useAppStore((state) => state.activeProfileId)
+  const setActiveProfileId = useAppStore((state) => state.setActiveProfileId)
+  const setSelectedListId = useAppStore((state) => state.setSelectedListId)
+  const queryClient = useQueryClient()
   const me = useQuery(meQuery(Boolean(token)))
+  const profiles = useQuery({ ...profilesQuery, enabled: Boolean(token && me.data) })
+  const selectProfileMutation = useMutation({
+    mutationFn: selectProfile,
+    onSuccess: async (data) => {
+      setActiveProfileId(data.active_profile_id)
+      setSelectedListId(null)
+      if (token && typeof window !== 'undefined') {
+        window.sessionStorage.setItem('wadi.profile.selected_token', token)
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.me }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.profiles }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.lists }),
+        queryClient.invalidateQueries({ queryKey: ['list-items'] }),
+        queryClient.invalidateQueries({ queryKey: ['watch-data'] }),
+        queryClient.invalidateQueries({ queryKey: ['continue-watching'] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.browseLayout }),
+      ])
+    },
+  })
+
+  useEffect(() => {
+    if (me.data?.active_profile_id) {
+      setActiveProfileId(me.data.active_profile_id)
+    }
+  }, [me.data?.active_profile_id, setActiveProfileId])
 
   if (!token) {
     return <Navigate to="/login" replace />
@@ -33,6 +64,70 @@ export function ProtectedRoute({ children }: { children: (user: User) => ReactNo
     return (
       <main className={cn('grid min-h-svh content-center justify-items-center gap-[clamp(34px,7vh,72px)] px-6 py-[clamp(36px,8vw,96px)]', appBackground)}>
         <LoadingState label="Preparing app" />
+      </main>
+    )
+  }
+
+  if (profiles.isLoading) {
+    return (
+      <main className={cn('grid min-h-svh content-center justify-items-center gap-[clamp(34px,7vh,72px)] px-6 py-[clamp(36px,8vw,96px)]', appBackground)}>
+        <LoadingState label="Loading profiles" />
+      </main>
+    )
+  }
+
+  if (profiles.error || !profiles.data) {
+    return <InvalidSessionRedirect />
+  }
+
+  if (profiles.data.length === 1) {
+    const profile = profiles.data[0]
+    if (activeProfileId !== profile.id || me.data.active_profile_id !== profile.id) {
+      if (!selectProfileMutation.isPending) {
+        selectProfileMutation.mutate(profile.id)
+      }
+      return (
+        <main className={cn('grid min-h-svh content-center justify-items-center gap-[clamp(34px,7vh,72px)] px-6 py-[clamp(36px,8vw,96px)]', appBackground)}>
+          <LoadingState label="Preparing profile" />
+        </main>
+      )
+    }
+  }
+
+  const selectedToken =
+    typeof window === 'undefined'
+      ? null
+      : window.sessionStorage.getItem('wadi.profile.selected_token')
+  const requiresSelection =
+    profiles.data.length > 1 &&
+    (selectedToken !== token || activeProfileId !== me.data.active_profile_id)
+
+  if (requiresSelection) {
+    return (
+      <main className={cn('grid min-h-svh content-center justify-items-center gap-6 px-6 py-[clamp(36px,8vw,96px)]', appBackground)}>
+        <section className="grid w-[min(760px,100%)] gap-4 rounded-2xl border border-border bg-card/70 p-6 backdrop-blur-sm">
+          <header className="grid gap-1">
+            <h1 className="m-0 text-[clamp(1.5rem,3vw,2.1rem)] font-[560]">Who&apos;s watching?</h1>
+            <p className="m-0 text-sm text-muted-foreground">Choose a profile to continue. This controls your watch history, lists, and layout.</p>
+          </header>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {profiles.data.map((profile) => (
+              <Button
+                key={profile.id}
+                type="button"
+                variant="secondary"
+                className="h-auto justify-start rounded-xl px-4 py-3 text-left"
+                disabled={selectProfileMutation.isPending}
+                onClick={() => selectProfileMutation.mutate(profile.id)}
+              >
+                <span className="grid gap-0.5">
+                  <span className="text-base">{profile.name}</span>
+                  <span className="text-xs text-muted-foreground">{profile.avatar_key}</span>
+                </span>
+              </Button>
+            ))}
+          </div>
+        </section>
       </main>
     )
   }

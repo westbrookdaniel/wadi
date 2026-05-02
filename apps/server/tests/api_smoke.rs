@@ -486,6 +486,199 @@ async fn watch_state_is_user_scoped() {
 }
 
 #[tokio::test]
+async fn profile_selection_scopes_watch_data_lists_and_layout() {
+    let app = test_app().await;
+
+    let (_, auth) = json_request(
+        app.clone(),
+        Method::POST,
+        "/api/auth/register",
+        None,
+        json!({ "email": "profiles@example.com", "password": "password123" }),
+    )
+    .await;
+    let token = auth["token"].as_str().unwrap();
+
+    let (status, profiles_before) = json_request(
+        app.clone(),
+        Method::GET,
+        "/api/profiles",
+        Some(token),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(profiles_before["items"].as_array().unwrap().len(), 1);
+    let primary_profile_id = profiles_before["items"][0]["id"].as_str().unwrap();
+
+    let (status, second_profile) = json_request(
+        app.clone(),
+        Method::POST,
+        "/api/profiles",
+        Some(token),
+        json!({ "name": "Kids", "avatar_key": "avatar-2" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let second_profile_id = second_profile["id"].as_str().unwrap();
+
+    let (status, _) = json_request(
+        app.clone(),
+        Method::PUT,
+        "/api/watch-progress",
+        Some(token),
+        json!({
+            "media_type": "movie",
+            "media_id": "ttprofile",
+            "position_seconds": 300,
+            "duration_seconds": 1200
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, _) = json_request(
+        app.clone(),
+        Method::POST,
+        "/api/lists",
+        Some(token),
+        json!({ "name": "Main Picks" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    let (status, _) = json_request(
+        app.clone(),
+        Method::PUT,
+        "/api/settings/browse-layout",
+        Some(token),
+        json!({
+            "pages": {
+                "home": { "order": ["continue_watching"], "hidden": [] }
+            }
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, _) = json_request(
+        app.clone(),
+        Method::POST,
+        "/api/profiles/select",
+        Some(token),
+        json!({ "profile_id": second_profile_id }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, watch_data_second) = json_request(
+        app.clone(),
+        Method::GET,
+        "/api/watch-data/movie/ttprofile",
+        Some(token),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(watch_data_second["items"].as_array().unwrap().len(), 0);
+
+    let (status, lists_second) = json_request(
+        app.clone(),
+        Method::GET,
+        "/api/lists",
+        Some(token),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(lists_second["items"].as_array().unwrap().len(), 1);
+    assert_eq!(lists_second["items"][0]["name"], "Saved");
+
+    let (status, layout_second_before) = json_request(
+        app.clone(),
+        Method::GET,
+        "/api/settings/browse-layout",
+        Some(token),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        layout_second_before["pages"]["home"]["order"]
+            .as_array()
+            .unwrap()
+            .len(),
+        0
+    );
+
+    let (status, _) = json_request(
+        app.clone(),
+        Method::PUT,
+        "/api/settings/browse-layout",
+        Some(token),
+        json!({
+            "pages": {
+                "home": { "order": ["watchlist:only-kids"], "hidden": [] }
+            }
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, _) = json_request(
+        app.clone(),
+        Method::POST,
+        "/api/profiles/select",
+        Some(token),
+        json!({ "profile_id": primary_profile_id }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, watch_data_primary) = json_request(
+        app.clone(),
+        Method::GET,
+        "/api/watch-data/movie/ttprofile",
+        Some(token),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(watch_data_primary["items"].as_array().unwrap().len(), 1);
+
+    let (status, lists_primary) = json_request(
+        app.clone(),
+        Method::GET,
+        "/api/lists",
+        Some(token),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        lists_primary["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|value| value["name"] == "Main Picks")
+    );
+
+    let (status, layout_primary) = json_request(
+        app.clone(),
+        Method::GET,
+        "/api/settings/browse-layout",
+        Some(token),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        layout_primary["pages"]["home"]["order"],
+        json!(["continue_watching"])
+    );
+}
+
+#[tokio::test]
 async fn browse_layout_requires_auth_and_roundtrips_normalized_values() {
     let app = test_app().await;
 
