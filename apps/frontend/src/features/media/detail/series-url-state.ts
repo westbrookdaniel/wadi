@@ -1,8 +1,8 @@
 export type SeriesSearchState = {
   from: string | undefined
-  videoId: string | undefined
   episode: string | undefined
   season: string | undefined
+  videoId?: string | undefined
 }
 
 export function preferredEpisodeIdFromSearch({
@@ -27,10 +27,11 @@ export function nextSeriesSearchState(
   season: number | null,
   episodeId: string | null,
 ): SeriesSearchState {
-  return {
+  const next: SeriesSearchState = {
     ...previous,
     season: seasonToSearchParam(season),
     episode: episodeId || undefined,
-    videoId: episodeId || undefined,
   }
+  delete next.videoId
+  return next
 }

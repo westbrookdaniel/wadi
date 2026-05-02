@@ -228,8 +228,7 @@ function BrowseRoute({
       },
       search: {
         from: location.pathname,
-        videoId: preferredVideoId || undefined,
-        episode: undefined,
+        episode: preferredVideoId || undefined,
         season: undefined,
       },
     })

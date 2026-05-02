@@ -26,7 +26,7 @@ describe('series URL state helpers', () => {
     expect(seasonToSearchParam(null)).toBe('extras')
   })
 
-  it('updates search state with season + episode and mirrors videoId', () => {
+  it('updates search state with season + episode only', () => {
     expect(
       nextSeriesSearchState(
         { from: '/series', season: '1', episode: 'old', videoId: 'old' },
@@ -37,7 +37,6 @@ describe('series URL state helpers', () => {
       from: '/series',
       season: '2',
       episode: 'new-id',
-      videoId: 'new-id',
     })
 
     expect(
@@ -50,7 +49,6 @@ describe('series URL state helpers', () => {
       from: '/series',
       season: 'special',
       episode: undefined,
-      videoId: undefined,
     })
   })
 })

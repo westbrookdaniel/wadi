@@ -125,7 +125,11 @@ export function SeriesDetailPage({
               type="button"
               size="sm"
               variant="secondary"
-              onClick={() => setStepOverride("episodes")}
+              onClick={() => {
+                setStepOverride("episodes");
+                setSelectedEpisodeIdOverride(null);
+                onSelectionChange?.({ season: selectedSeason, episodeId: null });
+              }}
             >
               <ChevronLeft aria-hidden="true" />
               Change Episode

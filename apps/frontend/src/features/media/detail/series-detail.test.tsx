@@ -201,5 +201,11 @@ describe("SeriesDetailPage", () => {
       season: 2,
       episodeId: "s2e1",
     });
+
+    await userEvent.click(screen.getByRole("button", { name: "Change Episode" }));
+    expect(onSelectionChange).toHaveBeenCalledWith({
+      season: 2,
+      episodeId: null,
+    });
   });
 });
