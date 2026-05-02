@@ -228,6 +228,95 @@ async fn stream_proxy_forwards_range_and_preserves_media_headers() {
 }
 
 #[tokio::test]
+async fn subtitle_proxy_requires_auth_and_valid_http_url() {
+    let app = test_app().await;
+
+    let upstream_url = encode_query_value("https://cdn.example/subtitles.vtt");
+    let (status, _, _) = raw_request(
+        app.clone(),
+        Method::GET,
+        &format!("/api/subtitle-proxy?url={upstream_url}"),
+        None,
+        Body::empty(),
+        |builder| builder,
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+
+    let (_, auth) = json_request(
+        app.clone(),
+        Method::POST,
+        "/api/auth/register",
+        None,
+        json!({ "email": "subtitle-proxy-invalid@example.com", "password": "password123" }),
+    )
+    .await;
+    let token = auth["token"].as_str().unwrap();
+
+    let invalid_url = encode_query_value("file:///etc/passwd");
+    let (status, body) = json_request(
+        app,
+        Method::GET,
+        &format!("/api/subtitle-proxy?url={invalid_url}"),
+        Some(token),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(body["error"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("http and https"));
+}
+
+#[tokio::test]
+async fn subtitle_proxy_preserves_text_headers_and_body() {
+    let app = test_app().await;
+    let upstream = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/subtitles.vtt"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_raw("WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHi", "text/vtt; charset=utf-8")
+                .insert_header("cache-control", "public, max-age=120")
+        )
+        .mount(&upstream)
+        .await;
+
+    let (_, auth) = json_request(
+        app.clone(),
+        Method::POST,
+        "/api/auth/register",
+        None,
+        json!({ "email": "subtitle-proxy@example.com", "password": "password123" }),
+    )
+    .await;
+    let token = auth["token"].as_str().unwrap();
+    let upstream_url = encode_query_value(&format!("{}/subtitles.vtt", upstream.uri()));
+
+    let (status, headers, body) = raw_request(
+        app,
+        Method::GET,
+        &format!("/api/subtitle-proxy?url={upstream_url}"),
+        Some(token),
+        Body::empty(),
+        |builder| builder,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(headers[header::CONTENT_TYPE], "text/vtt; charset=utf-8");
+    assert!(headers.contains_key(header::CONTENT_LENGTH));
+    assert_eq!(headers[header::CACHE_CONTROL], "public, max-age=120");
+    assert_eq!(
+        headers[header::ACCESS_CONTROL_EXPOSE_HEADERS],
+        "Content-Length, Content-Type"
+    );
+    assert_eq!(body, "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHi");
+}
+
+#[tokio::test]
 async fn watch_state_progress_and_continue_watching_flow() {
     let app = test_app().await;
 
@@ -655,13 +744,11 @@ async fn profile_selection_scopes_watch_data_lists_and_layout() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert!(
-        lists_primary["items"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|value| value["name"] == "Main Picks")
-    );
+    assert!(lists_primary["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|value| value["name"] == "Main Picks"));
 
     let (status, layout_primary) = json_request(
         app.clone(),
@@ -983,5 +1070,66 @@ async fn installs_http_addon_and_fetches_streams() {
     assert_eq!(
         streams["responses"][0]["response"]["streams"][0]["url"],
         "https://cdn.example/movie.mp4"
+    );
+}
+
+#[tokio::test]
+#[ignore = "binds a local mock addon HTTP server; run explicitly outside restricted sandboxes"]
+async fn forwards_subtitle_context_extra_args_to_addons() {
+    let addon = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/manifest.json"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "org.example.subtitles",
+            "name": "Example Subtitles",
+            "version": "1.0.0",
+            "types": ["series"],
+            "resources": [{ "name": "subtitles", "types": ["series"], "idPrefixes": ["tt"] }],
+            "catalogs": []
+        })))
+        .mount(&addon)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(
+            "/subtitles/series/tt123/filename=episode1.mkv&videoHash=deadbeef&videoId=tt123%3A1%3A2&videoSize=12345.json",
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "subtitles": [{ "id": "eng", "lang": "eng", "url": "https://cdn.example/eng.vtt" }]
+        })))
+        .mount(&addon)
+        .await;
+
+    let app = test_app().await;
+    let (_, auth) = json_request(
+        app.clone(),
+        Method::POST,
+        "/api/auth/register",
+        None,
+        json!({ "email": "subtitles-extra@example.com", "password": "password123" }),
+    )
+    .await;
+    let token = auth["token"].as_str().unwrap();
+
+    let (status, installed) = json_request(
+        app.clone(),
+        Method::POST,
+        "/api/addons/install",
+        Some(token),
+        json!({ "url": addon.uri() }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(installed["transport"], "http");
+
+    let endpoint = format!(
+        "/api/subtitles/series/tt123?videoId={}&videoHash=deadbeef&videoSize=12345&filename=episode1.mkv",
+        encode_query_value("tt123:1:2")
+    );
+    let (status, subtitles) =
+        json_request(app, Method::GET, &endpoint, Some(token), Value::Null).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        subtitles["responses"][0]["response"]["subtitles"][0]["url"],
+        "https://cdn.example/eng.vtt"
     );
 }

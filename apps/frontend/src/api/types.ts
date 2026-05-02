@@ -167,6 +167,13 @@ export type StreamInfo = {
   externalUrl?: string
   infoHash?: string
   fileIdx?: number
+  subtitles?: SubtitleInfo[]
+  behaviorHints?: {
+    videoHash?: string
+    videoSize?: number
+    filename?: string
+    [key: string]: unknown
+  }
   [key: string]: unknown
 }
 

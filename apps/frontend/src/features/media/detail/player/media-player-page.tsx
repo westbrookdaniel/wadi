@@ -40,12 +40,13 @@ import {
   defaultWatchState,
   findWatchState,
   queryKeys,
+  type SubtitleQueryContext,
   streamsQuery,
   subtitlesQuery,
   updateWatchProgress,
   watchDataQuery,
 } from '@/api/queries'
-import type { MediaPreview, SubtitleInfo, WatchState } from '@/api/types'
+import type { MediaPreview, WatchState } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -60,8 +61,9 @@ import { stateBlock } from '@/lib/styles'
 import { useAppStore } from '@/store/app-store'
 
 import { getChromecastTransport } from '../chromecast'
-import { buildStreamProxyUrl } from '../stream-playback'
+import { buildStreamProxyUrl, buildSubtitleProxyUrl } from '../stream-playback'
 import type { Episode, PlaybackTarget, PlayableStream } from '../types'
+import { mergeSubtitleTracks, parseSubtitleText, type SubtitleCue } from './subtitle-utils'
 import { usePlayerKeyboardShortcuts } from './use-player-keyboard-shortcuts'
 import { usePlayerPreferences } from './use-player-preferences'
 import { initialPlayerState, type CastStateData, type PlayerState } from './state'
@@ -93,8 +95,25 @@ export function MediaPlayerPage({
   const watchState =
     findWatchState(watchData.data, activeTarget.videoId) ??
     defaultWatchState(activeTarget.mediaType, activeTarget.mediaId, activeTarget.videoId)
+  const subtitleRequestId = activeTarget.videoId ?? activeTarget.mediaId
+  const subtitleQueryContext = useMemo<SubtitleQueryContext>(() => {
+    const behaviorHints = activeStream.behaviorHints && typeof activeStream.behaviorHints === 'object'
+      ? activeStream.behaviorHints
+      : undefined
+    return {
+      videoId: activeTarget.videoId,
+      videoHash: typeof behaviorHints?.videoHash === 'string' ? behaviorHints.videoHash : null,
+      videoSize: Number.isFinite(behaviorHints?.videoSize)
+        ? Number(behaviorHints?.videoSize)
+        : null,
+      filename: typeof behaviorHints?.filename === 'string' ? behaviorHints.filename : null,
+    }
+  }, [activeStream.behaviorHints, activeTarget.videoId])
   const subtitleTracks = useQuery(
-    subtitlesQuery(activeTarget.mediaType, activeTarget.mediaId, Boolean(activeTarget.mediaId)),
+    subtitlesQuery(activeTarget.mediaType, subtitleRequestId, {
+      enabled: Boolean(activeTarget.mediaType && subtitleRequestId),
+      context: subtitleQueryContext,
+    }),
   )
   const overrideMediaId = activeTarget.overrideMediaId ?? activeTarget.mediaId
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -125,24 +144,25 @@ export function MediaPlayerPage({
 
   const lastSentCastPropsRef = useRef<string | null>(null)
   const [subtitleCues, setSubtitleCues] = useState<SubtitleCue[]>([])
+  const [subtitleDebugError, setSubtitleDebugError] = useState<string | null>(null)
 
   const streamSubtitleList = useMemo(
-    () =>
-      (subtitleTracks.data ?? [])
-        .filter((track) => typeof track.url === "string")
-        .map((track, index) => ({
-          id: subtitleIdentity(track, index),
-          language: track.lang ?? "und",
-          url: track.url as string,
-          source: (track as { addon_id?: string }).addon_id ?? "subtitles",
-        })),
-    [subtitleTracks.data],
+    () => mergeSubtitleTracks(
+      activeStream.subtitles,
+      activeStream.addon_id ?? 'stream',
+      (subtitleTracks.data ?? []).map((track) => ({
+        ...track,
+        source: (track as { addon_id?: string }).addon_id ?? 'subtitles',
+      })),
+    ),
+    [activeStream.addon_id, activeStream.subtitles, subtitleTracks.data],
   )
 
   const { playbackState, updatePlaybackState } = usePlayerPreferences({
     mediaType: activeTarget.mediaType,
     overrideMediaId,
     streamSubtitleList,
+    streamSubtitlesLoading: subtitleTracks.isLoading,
   })
 
   const progress = useMutation({
@@ -260,9 +280,9 @@ export function MediaPlayerPage({
     if (!castConnected || !activeStream.url) {
       return
     }
-    const tracks = (subtitleTracks.data ?? []).map((track, index) => ({
-      id: subtitleIdentity(track, index),
-      lang: track.lang ?? "und",
+    const tracks = streamSubtitleList.map((track) => ({
+      id: track.id,
+      lang: track.language,
       url: track.url,
     }))
     void castTransport.sendMessage({
@@ -292,7 +312,7 @@ export function MediaPlayerPage({
     propsToObserve.forEach((propName) => {
       void castTransport.sendMessage({ type: "observeProp", propName })
     })
-  }, [activeStream.url, castConnected, castTransport, subtitleTracks.data])
+  }, [activeStream.url, castConnected, castTransport, player.state.currentTime, streamSubtitleList])
 
   useEffect(() => {
     if (!castConnected) {
@@ -341,19 +361,37 @@ export function MediaPlayerPage({
     let cancelled = false
     if (!activeSubtitleTrack) {
       setSubtitleCues([])
+      setSubtitleDebugError(null)
       return
     }
-    void fetch(activeSubtitleTrack.url)
-      .then((response) => response.text())
+    void fetch(buildSubtitleProxyUrl(activeSubtitleTrack.url))
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`subtitle proxy request failed with ${response.status}`)
+        }
+        return response.text()
+      })
       .then((text) => {
         if (cancelled) {
           return
         }
-        setSubtitleCues(parseSubtitleText(text))
+        const cues = parseSubtitleText(text)
+        if (!cues.length && text.trim()) {
+          console.warn('[subtitles] parsed zero cues', { subtitleUrl: activeSubtitleTrack.url })
+          setSubtitleDebugError('Subtitle track loaded but no cues were parsed')
+        } else {
+          setSubtitleDebugError(null)
+        }
+        setSubtitleCues(cues)
       })
-      .catch(() => {
+      .catch((error) => {
         if (!cancelled) {
+          console.error('[subtitles] failed to load subtitle track', {
+            subtitleUrl: activeSubtitleTrack.url,
+            error,
+          })
           setSubtitleCues([])
+          setSubtitleDebugError('Failed to load subtitle track')
         }
       })
     return () => {
@@ -652,6 +690,12 @@ export function MediaPlayerPage({
               >
                 {subtitleText}
               </span>
+            </div>
+          ) : null}
+
+          {import.meta.env.DEV && subtitleDebugError ? (
+            <div className="pointer-events-none absolute right-4 bottom-4 z-[6] rounded bg-black/70 px-2 py-1 text-[11px] text-white/80">
+              {subtitleDebugError}
             </div>
           ) : null}
 
@@ -1415,90 +1459,6 @@ function formatEpisodeBadge(season: number | null, episode: number | null) {
   const seasonLabel = season === null ? "EX" : `S${String(Math.max(season, 0)).padStart(2, "0")}`
   const episodeLabel = episode === null ? "E--" : `E${String(Math.max(episode, 0)).padStart(2, "0")}`
   return `${seasonLabel}${episodeLabel}`
-}
-
-type SubtitleCue = {
-  start: number
-  end: number
-  text: string
-}
-
-function parseSubtitleText(text: string): SubtitleCue[] {
-  const normalized = text.replace(/\r\n/g, "\n")
-  if (normalized.startsWith("WEBVTT")) {
-    return parseVtt(normalized)
-  }
-  return parseSrt(normalized)
-}
-
-function parseSrt(text: string): SubtitleCue[] {
-  return text
-    .split(/\n\n+/)
-    .map((block) => block.trim())
-    .filter(Boolean)
-    .flatMap((block) => {
-      const lines = block.split("\n")
-      const timing = lines.find((line) => line.includes("-->"))
-      if (!timing) {
-        return []
-      }
-      const [startRaw, endRaw] = timing.split("-->").map((value) => value.trim())
-      const start = parseTimestamp(startRaw)
-      const end = parseTimestamp(endRaw)
-      if (!Number.isFinite(start) || !Number.isFinite(end)) {
-        return []
-      }
-      const textLines = lines.slice(lines.indexOf(timing) + 1).join("\n").trim()
-      if (!textLines) {
-        return []
-      }
-      return [{ start, end, text: textLines }]
-    })
-}
-
-function parseVtt(text: string): SubtitleCue[] {
-  return text
-    .split(/\n\n+/)
-    .map((block) => block.trim())
-    .filter((block) => block.includes("-->"))
-    .flatMap((block) => {
-      const lines = block.split("\n")
-      const timing = lines.find((line) => line.includes("-->"))
-      if (!timing) {
-        return []
-      }
-      const [startRaw, endRawWithSettings] = timing.split("-->").map((value) => value.trim())
-      const endRaw = endRawWithSettings.split(" ")[0] ?? endRawWithSettings
-      const start = parseTimestamp(startRaw)
-      const end = parseTimestamp(endRaw)
-      if (!Number.isFinite(start) || !Number.isFinite(end)) {
-        return []
-      }
-      const textLines = lines.slice(lines.indexOf(timing) + 1).join("\n").trim()
-      if (!textLines) {
-        return []
-      }
-      return [{ start, end, text: textLines }]
-    })
-}
-
-function parseTimestamp(value: string) {
-  const normalized = value.replace(",", ".")
-  const parts = normalized.split(":")
-  if (parts.length < 2 || parts.length > 3) {
-    return NaN
-  }
-  const secondsWithMs = Number(parts[parts.length - 1])
-  const minutes = Number(parts[parts.length - 2])
-  const hours = parts.length === 3 ? Number(parts[0]) : 0
-  if (![hours, minutes, secondsWithMs].every(Number.isFinite)) {
-    return NaN
-  }
-  return hours * 3600 + minutes * 60 + secondsWithMs
-}
-
-function subtitleIdentity(track: SubtitleInfo, index: number) {
-  return track.id ?? `${track.lang ?? "und"}-${index}`
 }
 
 function hexToRgba(hex: string, opacity: number) {

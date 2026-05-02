@@ -39,10 +39,12 @@ export function usePlayerPreferences({
   mediaType,
   overrideMediaId,
   streamSubtitleList,
+  streamSubtitlesLoading = false,
 }: {
   mediaType: string
   overrideMediaId: string
   streamSubtitleList: SubtitleTrackOption[]
+  streamSubtitlesLoading?: boolean
 }) {
   const queryClient = useQueryClient()
   const playerDefaults = useQuery(playerDefaultsQuery)
@@ -122,28 +124,19 @@ export function usePlayerPreferences({
   }, [mergedPrefs, overrideHydrationKey])
 
   useEffect(() => {
-    if (!streamSubtitleList.length) {
-      updatePlaybackState({ selectedSubtitleId: null, subtitlesEnabled: false })
-      return
-    }
-    if (!playbackState.subtitlesEnabled) {
-      if (playbackState.selectedSubtitleId !== null) {
-        updatePlaybackState({ selectedSubtitleId: null })
-      }
-      return
-    }
-    const nextSubtitleId = selectPreferredSubtitleTrack(
+    const patch = resolveSubtitleSelectionState(
+      playbackState,
       streamSubtitleList,
-      playbackState.preferredSubtitleLanguage,
-      playbackState.selectedSubtitleId,
+      streamSubtitlesLoading,
     )
-    if (nextSubtitleId !== playbackState.selectedSubtitleId) {
-      updatePlaybackState({ selectedSubtitleId: nextSubtitleId })
+    if (patch) {
+      updatePlaybackState(patch)
     }
   }, [
     playbackState.preferredSubtitleLanguage,
     playbackState.selectedSubtitleId,
     playbackState.subtitlesEnabled,
+    streamSubtitlesLoading,
     streamSubtitleList,
     updatePlaybackState,
   ])
@@ -225,6 +218,34 @@ function selectPreferredSubtitleTrack(
     }
   }
   return tracks[0]?.id ?? null
+}
+
+export function resolveSubtitleSelectionState(
+  playbackState: Pick<LocalPlaybackState, 'selectedSubtitleId' | 'subtitlesEnabled' | 'preferredSubtitleLanguage'>,
+  tracks: SubtitleTrackOption[],
+  streamSubtitlesLoading: boolean,
+): Partial<LocalPlaybackState> | null {
+  if (streamSubtitlesLoading) {
+    return null
+  }
+  if (!tracks.length) {
+    return { selectedSubtitleId: null, subtitlesEnabled: false }
+  }
+  if (!playbackState.subtitlesEnabled) {
+    if (playbackState.selectedSubtitleId !== null) {
+      return { selectedSubtitleId: null }
+    }
+    return null
+  }
+  const nextSubtitleId = selectPreferredSubtitleTrack(
+    tracks,
+    playbackState.preferredSubtitleLanguage,
+    playbackState.selectedSubtitleId,
+  )
+  if (nextSubtitleId !== playbackState.selectedSubtitleId) {
+    return { selectedSubtitleId: nextSubtitleId }
+  }
+  return null
 }
 
 function buildOverridePayload(

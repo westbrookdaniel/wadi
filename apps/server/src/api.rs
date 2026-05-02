@@ -70,6 +70,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/streams/{content_type}/{id}", get(streams))
         .route("/api/subtitles/{content_type}/{id}", get(subtitles))
         .route("/api/stream-proxy", get(stream_proxy))
+        .route("/api/subtitle-proxy", get(subtitle_proxy))
         .route("/api/watch-state", put(set_watch_state))
         .route("/api/watch-state/{content_type}/{id}", get(get_watch_state))
         .route("/api/watch-data/{content_type}/{id}", get(get_watch_data))
@@ -1057,7 +1058,15 @@ async fn meta(
     user: AuthUser,
     Path((content_type, id)): Path<(String, String)>,
 ) -> AppResult<Json<Value>> {
-    aggregate_resource(state, user, ResourceKind::Meta, content_type, id).await
+    aggregate_resource(
+        state,
+        user,
+        ResourceKind::Meta,
+        content_type,
+        id,
+        BTreeMap::new(),
+    )
+    .await
 }
 
 async fn streams(
@@ -1065,20 +1074,59 @@ async fn streams(
     user: AuthUser,
     Path((content_type, id)): Path<(String, String)>,
 ) -> AppResult<Json<Value>> {
-    aggregate_resource(state, user, ResourceKind::Stream, content_type, id).await
+    aggregate_resource(
+        state,
+        user,
+        ResourceKind::Stream,
+        content_type,
+        id,
+        BTreeMap::new(),
+    )
+    .await
 }
 
 async fn subtitles(
     State(state): State<AppState>,
     user: AuthUser,
     Path((content_type, id)): Path<(String, String)>,
+    Query(query): Query<SubtitlesResourceQuery>,
 ) -> AppResult<Json<Value>> {
-    aggregate_resource(state, user, ResourceKind::Subtitles, content_type, id).await
+    aggregate_resource(
+        state,
+        user,
+        ResourceKind::Subtitles,
+        content_type,
+        id,
+        query.into_extra_args(),
+    )
+    .await
 }
 
 #[derive(Debug, Deserialize)]
 struct StreamProxyQuery {
     url: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct SubtitlesResourceQuery {
+    #[serde(rename = "videoId")]
+    video_id: Option<String>,
+    #[serde(rename = "videoHash")]
+    video_hash: Option<String>,
+    #[serde(rename = "videoSize")]
+    video_size: Option<String>,
+    filename: Option<String>,
+}
+
+impl SubtitlesResourceQuery {
+    fn into_extra_args(self) -> BTreeMap<String, String> {
+        let mut extra_args = BTreeMap::new();
+        insert_non_empty_query_arg(&mut extra_args, "videoId", self.video_id);
+        insert_non_empty_query_arg(&mut extra_args, "videoHash", self.video_hash);
+        insert_non_empty_query_arg(&mut extra_args, "videoSize", self.video_size);
+        insert_non_empty_query_arg(&mut extra_args, "filename", self.filename);
+        extra_args
+    }
 }
 
 async fn stream_proxy(
@@ -1133,12 +1181,58 @@ async fn stream_proxy(
         .map_err(|err| AppError::Upstream(err.to_string()))
 }
 
+#[derive(Debug, Deserialize)]
+struct SubtitleProxyQuery {
+    url: String,
+}
+
+async fn subtitle_proxy(
+    State(state): State<AppState>,
+    _user: AuthUser,
+    Query(query): Query<SubtitleProxyQuery>,
+) -> AppResult<Response<Body>> {
+    let url = url::Url::parse(&query.url)?;
+    if !matches!(url.scheme(), "http" | "https") {
+        return Err(AppError::BadRequest(
+            "subtitle proxy only supports http and https URLs".into(),
+        ));
+    }
+
+    let upstream = state.http.get(url).send().await?;
+    let status = upstream.status();
+    let upstream_headers = upstream.headers().clone();
+    let mut response = Response::builder().status(status);
+
+    for name in [
+        CONTENT_TYPE,
+        CONTENT_LENGTH,
+        ETAG,
+        LAST_MODIFIED,
+        CACHE_CONTROL,
+        EXPIRES,
+    ] {
+        if let Some(value) = upstream_headers.get(&name) {
+            response = response.header(name, value);
+        }
+    }
+
+    response = response.header(
+        ACCESS_CONTROL_EXPOSE_HEADERS,
+        HeaderValue::from_static("Content-Length, Content-Type"),
+    );
+
+    response
+        .body(Body::from_stream(upstream.bytes_stream()))
+        .map_err(|err| AppError::Upstream(err.to_string()))
+}
+
 async fn aggregate_resource(
     state: AppState,
     user: AuthUser,
     kind: ResourceKind,
     content_type: String,
     id: String,
+    extra_args: BTreeMap<String, String>,
 ) -> AppResult<Json<Value>> {
     let addons = load_user_addons(&state, &user.id).await?;
     let mut responses = Vec::new();
@@ -1158,7 +1252,7 @@ async fn aggregate_resource(
                     kind,
                     content_type: content_type.clone(),
                     id: id.clone(),
-                    extra_args: BTreeMap::new(),
+                    extra_args: extra_args.clone(),
                 },
                 addon.config,
             )
@@ -1167,6 +1261,19 @@ async fn aggregate_resource(
     }
 
     Ok(Json(json!({ "responses": responses })))
+}
+
+fn insert_non_empty_query_arg(
+    target: &mut BTreeMap<String, String>,
+    key: &str,
+    value: Option<String>,
+) {
+    if let Some(value) = value.and_then(|value| {
+        let trimmed = value.trim().to_string();
+        (!trimmed.is_empty()).then_some(trimmed)
+    }) {
+        target.insert(key.to_string(), value);
+    }
 }
 
 fn normalize_email(email: &str) -> AppResult<String> {
@@ -1731,7 +1838,8 @@ fn normalize_player_override_model(mut value: PlayerOverride) -> PlayerOverride 
     value.subtitle_delay_seconds = value.subtitle_delay_seconds.map(|v| v.clamp(-30.0, 30.0));
     value.subtitle_size = value.subtitle_size.map(|v| v.clamp(0.5, 3.0));
     value.subtitle_position = value.subtitle_position.map(|v| v.clamp(-1.0, 1.0));
-    value.subtitle_background_opacity = value.subtitle_background_opacity.map(|v| v.clamp(0.0, 1.0));
+    value.subtitle_background_opacity =
+        value.subtitle_background_opacity.map(|v| v.clamp(0.0, 1.0));
     value.subtitle_offset_x = value.subtitle_offset_x.map(|v| v.clamp(-100.0, 100.0));
     value.subtitle_offset_y = value.subtitle_offset_y.map(|v| v.clamp(-100.0, 100.0));
     value.playback_speed = value.playback_speed.map(|v| v.clamp(0.25, 3.0));
