@@ -1,0 +1,2129 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  ArrowLeft,
+  Cast,
+  Captions,
+  ChevronLeft,
+  ChevronRight,
+  Clapperboard,
+  Languages,
+  Maximize,
+  Pause,
+  Play,
+  Settings2,
+  Timer,
+  Volume1,
+  Volume2,
+  VolumeX,
+} from 'lucide-react'
+import {
+  type PointerEvent as ReactPointerEvent,
+  type RefObject,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
+import {
+  ALL_FORMATS,
+  AudioBufferSink,
+  CanvasSink,
+  Input,
+  type InputAudioTrack,
+  UrlSource,
+  type WrappedAudioBuffer,
+  type WrappedCanvas,
+} from 'mediabunny'
+
+import {
+  defaultWatchState,
+  findWatchState,
+  queryKeys,
+  streamsQuery,
+  subtitlesQuery,
+  updateWatchProgress,
+  watchDataQuery,
+} from '@/api/queries'
+import type { MediaPreview, SubtitleInfo, WatchState } from '@/api/types'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import { cn } from '@/lib/utils'
+import { stateBlock } from '@/lib/styles'
+import { useAppStore } from '@/store/app-store'
+
+import { getChromecastTransport } from '../chromecast'
+import { buildStreamProxyUrl } from '../stream-playback'
+import type { Episode, PlaybackTarget, PlayableStream } from '../types'
+import { usePlayerKeyboardShortcuts } from './use-player-keyboard-shortcuts'
+import { usePlayerPreferences } from './use-player-preferences'
+import { initialPlayerState, type CastStateData, type PlayerState } from './state'
+
+export function MediaPlayerPage({
+  media,
+  stream,
+  target,
+  onBack,
+}: {
+  media: MediaPreview
+  stream: PlayableStream
+  target: PlaybackTarget
+  onBack: () => void
+}) {
+  const queryClient = useQueryClient()
+  const [activeStream, setActiveStream] = useState(stream)
+  const [activeTarget, setActiveTarget] = useState(target)
+  const streamUrl = activeStream.url
+  const token = useAppStore((state) => state.token)
+  const proxiedStreamUrl = streamUrl ? buildStreamProxyUrl(streamUrl) : undefined
+  const watchData = useQuery(
+    watchDataQuery(
+      activeTarget.mediaType,
+      activeTarget.mediaId,
+      Boolean(activeTarget.mediaType && activeTarget.mediaId),
+    ),
+  )
+  const watchState =
+    findWatchState(watchData.data, activeTarget.videoId) ??
+    defaultWatchState(activeTarget.mediaType, activeTarget.mediaId, activeTarget.videoId)
+  const subtitleTracks = useQuery(
+    subtitlesQuery(activeTarget.mediaType, activeTarget.mediaId, Boolean(activeTarget.mediaId)),
+  )
+  const overrideMediaId = activeTarget.overrideMediaId ?? activeTarget.mediaId
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const playerRef = useRef<HTMLDivElement | null>(null)
+  const lastSavedRef = useRef(0)
+  const progressMutateRef = useRef<((payload: { position: number; duration?: number | null }) => void) | null>(null)
+  const castTransport = useMemo(() => getChromecastTransport(), [])
+  const [castConnected, setCastConnected] = useState(false)
+  const [castReady, setCastReady] = useState(false)
+  const [castUnavailableReason, setCastUnavailableReason] = useState<string | null>(null)
+  const [castState, setCastState] = useState<CastStateData>({})
+  const [episodeSheetOpen, setEpisodeSheetOpen] = useState(false)
+  const [selectedSwapSeason, setSelectedSwapSeason] = useState<number | null>(activeTarget.episodeContext?.season ?? null)
+  const [pendingEpisode, setPendingEpisode] = useState<Episode | null>(null)
+  const episodeStreams = useQuery(
+    streamsQuery(
+      activeTarget.mediaType,
+      pendingEpisode?.id ?? "",
+      Boolean(pendingEpisode),
+    ),
+  )
+
+  useEffect(() => {
+    setActiveStream(stream)
+    setActiveTarget(target)
+    setSelectedSwapSeason(target.episodeContext?.season ?? null)
+  }, [stream, target])
+
+  const lastSentCastPropsRef = useRef<string | null>(null)
+  const [subtitleCues, setSubtitleCues] = useState<SubtitleCue[]>([])
+
+  const streamSubtitleList = useMemo(
+    () =>
+      (subtitleTracks.data ?? [])
+        .filter((track) => typeof track.url === "string")
+        .map((track, index) => ({
+          id: subtitleIdentity(track, index),
+          language: track.lang ?? "und",
+          url: track.url as string,
+          source: (track as { addon_id?: string }).addon_id ?? "subtitles",
+        })),
+    [subtitleTracks.data],
+  )
+
+  const { playbackState, updatePlaybackState } = usePlayerPreferences({
+    mediaType: activeTarget.mediaType,
+    overrideMediaId,
+    streamSubtitleList,
+  })
+
+  const progress = useMutation({
+    mutationFn: (payload: { position: number; duration?: number | null }) =>
+      updateWatchProgress({
+        media_type: activeTarget.mediaType,
+        media_id: activeTarget.mediaId,
+        video_id: activeTarget.videoId,
+        position_seconds: Math.max(0, Math.floor(payload.position)),
+        duration_seconds: payload.duration ? Math.floor(payload.duration) : null,
+      }),
+    onSuccess: (state) => {
+      queryClient.setQueryData(queryKeys.watchData(activeTarget.mediaType, activeTarget.mediaId), (existing: { items?: WatchState[] } | undefined) => {
+        if (!existing) {
+          return { media_type: activeTarget.mediaType, media_id: activeTarget.mediaId, items: [state] }
+        }
+        const items = existing.items ?? []
+        const index = items.findIndex((item) => (item.video_id ?? null) === activeTarget.videoId)
+        return {
+          ...existing,
+          items: index >= 0 ? items.map((item, itemIndex) => (itemIndex === index ? state : item)) : [...items, state],
+        }
+      })
+      queryClient.invalidateQueries({ queryKey: queryKeys.watchData(activeTarget.mediaType, activeTarget.mediaId) })
+      queryClient.invalidateQueries({ queryKey: queryKeys.continueWatching(20) })
+      queryClient.invalidateQueries({ queryKey: queryKeys.continueWatching(12) })
+    },
+  })
+
+  useEffect(() => {
+    progressMutateRef.current = progress.mutate
+  }, [progress.mutate])
+
+  const saveProgress = useCallback((position: number, duration: number) => {
+    if (!Number.isFinite(position)) {
+      return
+    }
+    lastSavedRef.current = position
+    progressMutateRef.current?.({ position, duration: finiteDuration(duration) })
+  }, [])
+
+  const player = useMediabunnyPlayer({
+    canvasRef,
+    url: proxiedStreamUrl,
+    authToken: token,
+    savedPosition: watchState.position_seconds,
+    watched: watchState.watched,
+    preferredAudioLanguage: playbackState.preferredAudioLanguage,
+    selectedAudioTrackId: playbackState.selectedAudioTrackId,
+    initialPlaybackSpeed: playbackState.playbackSpeed,
+    onProgressCommit: saveProgress,
+  })
+
+  useEffect(() => {
+    player.setPlaybackSpeed(playbackState.playbackSpeed)
+  }, [player.setPlaybackSpeed, playbackState.playbackSpeed])
+
+  useEffect(() => {
+    if (!playbackState.selectedAudioTrackId) {
+      return
+    }
+    player.setAudioTrack(playbackState.selectedAudioTrackId)
+  }, [player.setAudioTrack, playbackState.selectedAudioTrackId])
+
+  useEffect(() => {
+    const receiverAppId = import.meta.env.VITE_CHROMECAST_RECEIVER_APP_ID as string | undefined
+    if (!receiverAppId) {
+      setCastReady(false)
+      setCastUnavailableReason("Set VITE_CHROMECAST_RECEIVER_APP_ID to enable casting")
+      return
+    }
+    setCastUnavailableReason(null)
+    let alive = true
+    castTransport
+      .setOptions(receiverAppId)
+      .then(() => {
+        if (alive) {
+          setCastReady(true)
+          setCastUnavailableReason(null)
+        }
+      })
+      .catch(() => {
+        if (alive) {
+          setCastReady(false)
+          setCastUnavailableReason("Unable to initialize Chromecast")
+        }
+      })
+    const onCastStateChanged = () => {
+      const value = castTransport.getCastState()
+      setCastConnected(value === window.cast?.framework?.CastState?.CONNECTED)
+    }
+    const onMessage = (message: unknown) => {
+      if (!message || typeof message !== "object" || !("event" in message)) {
+        return
+      }
+      const castMessage = message as { event: string; args?: unknown[] }
+      if (castMessage.event === "propChanged" || castMessage.event === "propValue") {
+        const [name, value] = castMessage.args ?? []
+        if (typeof name === "string") {
+          setCastState((current) => ({ ...current, [name]: value } as CastStateData))
+        }
+      }
+    }
+    castTransport.on("cast_state_changed", onCastStateChanged)
+    castTransport.on("message", onMessage)
+    onCastStateChanged()
+    return () => {
+      alive = false
+      castTransport.off("cast_state_changed", onCastStateChanged)
+      castTransport.off("message", onMessage)
+    }
+  }, [castTransport])
+
+  useEffect(() => {
+    if (!castConnected || !activeStream.url) {
+      return
+    }
+    const tracks = (subtitleTracks.data ?? []).map((track, index) => ({
+      id: subtitleIdentity(track, index),
+      lang: track.lang ?? "und",
+      url: track.url,
+    }))
+    void castTransport.sendMessage({
+      type: "command",
+      commandName: "load",
+      commandArgs: {
+        stream: {
+          url: activeStream.url,
+          subtitles: tracks,
+        },
+        autoplay: true,
+        time: player.state.currentTime,
+      },
+    })
+    const propsToObserve = [
+      "stream",
+      "loaded",
+      "paused",
+      "time",
+      "duration",
+      "volume",
+      "muted",
+      "playbackSpeed",
+      "selectedSubtitlesTrackId",
+      "selectedAudioTrackId",
+    ]
+    propsToObserve.forEach((propName) => {
+      void castTransport.sendMessage({ type: "observeProp", propName })
+    })
+  }, [activeStream.url, castConnected, castTransport, subtitleTracks.data])
+
+  useEffect(() => {
+    if (!castConnected) {
+      lastSentCastPropsRef.current = null
+      return
+    }
+    const castProps = {
+      playbackSpeed: playbackState.playbackSpeed,
+      selectedSubtitlesTrackId: playbackState.selectedSubtitleId,
+      selectedAudioTrackId: playbackState.selectedAudioTrackId,
+    }
+    const serialized = JSON.stringify(castProps)
+    if (serialized === lastSentCastPropsRef.current) {
+      return
+    }
+    lastSentCastPropsRef.current = serialized
+    void castTransport.sendMessage({
+      type: "setProp",
+      propName: "playbackSpeed",
+      propValue: castProps.playbackSpeed,
+    })
+    void castTransport.sendMessage({
+      type: "setProp",
+      propName: "selectedSubtitlesTrackId",
+      propValue: castProps.selectedSubtitlesTrackId,
+    })
+    void castTransport.sendMessage({
+      type: "setProp",
+      propName: "selectedAudioTrackId",
+      propValue: castProps.selectedAudioTrackId,
+    })
+  }, [
+    castConnected,
+    castTransport,
+    playbackState.playbackSpeed,
+    playbackState.selectedAudioTrackId,
+    playbackState.selectedSubtitleId,
+  ])
+
+  const activeSubtitleTrack = useMemo(
+    () => streamSubtitleList.find((track) => track.id === playbackState.selectedSubtitleId),
+    [playbackState.selectedSubtitleId, streamSubtitleList],
+  )
+
+  useEffect(() => {
+    let cancelled = false
+    if (!activeSubtitleTrack) {
+      setSubtitleCues([])
+      return
+    }
+    void fetch(activeSubtitleTrack.url)
+      .then((response) => response.text())
+      .then((text) => {
+        if (cancelled) {
+          return
+        }
+        setSubtitleCues(parseSubtitleText(text))
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSubtitleCues([])
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [activeSubtitleTrack])
+
+  const subtitleText = useMemo(() => {
+    if (!playbackState.selectedSubtitleId || !subtitleCues.length) {
+      return ""
+    }
+    const baseTime = castConnected
+      ? Number(castState.currentTime ?? 0)
+      : player.state.currentTime
+    const time = baseTime + playbackState.subtitleDelay
+    const cue = subtitleCues.find((candidate) => time >= candidate.start && time <= candidate.end)
+    return cue?.text ?? ""
+  }, [
+    castConnected,
+    castState.currentTime,
+    playbackState.subtitleDelay,
+    playbackState.selectedSubtitleId,
+    player.state.currentTime,
+    subtitleCues,
+  ])
+
+  useEffect(() => {
+    if (!pendingEpisode || !episodeStreams.data?.length) {
+      return
+    }
+    const nextStream = episodeStreams.data[0] as PlayableStream
+    setActiveTarget((current) => ({
+      ...current,
+      videoId: pendingEpisode.id,
+      episodeContext: {
+        season: pendingEpisode.season,
+        episode: pendingEpisode.episode,
+        title: pendingEpisode.title,
+      },
+    }))
+    setActiveStream(nextStream)
+    setPendingEpisode(null)
+    setEpisodeSheetOpen(false)
+  }, [episodeStreams.data, pendingEpisode])
+
+  const onTogglePlay = useCallback(() => {
+    if (castConnected) {
+      const paused = !(castState.paused === true)
+      void castTransport.sendMessage({ type: "setProp", propName: "paused", propValue: paused })
+      return
+    }
+    player.toggle()
+  }, [castConnected, castState.paused, castTransport, player])
+
+  const onSeek = useCallback((seconds: number) => {
+    if (castConnected) {
+      void castTransport.sendMessage({ type: "setProp", propName: "time", propValue: seconds })
+      return
+    }
+    player.seek(seconds, true)
+  }, [castConnected, castTransport, player])
+
+  const onVolume = useCallback((volume: number) => {
+    if (castConnected) {
+      void castTransport.sendMessage({ type: "setProp", propName: "volume", propValue: volume })
+      return
+    }
+    player.setVolume(volume)
+  }, [castConnected, castTransport, player])
+
+  const onToggleMute = useCallback(() => {
+    if (castConnected) {
+      const muted = !(castState.muted === true)
+      void castTransport.sendMessage({ type: "setProp", propName: "muted", propValue: muted })
+      return
+    }
+    player.toggleMute()
+  }, [castConnected, castState.muted, castTransport, player])
+
+  const onChangeSpeed = useCallback((speed: number) => {
+    updatePlaybackState({ playbackSpeed: speed })
+    if (castConnected) {
+      void castTransport.sendMessage({ type: "setProp", propName: "playbackSpeed", propValue: speed })
+      return
+    }
+    player.setPlaybackSpeed(speed)
+  }, [castConnected, castTransport, player, updatePlaybackState])
+
+  const effectiveState: PlayerState = castConnected
+    ? {
+      ...player.state,
+      currentTime: Number(castState.currentTime ?? player.state.currentTime),
+      duration: Number(castState.duration ?? player.state.duration),
+      muted: Boolean(castState.muted ?? player.state.muted),
+      volume: Number(castState.volume ?? player.state.volume),
+      playing:
+          castState.paused === undefined
+            ? player.state.playing
+            : !(castState.paused as boolean),
+      playbackSpeed: Number(castState.playbackSpeed ?? player.state.playbackSpeed),
+      selectedAudioTrackId:
+          (castState.selectedAudioTrackId as string | null | undefined) ?? player.state.selectedAudioTrackId,
+    }
+    : player.state
+
+  useEffect(() => {
+    if (effectiveState.status !== 'ready') {
+      return
+    }
+    if (Math.abs(effectiveState.currentTime - lastSavedRef.current) >= 15) {
+      saveProgress(effectiveState.currentTime, effectiveState.duration)
+    }
+  }, [effectiveState.currentTime, effectiveState.duration, effectiveState.status, saveProgress])
+
+  usePlayerKeyboardShortcuts(
+    {
+      status: effectiveState.status,
+      currentTime: effectiveState.currentTime,
+      duration: effectiveState.duration,
+      playbackSpeed: playbackState.playbackSpeed,
+    },
+    {
+      onTogglePlay,
+      onSeek,
+      onToggleMute,
+      onChangeSpeed,
+      onToggleFullscreen: () => toggleFullscreen(playerRef.current),
+    },
+  )
+
+  if (!streamUrl) {
+    return (
+      <div className="min-h-svh bg-black">
+        <div className={cn(stateBlock, 'min-h-svh bg-black px-6')}>
+          <strong>This stream cannot play directly</strong>
+          <p>Only direct stream URLs can be played in the browser right now.</p>
+          {stream.externalUrl ? (
+            <Button size="sm" asChild>
+              <a href={stream.externalUrl} target="_blank" rel="noreferrer">
+                Open external stream
+              </a>
+            </Button>
+          ) : null}
+          <Button variant="ghost" size="icon-lg" type="button" onClick={onBack} aria-label="Back">
+            <ArrowLeft aria-hidden="true" />
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <TooltipProvider>
+      <div className="min-h-svh bg-black">
+        <div
+          ref={playerRef}
+          className="group/player relative grid min-h-svh overflow-hidden bg-black text-white focus-within:[&_.player-chrome]:translate-y-0 focus-within:[&_.player-chrome]:opacity-100 hover:[&_.player-chrome]:translate-y-0 hover:[&_.player-chrome]:opacity-100"
+          onClick={(event) => {
+            if (event.target === event.currentTarget || event.target === canvasRef.current) {
+              player.toggle()
+            }
+          }}
+        >
+          <canvas
+            ref={canvasRef}
+            className={cn(
+              'm-auto block h-svh w-screen bg-black object-contain',
+              !player.state.hasVideo && 'hidden',
+            )}
+            aria-label={`Playing ${media.name}`}
+          />
+
+          {!player.state.hasVideo ? (
+            <div className="grid min-h-svh content-center justify-items-center gap-3 px-6 text-center">
+              <strong className="text-2xl font-semibold">{media.name}</strong>
+              <p className="max-w-[420px] text-sm text-white/68">
+                {player.state.hasAudio ? 'Audio stream' : player.state.status === 'loading' ? 'Loading stream' : 'No video track'}
+              </p>
+            </div>
+          ) : null}
+
+          {player.state.status === 'loading' ? (
+            <div className="pointer-events-none absolute inset-0 grid place-items-center bg-black/35 text-sm font-medium text-white/80">
+              Loading stream
+            </div>
+          ) : null}
+
+          {player.state.error ? (
+            <div className={cn(stateBlock, 'absolute inset-0 min-h-0 bg-black/92 px-6')}>
+              <strong>Unable to play this stream</strong>
+              <p>{player.state.error}</p>
+              {stream.externalUrl ? (
+                <Button size="sm" asChild>
+                  <a href={stream.externalUrl} target="_blank" rel="noreferrer">
+                    Open external stream
+                  </a>
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+
+          <PlayerChrome
+            playerRef={playerRef}
+            mediaName={media.name}
+            state={effectiveState}
+            warning={effectiveState.warning}
+            episodeContext={activeTarget.episodeContext ?? null}
+            hasEpisodeSwapper={Boolean(activeTarget.seriesEpisodes?.length)}
+            forceVisible={episodeSheetOpen}
+            onOpenEpisodeSwapper={() => setEpisodeSheetOpen(true)}
+            subtitleTracks={streamSubtitleList}
+            selectedSubtitleId={playbackState.selectedSubtitleId}
+            onSelectSubtitle={(id) => {
+              updatePlaybackState({ selectedSubtitleId: id, subtitlesEnabled: id !== null })
+              if (castConnected) {
+                void castTransport.sendMessage({
+                  type: "setProp",
+                  propName: "selectedSubtitlesTrackId",
+                  propValue: id,
+                })
+              }
+            }}
+            subtitleDelay={playbackState.subtitleDelay}
+            onSubtitleDelayChange={(value) => updatePlaybackState({ subtitleDelay: value })}
+            subtitleSize={playbackState.subtitleSize}
+            onSubtitleSizeChange={(value) => updatePlaybackState({ subtitleSize: value })}
+            subtitlePosition={playbackState.subtitlePosition}
+            onSubtitlePositionChange={(value) => updatePlaybackState({ subtitlePosition: value })}
+            subtitleTextColor={playbackState.subtitleTextColor}
+            onSubtitleTextColorChange={(value) => updatePlaybackState({ subtitleTextColor: value })}
+            subtitleBackgroundColor={playbackState.subtitleBackgroundColor}
+            onSubtitleBackgroundColorChange={(value) => updatePlaybackState({ subtitleBackgroundColor: value })}
+            subtitleBackgroundOpacity={playbackState.subtitleBackgroundOpacity}
+            onSubtitleBackgroundOpacityChange={(value) => updatePlaybackState({ subtitleBackgroundOpacity: value })}
+            subtitleOutlineColor={playbackState.subtitleOutlineColor}
+            onSubtitleOutlineColorChange={(value) => updatePlaybackState({ subtitleOutlineColor: value })}
+            subtitleOutlineStyle={playbackState.subtitleOutlineStyle}
+            onSubtitleOutlineStyleChange={(value) => updatePlaybackState({ subtitleOutlineStyle: value })}
+            subtitleFontFamily={playbackState.subtitleFontFamily}
+            onSubtitleFontFamilyChange={(value) => updatePlaybackState({ subtitleFontFamily: value })}
+            subtitleOffsetX={playbackState.subtitleOffsetX}
+            onSubtitleOffsetXChange={(value) => updatePlaybackState({ subtitleOffsetX: value })}
+            subtitleOffsetY={playbackState.subtitleOffsetY}
+            onSubtitleOffsetYChange={(value) => updatePlaybackState({ subtitleOffsetY: value })}
+            playbackSpeed={playbackState.playbackSpeed}
+            onPlaybackSpeedChange={onChangeSpeed}
+            castReady={castReady}
+            castConnected={castConnected}
+            castUnavailableReason={castUnavailableReason}
+            onCastToggle={() => {
+              if (castConnected) {
+                castTransport.endCurrentSession(true)
+              } else {
+                void castTransport.requestSession()
+              }
+            }}
+            onBack={() => {
+              saveProgress(effectiveState.currentTime, effectiveState.duration)
+              onBack()
+            }}
+            onTogglePlay={onTogglePlay}
+            onSeek={onSeek}
+            onVolumeChange={onVolume}
+            onToggleMute={onToggleMute}
+            onSelectAudioTrack={(id) => {
+              updatePlaybackState({ selectedAudioTrackId: id })
+              if (castConnected) {
+                void castTransport.sendMessage({ type: "setProp", propName: "selectedAudioTrackId", propValue: id })
+              } else {
+                player.setAudioTrack(id)
+              }
+            }}
+          />
+
+          {subtitleText ? (
+            <div
+              className="pointer-events-none absolute inset-x-6 z-[6] text-center"
+              style={{
+                bottom: `${Math.max(12, (12 + playbackState.subtitlePosition * 100 + playbackState.subtitleOffsetY))}px`,
+                transform: `translateX(${playbackState.subtitleOffsetX}px)`,
+                fontSize: `${playbackState.subtitleSize}rem`,
+                color: playbackState.subtitleTextColor,
+                fontFamily: playbackState.subtitleFontFamily,
+                textShadow:
+                  playbackState.subtitleOutlineStyle === "shadow"
+                    ? `0 0 8px ${playbackState.subtitleOutlineColor}`
+                    : `1px 1px 0 ${playbackState.subtitleOutlineColor}, -1px -1px 0 ${playbackState.subtitleOutlineColor}, -1px 1px 0 ${playbackState.subtitleOutlineColor}, 1px -1px 0 ${playbackState.subtitleOutlineColor}`,
+              }}
+            >
+              <span
+                style={{
+                  backgroundColor: hexToRgba(playbackState.subtitleBackgroundColor, playbackState.subtitleBackgroundOpacity),
+                  padding: "0.2em 0.45em",
+                  borderRadius: 4,
+                }}
+              >
+                {subtitleText}
+              </span>
+            </div>
+          ) : null}
+
+          <Dialog open={episodeSheetOpen} onOpenChange={setEpisodeSheetOpen}>
+            <DialogContent
+              showCloseButton={false}
+              className="top-0 right-0 left-auto h-svh max-h-none w-[min(430px,100vw)] translate-y-0 rounded-none p-0 data-open:slide-in-from-right-full data-closed:slide-out-to-right-full data-open:zoom-in-100 data-closed:zoom-out-100"
+            >
+              <EpisodeSwapper
+                episodes={activeTarget.seriesEpisodes ?? []}
+                selectedEpisodeId={activeTarget.videoId}
+                selectedSeason={selectedSwapSeason}
+                onSeasonChange={setSelectedSwapSeason}
+                onSelectEpisode={setPendingEpisode}
+              />
+              {pendingEpisode && episodeStreams.isLoading ? (
+                <p className="text-sm text-muted-foreground">Loading streams for {pendingEpisode.title}…</p>
+              ) : null}
+            </DialogContent>
+          </Dialog>
+
+          <span className="absolute size-px overflow-hidden whitespace-nowrap [clip:rect(0,0,0,0)]" aria-live="polite">
+            {effectiveState.status === 'loading' ? 'Loading stream' : null}
+            {effectiveState.status === 'ready' ? `Playing ${media.name}, ${formatDuration(effectiveState.duration)}` : null}
+            {effectiveState.error ? `Playback error: ${effectiveState.error}` : null}
+          </span>
+        </div>
+      </div>
+    </TooltipProvider>
+  )
+}
+
+function PlayerChrome({
+  playerRef,
+  mediaName,
+  state,
+  warning,
+  episodeContext,
+  hasEpisodeSwapper,
+  forceVisible,
+  onOpenEpisodeSwapper,
+  subtitleTracks,
+  selectedSubtitleId,
+  onSelectSubtitle,
+  subtitleDelay,
+  onSubtitleDelayChange,
+  subtitleSize,
+  onSubtitleSizeChange,
+  subtitlePosition,
+  onSubtitlePositionChange,
+  subtitleTextColor,
+  onSubtitleTextColorChange,
+  subtitleBackgroundColor,
+  onSubtitleBackgroundColorChange,
+  subtitleBackgroundOpacity,
+  onSubtitleBackgroundOpacityChange,
+  subtitleOutlineColor,
+  onSubtitleOutlineColorChange,
+  subtitleOutlineStyle,
+  onSubtitleOutlineStyleChange,
+  subtitleFontFamily,
+  onSubtitleFontFamilyChange,
+  subtitleOffsetX,
+  onSubtitleOffsetXChange,
+  subtitleOffsetY,
+  onSubtitleOffsetYChange,
+  playbackSpeed,
+  onPlaybackSpeedChange,
+  castReady,
+  castConnected,
+  castUnavailableReason,
+  onCastToggle,
+  onBack,
+  onTogglePlay,
+  onSeek,
+  onVolumeChange,
+  onToggleMute,
+  onSelectAudioTrack,
+}: {
+  playerRef: RefObject<HTMLDivElement | null>
+  mediaName: string
+  state: PlayerState
+  warning: string | null
+  episodeContext: PlaybackTarget["episodeContext"]
+  hasEpisodeSwapper: boolean
+  forceVisible: boolean
+  onOpenEpisodeSwapper: () => void
+  subtitleTracks: Array<{ id: string; language: string; source: string }>
+  selectedSubtitleId: string | null
+  onSelectSubtitle: (id: string | null) => void
+  subtitleDelay: number
+  onSubtitleDelayChange: (value: number) => void
+  subtitleSize: number
+  onSubtitleSizeChange: (value: number) => void
+  subtitlePosition: number
+  onSubtitlePositionChange: (value: number) => void
+  subtitleTextColor: string
+  onSubtitleTextColorChange: (value: string) => void
+  subtitleBackgroundColor: string
+  onSubtitleBackgroundColorChange: (value: string) => void
+  subtitleBackgroundOpacity: number
+  onSubtitleBackgroundOpacityChange: (value: number) => void
+  subtitleOutlineColor: string
+  onSubtitleOutlineColorChange: (value: string) => void
+  subtitleOutlineStyle: string
+  onSubtitleOutlineStyleChange: (value: string) => void
+  subtitleFontFamily: string
+  onSubtitleFontFamilyChange: (value: string) => void
+  subtitleOffsetX: number
+  onSubtitleOffsetXChange: (value: number) => void
+  subtitleOffsetY: number
+  onSubtitleOffsetYChange: (value: number) => void
+  playbackSpeed: number
+  onPlaybackSpeedChange: (value: number) => void
+  castReady: boolean
+  castConnected: boolean
+  castUnavailableReason: string | null
+  onCastToggle: () => void
+  onBack: () => void
+  onTogglePlay: () => void
+  onSeek: (seconds: number) => void
+  onVolumeChange: (volume: number) => void
+  onToggleMute: () => void
+  onSelectAudioTrack: (id: string | null) => void
+}) {
+  const disabled = state.status !== 'ready'
+  const actualVolume = state.muted ? 0 : state.volume
+  const VolumeIcon = state.muted || state.volume === 0 ? VolumeX : state.volume < 0.5 ? Volume1 : Volume2
+  const [audioMenuOpen, setAudioMenuOpen] = useState(false)
+  const [speedMenuOpen, setSpeedMenuOpen] = useState(false)
+  const [subtitleMenuOpen, setSubtitleMenuOpen] = useState(false)
+  const [subtitleSettingsOpen, setSubtitleSettingsOpen] = useState(false)
+  const controlsLayerRef = useRef<HTMLDivElement | null>(null)
+  const selectedAudioTrack =
+    state.audioTracks.find((track) => track.id === state.selectedAudioTrackId) ?? null
+  const audioLabel = selectedAudioTrack ? compactAudioLabel(selectedAudioTrack.label) : 'Default'
+  const speedLabel = `${formatSpeedLabel(playbackSpeed)}x`
+  const controlsPinnedOpen = forceVisible || audioMenuOpen || speedMenuOpen || subtitleMenuOpen || subtitleSettingsOpen
+
+  useEffect(() => {
+    if (!audioMenuOpen && !speedMenuOpen && !subtitleMenuOpen) {
+      return
+    }
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null
+      if (controlsLayerRef.current?.contains(target ?? null)) {
+        return
+      }
+      setAudioMenuOpen(false)
+      setSpeedMenuOpen(false)
+      setSubtitleMenuOpen(false)
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') {
+        return
+      }
+      setAudioMenuOpen(false)
+      setSpeedMenuOpen(false)
+      setSubtitleMenuOpen(false)
+    }
+    window.addEventListener('pointerdown', onPointerDown)
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDown)
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [audioMenuOpen, speedMenuOpen, subtitleMenuOpen])
+
+  return (
+    <div
+      ref={controlsLayerRef}
+      className={cn(
+        "player-chrome pointer-events-none absolute inset-x-0 top-0 bottom-0 z-[5] flex translate-y-1 flex-col justify-between opacity-0 transition-[opacity,transform] duration-200",
+        controlsPinnedOpen && "translate-y-0 opacity-100",
+      )}
+    >
+      <div className="pointer-events-auto flex items-start justify-between gap-3 p-4 sm:p-6">
+        <div className="flex min-w-0 items-center gap-3">
+          <TooltipButton label="Back">
+            <Button
+              variant="ghost"
+              size="icon-lg"
+              className="size-11 rounded-full border-0 bg-black/55 text-white hover:bg-black/78 focus-visible:bg-black/78 focus-visible:ring-white/30 [&_svg]:size-[22px]"
+              type="button"
+              onClick={onBack}
+              aria-label="Back"
+            >
+              <ArrowLeft aria-hidden="true" />
+            </Button>
+          </TooltipButton>
+          {episodeContext ? (
+            <div className="rounded-md bg-black/55 px-2.5 py-1.5 text-xs text-white/90">
+              <div className="font-medium">
+                {formatEpisodeBadge(episodeContext.season, episodeContext.episode)}
+              </div>
+              <div className="max-w-[46vw] truncate text-white/75">{episodeContext.title}</div>
+            </div>
+          ) : null}
+        </div>
+
+        {warning ? (
+          <p className="max-w-[min(520px,60vw)] rounded-md bg-black/62 px-3 py-2 text-right text-xs font-medium text-white/78">
+            {warning}
+          </p>
+        ) : null}
+      </div>
+
+      <div className="pointer-events-auto grid gap-3 px-4 pb-4 sm:px-6 sm:pb-6">
+        <ProgressScrubber
+          label={`Seek ${mediaName}`}
+          value={state.currentTime}
+          max={state.duration}
+          disabled={disabled}
+          onChange={onSeek}
+        />
+
+        <div className="grid gap-2 rounded-md bg-black/50 px-3 py-2 backdrop-blur-sm">
+          <div className="flex min-h-11 items-center gap-2 max-[620px]:grid max-[620px]:grid-cols-[auto_1fr_auto]">
+          <TooltipButton label={state.playing ? 'Pause' : 'Play'}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-full text-white hover:bg-white/14 focus-visible:ring-white/30"
+              type="button"
+              onClick={onTogglePlay}
+              disabled={disabled}
+              aria-label={state.playing ? 'Pause' : 'Play'}
+            >
+              {state.playing ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
+            </Button>
+          </TooltipButton>
+
+          <span className="min-w-[104px] text-sm font-medium tabular-nums text-white/86 max-[620px]:min-w-0">
+            {formatTimestamp(state.currentTime)} / {formatTimestamp(state.duration)}
+          </span>
+
+          <div className="flex items-center gap-2 max-[620px]:col-span-3">
+            <TooltipButton label={state.muted ? 'Unmute' : 'Mute'}>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="rounded-full text-white hover:bg-white/14 focus-visible:ring-white/30"
+                type="button"
+                onClick={onToggleMute}
+                disabled={disabled || !state.hasAudio}
+                aria-label={state.muted ? 'Unmute' : 'Mute'}
+              >
+                <VolumeIcon aria-hidden="true" />
+              </Button>
+            </TooltipButton>
+            <ProgressScrubber
+              label="Volume"
+              value={actualVolume}
+              max={1}
+              disabled={disabled || !state.hasAudio}
+              compact
+              onChange={onVolumeChange}
+            />
+          </div>
+
+            <div className="ml-auto flex items-center gap-1 max-[620px]:col-start-3 max-[620px]:row-start-1">
+              <div className="relative">
+                <TooltipButton label="Playback speed">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 rounded-full text-white hover:bg-white/14 focus-visible:ring-white/30"
+                    type="button"
+                    onClick={() => {
+                      setSpeedMenuOpen((value) => !value)
+                      setAudioMenuOpen(false)
+                      setSubtitleMenuOpen(false)
+                    }}
+                    aria-label="Playback speed"
+                  >
+                    <Timer aria-hidden="true" className="size-3.5" />
+                    <span className="text-[11px]">{speedLabel}</span>
+                  </Button>
+                </TooltipButton>
+                {speedMenuOpen ? (
+                  <div className="absolute right-0 bottom-full z-20 mb-2 grid min-w-[120px] gap-1 rounded-md border border-white/18 bg-black/88 p-1 text-xs shadow-lg backdrop-blur">
+                    {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((speed) => (
+                      <button
+                        key={String(speed)}
+                        type="button"
+                        className={cn(
+                          "rounded px-2 py-1 text-left text-white/90 hover:bg-white/14",
+                          playbackSpeed === speed && "bg-white/20",
+                        )}
+                        onClick={() => {
+                          onPlaybackSpeedChange(speed)
+                          setSpeedMenuOpen(false)
+                        }}
+                      >
+                        {formatSpeedLabel(speed)}x
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="relative">
+                <TooltipButton label="Audio track">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 rounded-full text-white hover:bg-white/14 focus-visible:ring-white/30"
+                    type="button"
+                    onClick={() => {
+                      setAudioMenuOpen((value) => !value)
+                      setSpeedMenuOpen(false)
+                      setSubtitleMenuOpen(false)
+                    }}
+                    aria-label="Audio track"
+                  >
+                    <Languages aria-hidden="true" className="size-3.5" />
+                    <span className="max-w-[90px] truncate text-[11px]">{audioLabel}</span>
+                  </Button>
+                </TooltipButton>
+                {audioMenuOpen ? (
+                  <div className="absolute right-0 bottom-full z-20 mb-2 grid min-w-[220px] gap-1 rounded-md border border-white/18 bg-black/88 p-1 text-xs shadow-lg backdrop-blur">
+                    <button
+                      type="button"
+                      className={cn(
+                        "rounded px-2 py-1 text-left text-white/90 hover:bg-white/14",
+                        !state.selectedAudioTrackId && "bg-white/20",
+                      )}
+                      onClick={() => {
+                        onSelectAudioTrack(null)
+                        setAudioMenuOpen(false)
+                      }}
+                    >
+                      Default audio
+                    </button>
+                    {state.audioTracks.map((track) => (
+                      <button
+                        key={track.id}
+                        type="button"
+                        className={cn(
+                          "rounded px-2 py-1 text-left text-white/90 hover:bg-white/14",
+                          state.selectedAudioTrackId === track.id && "bg-white/20",
+                        )}
+                        onClick={() => {
+                          onSelectAudioTrack(track.id)
+                          setAudioMenuOpen(false)
+                        }}
+                      >
+                        {track.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+
+              <TooltipButton label={castUnavailableReason ?? (castConnected ? "Stop casting" : "Cast")}>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className={cn(
+                    "rounded-full text-white hover:bg-white/14 focus-visible:ring-white/30",
+                    !castReady && "opacity-50",
+                  )}
+                  type="button"
+                  onClick={onCastToggle}
+                  disabled={!castReady}
+                  aria-label={castConnected ? "Stop casting" : "Cast"}
+                >
+                  <Cast aria-hidden="true" />
+                </Button>
+              </TooltipButton>
+              {hasEpisodeSwapper ? (
+                <TooltipButton label="Swap episode">
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    className="rounded-full text-white hover:bg-white/14 focus-visible:ring-white/30"
+                    type="button"
+                    onClick={onOpenEpisodeSwapper}
+                  >
+                    <Clapperboard aria-hidden="true" />
+                  </Button>
+                </TooltipButton>
+              ) : null}
+              <div className="relative">
+                <TooltipButton label="Subtitles">
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    className="rounded-full text-white hover:bg-white/14 focus-visible:ring-white/30"
+                    type="button"
+                    onClick={() => {
+                      setSubtitleMenuOpen((value) => !value)
+                      setSpeedMenuOpen(false)
+                      setAudioMenuOpen(false)
+                    }}
+                    aria-label="Subtitles"
+                  >
+                    <Captions aria-hidden="true" />
+                  </Button>
+                </TooltipButton>
+                {subtitleMenuOpen ? (
+                  <div className="absolute right-0 bottom-full z-20 mb-2 grid min-w-[250px] gap-2 rounded-md border border-white/18 bg-black/88 p-2 text-xs shadow-lg backdrop-blur">
+                    <label className="grid gap-1 text-white/78">
+                      <span>Subtitle Track</span>
+                      <select
+                        value={selectedSubtitleId ?? "__off"}
+                        className="h-8 rounded border border-white/20 bg-black/40 px-2 text-white"
+                        onChange={(event) => {
+                          const value = event.target.value
+                          onSelectSubtitle(value === "__off" ? null : value)
+                        }}
+                      >
+                        <option value="__off">No subtitles</option>
+                        {subtitleTracks.map((track) => (
+                          <option value={track.id} key={track.id}>
+                            {track.language} ({track.source})
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-8 justify-start text-white hover:bg-white/12"
+                      onClick={() => setSubtitleSettingsOpen(true)}
+                    >
+                      <Settings2 className="size-3.5" />
+                      Subtitle settings
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+              <TooltipButton label="Fullscreen">
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="rounded-full text-white hover:bg-white/14 focus-visible:ring-white/30"
+                  type="button"
+                  onClick={() => toggleFullscreen(playerRef.current)}
+                  aria-label="Fullscreen"
+                >
+                  <Maximize aria-hidden="true" />
+                </Button>
+              </TooltipButton>
+            </div>
+          </div>
+        </div>
+      </div>
+      <Dialog open={subtitleSettingsOpen} onOpenChange={setSubtitleSettingsOpen}>
+        <DialogContent
+          showCloseButton={false}
+          className="top-0 right-0 left-auto h-svh max-h-none w-[min(430px,100vw)] translate-y-0 rounded-none p-5 data-open:slide-in-from-right-full data-closed:slide-out-to-right-full data-open:zoom-in-100 data-closed:zoom-out-100"
+        >
+          <DialogTitle className="flex items-center gap-2">
+            <Captions className="size-4" />
+            Subtitle settings
+          </DialogTitle>
+          <div className="grid gap-2 text-xs">
+            <div className="grid grid-cols-2 gap-2">
+              <LabeledNumberInput label="Delay" value={subtitleDelay} step={0.1} min={-30} max={30} onChange={onSubtitleDelayChange} />
+              <LabeledNumberInput label="Size" value={subtitleSize} step={0.05} min={0.5} max={3} onChange={onSubtitleSizeChange} />
+              <LabeledNumberInput label="Position" value={subtitlePosition} step={0.05} min={-1} max={1} onChange={onSubtitlePositionChange} />
+              <LabeledNumberInput label="Bg Opacity" value={subtitleBackgroundOpacity} step={0.05} min={0} max={1} onChange={onSubtitleBackgroundOpacityChange} />
+              <LabeledNumberInput label="Offset X" value={subtitleOffsetX} step={1} min={-100} max={100} onChange={onSubtitleOffsetXChange} />
+              <LabeledNumberInput label="Offset Y" value={subtitleOffsetY} step={1} min={-100} max={100} onChange={onSubtitleOffsetYChange} />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <input value={subtitleTextColor} onChange={(event) => onSubtitleTextColorChange(event.target.value)} className="h-8 rounded border border-border bg-background px-2 text-foreground" aria-label="Subtitle text color" />
+              <input value={subtitleBackgroundColor} onChange={(event) => onSubtitleBackgroundColorChange(event.target.value)} className="h-8 rounded border border-border bg-background px-2 text-foreground" aria-label="Subtitle background color" />
+              <input value={subtitleOutlineColor} onChange={(event) => onSubtitleOutlineColorChange(event.target.value)} className="h-8 rounded border border-border bg-background px-2 text-foreground" aria-label="Subtitle outline color" />
+              <Select value={subtitleOutlineStyle} onValueChange={onSubtitleOutlineStyleChange}>
+                <SelectTrigger className="h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="outline">Outline</SelectItem>
+                  <SelectItem value="shadow">Shadow</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={subtitleFontFamily} onValueChange={onSubtitleFontFamilyChange}>
+                <SelectTrigger className="h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="sans-serif">Sans</SelectItem>
+                  <SelectItem value="serif">Serif</SelectItem>
+                  <SelectItem value="monospace">Monospace</SelectItem>
+                  <SelectItem value="system-ui">System</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+function TooltipButton({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  )
+}
+
+function ProgressScrubber({
+  label,
+  value,
+  max,
+  disabled,
+  compact = false,
+  onChange,
+}: {
+  label: string
+  value: number
+  max: number
+  disabled: boolean
+  compact?: boolean
+  onChange: (value: number) => void
+}) {
+  const progress = max > 0 ? Math.max(0, Math.min(value / max, 1)) : 0
+
+  const commitPointer = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (disabled || max <= 0) {
+      return
+    }
+    const rect = event.currentTarget.getBoundingClientRect()
+    const nextProgress = Math.max(0, Math.min((event.clientX - rect.left) / rect.width, 1))
+    onChange(nextProgress * max)
+  }
+
+  return (
+    <div
+      className={cn(
+        'relative h-5 cursor-pointer touch-none content-center rounded-full',
+        compact ? 'w-[120px]' : 'w-full',
+        disabled && 'cursor-default opacity-50',
+      )}
+      role="slider"
+      tabIndex={disabled ? -1 : 0}
+      aria-label={label}
+      aria-valuemin={0}
+      aria-valuemax={Math.round(max)}
+      aria-valuenow={Math.round(value)}
+      aria-disabled={disabled}
+      onPointerDown={(event) => {
+        if (disabled) {
+          return
+        }
+        event.currentTarget.setPointerCapture(event.pointerId)
+        commitPointer(event)
+      }}
+      onPointerMove={(event) => {
+        if (event.buttons !== 1) {
+          return
+        }
+        commitPointer(event)
+      }}
+      onKeyDown={(event) => {
+        if (disabled) {
+          return
+        }
+        const step = compact ? 0.05 : 5
+        if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') {
+          onChange(Math.max(value - step, 0))
+        } else if (event.key === 'ArrowRight' || event.key === 'ArrowUp') {
+          onChange(Math.min(value + step, max))
+        } else {
+          return
+        }
+        event.preventDefault()
+      }}
+    >
+      <span className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-white/24" />
+      <span
+        className="absolute top-1/2 left-0 h-1.5 -translate-y-1/2 rounded-full bg-white"
+        style={{ width: `${progress * 100}%` }}
+      />
+    </div>
+  )
+}
+
+function LabeledNumberInput({
+  label,
+  value,
+  min,
+  max,
+  step,
+  onChange,
+}: {
+  label: string
+  value: number
+  min: number
+  max: number
+  step: number
+  onChange: (value: number) => void
+}) {
+  return (
+    <label className="grid gap-1 text-[11px] text-white/75">
+      <span>{label}</span>
+      <input
+        type="number"
+        value={Number.isFinite(value) ? String(value) : "0"}
+        min={min}
+        max={max}
+        step={step}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="h-8 rounded border border-white/20 bg-black/40 px-2 text-white"
+      />
+    </label>
+  )
+}
+
+function EpisodeSwapper({
+  episodes,
+  selectedSeason,
+  selectedEpisodeId,
+  onSeasonChange,
+  onSelectEpisode,
+}: {
+  episodes: Episode[]
+  selectedSeason: number | null
+  selectedEpisodeId: string | null
+  onSeasonChange: (season: number | null) => void
+  onSelectEpisode: (episode: Episode) => void
+}) {
+  const seasons = useMemo(
+    () => Array.from(new Set(episodes.map((episode) => episode.season))),
+    [episodes],
+  )
+  const activeSeason = selectedSeason ?? seasons[0] ?? null
+  const activeSeasonIndex = seasons.findIndex((season) => season === activeSeason)
+  const hasPreviousSeason = activeSeasonIndex > 0
+  const hasNextSeason = activeSeasonIndex >= 0 && activeSeasonIndex < seasons.length - 1
+  const visible = useMemo(
+    () => episodes.filter((episode) => episode.season === activeSeason),
+    [activeSeason, episodes],
+  )
+
+  return (
+    <div className="grid min-h-0 gap-4">
+      <div className="grid grid-cols-[auto_1fr_auto] items-center gap-2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label="Previous season"
+          disabled={!hasPreviousSeason}
+          onClick={() => {
+            if (!hasPreviousSeason) {
+              return
+            }
+            onSeasonChange(seasons[activeSeasonIndex - 1] ?? null)
+          }}
+        >
+          <ChevronLeft aria-hidden="true" />
+        </Button>
+        <Select
+          value={activeSeason === null ? "__none" : String(activeSeason)}
+          onValueChange={(value) => onSeasonChange(value === "__none" ? null : Number(value))}
+        >
+          <SelectTrigger className="w-full" aria-label="Season">
+            <SelectValue placeholder="Season" />
+          </SelectTrigger>
+          <SelectContent>
+            {seasons.map((season) => (
+              <SelectItem key={String(season)} value={season === null ? "__none" : String(season)}>
+                {season === null ? "Extras" : season === 0 ? "Special" : `Season ${season}`}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label="Next season"
+          disabled={!hasNextSeason}
+          onClick={() => {
+            if (!hasNextSeason) {
+              return
+            }
+            onSeasonChange(seasons[activeSeasonIndex + 1] ?? null)
+          }}
+        >
+          <ChevronRight aria-hidden="true" />
+        </Button>
+      </div>
+      <div className="grid max-h-[70svh] gap-2 overflow-y-auto pr-1 [scrollbar-width:thin]">
+        {visible.map((episode) => (
+          <EpisodeSwapperItem
+            key={episode.id}
+            episode={episode}
+            active={selectedEpisodeId === episode.id}
+            onSelectEpisode={onSelectEpisode}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function EpisodeSwapperItem({
+  episode,
+  active,
+  onSelectEpisode,
+}: {
+  episode: Episode
+  active: boolean
+  onSelectEpisode: (episode: Episode) => void
+}) {
+  const [imageError, setImageError] = useState(false)
+  const showImage = Boolean(episode.thumbnail) && !imageError
+
+  return (
+    <div
+      className={cn(
+        "rounded-lg border border-border bg-card/70",
+        active && "border-primary/45 bg-card",
+      )}
+    >
+      <button
+        className="grid w-full min-w-0 cursor-pointer grid-cols-[84px_1fr] gap-3 text-left"
+        type="button"
+        onClick={() => onSelectEpisode(episode)}
+      >
+        {showImage ? (
+          <div className="h-16 w-24 overflow-hidden rounded-l-lg">
+            <img
+              src={episode.thumbnail}
+              alt={episode.title}
+              className="h-16 w-24 object-cover"
+              loading="lazy"
+              onError={() => setImageError(true)}
+            />
+          </div>
+        ) : (
+          <div
+            className="grid h-16 w-24 place-items-center rounded-l-lg bg-muted text-[0.65rem] uppercase tracking-wide text-muted-foreground"
+            aria-hidden="true"
+          >
+            No Image
+          </div>
+        )}
+        <div className="min-w-0 px-4 py-2.5">
+          <strong className="block overflow-hidden text-ellipsis whitespace-nowrap">
+            {episode.title}
+          </strong>
+          <span className="block text-[0.8rem] text-muted-foreground">
+            {formatEpisodeBadge(episode.season, episode.episode)}{episode.released ? ` • ${episode.released}` : ""}
+          </span>
+        </div>
+      </button>
+    </div>
+  )
+}
+
+function formatEpisodeBadge(season: number | null, episode: number | null) {
+  const seasonLabel = season === null ? "EX" : `S${String(Math.max(season, 0)).padStart(2, "0")}`
+  const episodeLabel = episode === null ? "E--" : `E${String(Math.max(episode, 0)).padStart(2, "0")}`
+  return `${seasonLabel}${episodeLabel}`
+}
+
+type SubtitleCue = {
+  start: number
+  end: number
+  text: string
+}
+
+function parseSubtitleText(text: string): SubtitleCue[] {
+  const normalized = text.replace(/\r\n/g, "\n")
+  if (normalized.startsWith("WEBVTT")) {
+    return parseVtt(normalized)
+  }
+  return parseSrt(normalized)
+}
+
+function parseSrt(text: string): SubtitleCue[] {
+  return text
+    .split(/\n\n+/)
+    .map((block) => block.trim())
+    .filter(Boolean)
+    .flatMap((block) => {
+      const lines = block.split("\n")
+      const timing = lines.find((line) => line.includes("-->"))
+      if (!timing) {
+        return []
+      }
+      const [startRaw, endRaw] = timing.split("-->").map((value) => value.trim())
+      const start = parseTimestamp(startRaw)
+      const end = parseTimestamp(endRaw)
+      if (!Number.isFinite(start) || !Number.isFinite(end)) {
+        return []
+      }
+      const textLines = lines.slice(lines.indexOf(timing) + 1).join("\n").trim()
+      if (!textLines) {
+        return []
+      }
+      return [{ start, end, text: textLines }]
+    })
+}
+
+function parseVtt(text: string): SubtitleCue[] {
+  return text
+    .split(/\n\n+/)
+    .map((block) => block.trim())
+    .filter((block) => block.includes("-->"))
+    .flatMap((block) => {
+      const lines = block.split("\n")
+      const timing = lines.find((line) => line.includes("-->"))
+      if (!timing) {
+        return []
+      }
+      const [startRaw, endRawWithSettings] = timing.split("-->").map((value) => value.trim())
+      const endRaw = endRawWithSettings.split(" ")[0] ?? endRawWithSettings
+      const start = parseTimestamp(startRaw)
+      const end = parseTimestamp(endRaw)
+      if (!Number.isFinite(start) || !Number.isFinite(end)) {
+        return []
+      }
+      const textLines = lines.slice(lines.indexOf(timing) + 1).join("\n").trim()
+      if (!textLines) {
+        return []
+      }
+      return [{ start, end, text: textLines }]
+    })
+}
+
+function parseTimestamp(value: string) {
+  const normalized = value.replace(",", ".")
+  const parts = normalized.split(":")
+  if (parts.length < 2 || parts.length > 3) {
+    return NaN
+  }
+  const secondsWithMs = Number(parts[parts.length - 1])
+  const minutes = Number(parts[parts.length - 2])
+  const hours = parts.length === 3 ? Number(parts[0]) : 0
+  if (![hours, minutes, secondsWithMs].every(Number.isFinite)) {
+    return NaN
+  }
+  return hours * 3600 + minutes * 60 + secondsWithMs
+}
+
+function subtitleIdentity(track: SubtitleInfo, index: number) {
+  return track.id ?? `${track.lang ?? "und"}-${index}`
+}
+
+function hexToRgba(hex: string, opacity: number) {
+  const safe = hex.replace("#", "")
+  const full = safe.length === 3
+    ? safe.split("").map((char) => `${char}${char}`).join("")
+    : safe
+  const red = Number.parseInt(full.slice(0, 2), 16)
+  const green = Number.parseInt(full.slice(2, 4), 16)
+  const blue = Number.parseInt(full.slice(4, 6), 16)
+  const alpha = Math.max(0, Math.min(opacity, 1))
+  return `rgba(${Number.isFinite(red) ? red : 0}, ${Number.isFinite(green) ? green : 0}, ${Number.isFinite(blue) ? blue : 0}, ${alpha})`
+}
+
+function useMediabunnyPlayer({
+  canvasRef,
+  url,
+  authToken,
+  savedPosition,
+  watched,
+  preferredAudioLanguage,
+  selectedAudioTrackId,
+  initialPlaybackSpeed,
+  onProgressCommit,
+}: {
+  canvasRef: RefObject<HTMLCanvasElement | null>
+  url?: string
+  authToken: string | null
+  savedPosition: number
+  watched: boolean
+  preferredAudioLanguage: string | null
+  selectedAudioTrackId: string | null
+  initialPlaybackSpeed: number
+  onProgressCommit: (position: number, duration: number) => void
+}) {
+  const [state, setState] = useState<PlayerState>(initialPlayerState)
+  const stateRef = useRef(initialPlayerState)
+  const inputRef = useRef<Input | null>(null)
+  const videoSinkRef = useRef<CanvasSink | null>(null)
+  const audioSinkRef = useRef<AudioBufferSink | null>(null)
+  const audioContextRef = useRef<AudioContext | null>(null)
+  const gainNodeRef = useRef<GainNode | null>(null)
+  const videoFrameIteratorRef = useRef<AsyncGenerator<WrappedCanvas, void, unknown> | null>(null)
+  const audioBufferIteratorRef = useRef<AsyncGenerator<WrappedAudioBuffer, void, unknown> | null>(null)
+  const nextFrameRef = useRef<WrappedCanvas | null>(null)
+  const queuedAudioNodesRef = useRef<Set<AudioBufferSourceNode>>(new Set())
+  const audioContextStartTimeRef = useRef<number | null>(null)
+  const playbackTimeAtStartRef = useRef(0)
+  const playingRef = useRef(false)
+  const durationRef = useRef(0)
+  const savedPositionRef = useRef(savedPosition)
+  const watchedRef = useRef(watched)
+  const hasRestoredRef = useRef(false)
+  const asyncIdRef = useRef(0)
+  const animationFrameRef = useRef<number | null>(null)
+  const renderIntervalRef = useRef<number | null>(null)
+  const renderRef = useRef<(requestNextFrame?: boolean) => void>(() => undefined)
+  const onProgressCommitRef = useRef(onProgressCommit)
+  const playbackRateRef = useRef(Math.max(0.25, Math.min(initialPlaybackSpeed || 1, 3)))
+
+  useEffect(() => {
+    onProgressCommitRef.current = onProgressCommit
+  }, [onProgressCommit])
+
+  useEffect(() => {
+    savedPositionRef.current = savedPosition
+    watchedRef.current = watched
+  }, [savedPosition, watched])
+
+  const updateState = useCallback((patch: Partial<PlayerState>) => {
+    stateRef.current = { ...stateRef.current, ...patch }
+    setState(stateRef.current)
+  }, [])
+
+  const getPlaybackTime = useCallback(() => {
+    if (playingRef.current) {
+      const audioContext = audioContextRef.current
+      const audioContextStartTime = audioContextStartTimeRef.current
+      if (!audioContext || audioContextStartTime === null) {
+        return playbackTimeAtStartRef.current
+      }
+      const elapsed = audioContext.currentTime - audioContextStartTime
+      return elapsed * playbackRateRef.current + playbackTimeAtStartRef.current
+    }
+    return playbackTimeAtStartRef.current
+  }, [])
+
+  const stopQueuedAudio = useCallback(() => {
+    for (const node of queuedAudioNodesRef.current) {
+      try {
+        node.stop()
+      } catch {
+        // Already stopped nodes are harmless here.
+      }
+    }
+    queuedAudioNodesRef.current.clear()
+  }, [])
+
+  const pause = useCallback((commit = true) => {
+    playbackTimeAtStartRef.current = Math.min(getPlaybackTime(), durationRef.current)
+    playingRef.current = false
+    void audioBufferIteratorRef.current?.return()
+    audioBufferIteratorRef.current = null
+    stopQueuedAudio()
+    updateState({ playing: false, currentTime: playbackTimeAtStartRef.current })
+    if (commit) {
+      onProgressCommitRef.current(playbackTimeAtStartRef.current, durationRef.current)
+    }
+  }, [getPlaybackTime, stopQueuedAudio, updateState])
+
+  const drawWrappedCanvas = useCallback((frame: WrappedCanvas) => {
+    const canvas = canvasRef.current
+    const context = canvas?.getContext('2d')
+    if (!canvas || !context) {
+      return
+    }
+    context.clearRect(0, 0, canvas.width, canvas.height)
+    context.drawImage(frame.canvas, 0, 0)
+  }, [canvasRef])
+
+  const updateNextFrame = useCallback(async () => {
+    const currentAsyncId = asyncIdRef.current
+    const iterator = videoFrameIteratorRef.current
+    if (!iterator) {
+      return
+    }
+
+    while (currentAsyncId === asyncIdRef.current) {
+      const result = await iterator.next()
+      const frame = result.value ?? null
+      if (!frame) {
+        break
+      }
+
+      if (currentAsyncId !== asyncIdRef.current) {
+        break
+      }
+
+      if (frame.timestamp <= getPlaybackTime()) {
+        drawWrappedCanvas(frame)
+      } else {
+        nextFrameRef.current = frame
+        break
+      }
+    }
+  }, [drawWrappedCanvas, getPlaybackTime])
+
+  const startVideoIterator = useCallback(async () => {
+    const videoSink = videoSinkRef.current
+    if (!videoSink) {
+      return
+    }
+
+    asyncIdRef.current += 1
+    await videoFrameIteratorRef.current?.return()
+    videoFrameIteratorRef.current = videoSink.canvases(getPlaybackTime())
+
+    const firstFrame = (await videoFrameIteratorRef.current.next()).value ?? null
+    const secondFrame = (await videoFrameIteratorRef.current.next()).value ?? null
+    nextFrameRef.current = secondFrame
+    if (firstFrame) {
+      drawWrappedCanvas(firstFrame)
+    }
+  }, [drawWrappedCanvas, getPlaybackTime])
+
+  const runAudioIterator = useCallback(async () => {
+    const audioContext = audioContextRef.current
+    const gainNode = gainNodeRef.current
+    const iterator = audioBufferIteratorRef.current
+    if (!audioContext || !gainNode || !iterator) {
+      return
+    }
+
+    for await (const { buffer, timestamp } of iterator) {
+      if (!playingRef.current) {
+        break
+      }
+
+      const node = audioContext.createBufferSource()
+      node.buffer = buffer
+      node.playbackRate.value = playbackRateRef.current
+      node.connect(gainNode)
+      const startTimestamp = audioContextStartTimeRef.current!
+        + (timestamp - playbackTimeAtStartRef.current) / playbackRateRef.current
+
+      if (startTimestamp >= audioContext.currentTime) {
+        node.start(startTimestamp)
+      } else {
+        node.start(audioContext.currentTime, audioContext.currentTime - startTimestamp)
+      }
+
+      queuedAudioNodesRef.current.add(node)
+      node.onended = () => {
+        queuedAudioNodesRef.current.delete(node)
+      }
+
+      if (timestamp - getPlaybackTime() >= 1) {
+        await waitUntilNearPlaybackTime(timestamp, getPlaybackTime)
+      }
+    }
+  }, [getPlaybackTime])
+
+  const play = useCallback(async () => {
+    if (stateRef.current.status !== 'ready') {
+      return
+    }
+
+    const audioContext = audioContextRef.current
+    if (!audioContext) {
+      return
+    }
+
+    if (audioContext.state === 'suspended') {
+      await audioContext.resume()
+    }
+
+    if (getPlaybackTime() >= durationRef.current) {
+      playbackTimeAtStartRef.current = 0
+      await startVideoIterator()
+    }
+
+    audioContextStartTimeRef.current = audioContext.currentTime
+    playingRef.current = true
+    updateState({ playing: true })
+
+    if (audioSinkRef.current) {
+      void audioBufferIteratorRef.current?.return()
+      audioBufferIteratorRef.current = audioSinkRef.current.buffers(getPlaybackTime())
+      void runAudioIterator()
+    }
+  }, [getPlaybackTime, runAudioIterator, startVideoIterator, updateState])
+
+  const seek = useCallback(async (seconds: number, commit = false) => {
+    if (stateRef.current.status !== 'ready') {
+      return
+    }
+
+    const nextTime = Math.max(0, Math.min(seconds, durationRef.current))
+    const wasPlaying = playingRef.current
+    if (wasPlaying) {
+      pause(false)
+    }
+
+    playbackTimeAtStartRef.current = nextTime
+    updateState({ currentTime: nextTime })
+    await startVideoIterator()
+
+    if (commit) {
+      onProgressCommitRef.current(nextTime, durationRef.current)
+    }
+
+    if (wasPlaying && nextTime < durationRef.current) {
+      void play()
+    }
+  }, [pause, play, startVideoIterator, updateState])
+
+  const render = useCallback((requestNextFrame = true) => {
+    if (stateRef.current.status === 'ready') {
+      const playbackTime = Math.min(getPlaybackTime(), durationRef.current)
+      if (playingRef.current && playbackTime >= durationRef.current) {
+        pause(true)
+        playbackTimeAtStartRef.current = durationRef.current
+      }
+
+      const nextFrame = nextFrameRef.current
+      if (nextFrame && nextFrame.timestamp <= playbackTime) {
+        drawWrappedCanvas(nextFrame)
+        nextFrameRef.current = null
+        void updateNextFrame()
+      }
+
+      updateState({ currentTime: playbackTime })
+    }
+
+    if (requestNextFrame) {
+      animationFrameRef.current = requestAnimationFrame(() => renderRef.current())
+    }
+  }, [drawWrappedCanvas, getPlaybackTime, pause, updateNextFrame, updateState])
+
+  useEffect(() => {
+    renderRef.current = render
+  }, [render])
+
+  const dispose = useCallback((commit = true) => {
+    if (commit && stateRef.current.status === 'ready') {
+      onProgressCommitRef.current(getPlaybackTime(), durationRef.current)
+    }
+
+    asyncIdRef.current += 1
+    playingRef.current = false
+    void videoFrameIteratorRef.current?.return()
+    void audioBufferIteratorRef.current?.return()
+    videoFrameIteratorRef.current = null
+    audioBufferIteratorRef.current = null
+    nextFrameRef.current = null
+    stopQueuedAudio()
+    inputRef.current?.dispose()
+    inputRef.current = null
+    videoSinkRef.current = null
+    audioSinkRef.current = null
+    void audioContextRef.current?.close()
+    audioContextRef.current = null
+    gainNodeRef.current = null
+
+    if (animationFrameRef.current !== null) {
+      cancelAnimationFrame(animationFrameRef.current)
+      animationFrameRef.current = null
+    }
+    if (renderIntervalRef.current !== null) {
+      clearInterval(renderIntervalRef.current)
+      renderIntervalRef.current = null
+    }
+  }, [getPlaybackTime, stopQueuedAudio])
+
+  useEffect(() => {
+    if (!url) {
+      updateState(initialPlayerState)
+      return
+    }
+
+    let canceled = false
+
+    const init = async () => {
+      dispose(false)
+      stateRef.current = { ...initialPlayerState, status: 'loading' }
+      setState(stateRef.current)
+
+      try {
+        const input = new Input({
+          formats: ALL_FORMATS,
+          source: new UrlSource(url, {
+            requestInit: {
+              headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined,
+            },
+          }),
+        })
+        inputRef.current = input
+
+        const [duration, videoTrackResult, audioTracksResult] = await Promise.all([
+          input.computeDuration(),
+          input.getPrimaryVideoTrack(),
+          input.getAudioTracks(),
+        ])
+        let videoTrack = videoTrackResult
+        const audioTracks = audioTracksResult.filter((track): track is InputAudioTrack => Boolean(track))
+        let audioTrack: InputAudioTrack | null =
+          audioTracks.find((track) => String(track.id) === selectedAudioTrackId)
+          ?? audioTracks.find((track) =>
+            preferredAudioLanguage
+              ? track.languageCode.toLowerCase() === preferredAudioLanguage.toLowerCase()
+              : false,
+          )
+          ?? audioTracks[0]
+          ?? null
+        let warning = ''
+
+        if (videoTrack) {
+          const codec = await resolveTrackCodec(videoTrack)
+          if (videoTrack.codec === null) {
+            warning += `Unsupported video codec (${codec}). `
+            videoTrack = null
+          } else if (!(await videoTrack.canDecode())) {
+            warning += `Unable to decode the video track codec (${codec}). `
+            videoTrack = null
+          }
+        }
+
+        if (audioTrack) {
+          const codec = await resolveTrackCodec(audioTrack)
+          if (audioTrack.codec === null) {
+            warning += `Unsupported audio codec (${codec}). `
+            audioTrack = null
+          } else if (!(await audioTrack.canDecode())) {
+            warning += `Unable to decode the audio track codec (${codec}). `
+            audioTrack = null
+          }
+        }
+
+        if (!videoTrack && !audioTrack) {
+          throw new Error(warning || 'No audio or video track found.')
+        }
+
+        if (canceled) {
+          input.dispose()
+          return
+        }
+
+        const AudioContextConstructor = getAudioContextConstructor()
+        const audioContext = audioTrack
+          ? new AudioContextConstructor({ sampleRate: audioTrack.sampleRate })
+          : new AudioContextConstructor()
+        const gainNode = audioContext.createGain()
+        gainNode.connect(audioContext.destination)
+        audioContextRef.current = audioContext
+        gainNodeRef.current = gainNode
+
+        const videoCanBeTransparent = videoTrack ? await videoTrack.canBeTransparent() : false
+        videoSinkRef.current = videoTrack
+          ? new CanvasSink(videoTrack, { poolSize: 2, fit: 'contain', alpha: videoCanBeTransparent })
+          : null
+        audioSinkRef.current = audioTrack ? new AudioBufferSink(audioTrack) : null
+        durationRef.current = duration
+
+        const canvas = canvasRef.current
+        if (canvas && videoTrack) {
+          canvas.width = videoTrack.displayWidth
+          canvas.height = videoTrack.displayHeight
+        }
+
+        const restoredTime = savedPositionRef.current > 0 && !watchedRef.current
+          ? Math.min(savedPositionRef.current, Math.max(0, duration - 3))
+          : 0
+        playbackTimeAtStartRef.current = restoredTime
+        hasRestoredRef.current = restoredTime > 0
+        playingRef.current = false
+        setGain(gainNode, stateRef.current.volume, stateRef.current.muted)
+        updateState({
+          status: 'ready',
+          warning: warning || null,
+          error: null,
+          duration,
+          currentTime: restoredTime,
+          playing: false,
+          hasVideo: Boolean(videoTrack),
+          hasAudio: Boolean(audioTrack),
+          playbackSpeed: playbackRateRef.current,
+          selectedAudioTrackId: audioTrack ? String(audioTrack.id) : null,
+          audioTracks: audioTracks.map((track) => ({
+            id: String(track.id),
+            label: track.name ?? `${track.languageCode.toUpperCase()} • ${track.codec ?? "audio"}`,
+            language: track.languageCode,
+          })),
+        })
+        await startVideoIterator()
+
+        animationFrameRef.current = requestAnimationFrame(() => render())
+        renderIntervalRef.current = window.setInterval(() => render(false), 500)
+
+        if (audioContext.state === 'running') {
+          void play()
+        }
+      } catch (error) {
+        if (canceled) {
+          return
+        }
+        console.error(error)
+        dispose(false)
+        updateState({
+          ...initialPlayerState,
+          status: 'error',
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
+
+    void init()
+
+    return () => {
+      canceled = true
+      dispose(true)
+    }
+  }, [
+    authToken,
+    canvasRef,
+    dispose,
+    play,
+    preferredAudioLanguage,
+    render,
+    selectedAudioTrackId,
+    startVideoIterator,
+    updateState,
+    url,
+  ])
+
+  useEffect(() => {
+    if (state.status !== 'ready' || hasRestoredRef.current || savedPosition <= 0 || watched) {
+      return
+    }
+
+    hasRestoredRef.current = true
+    void seek(Math.min(savedPosition, Math.max(0, state.duration - 3)), false)
+  }, [savedPosition, seek, state.duration, state.status, watched])
+
+  const setVolume = useCallback((volume: number) => {
+    const nextVolume = Math.max(0, Math.min(volume, 1))
+    const nextMuted = nextVolume === 0
+    setGain(gainNodeRef.current, nextVolume, nextMuted)
+    updateState({ volume: nextVolume, muted: nextMuted })
+  }, [updateState])
+
+  const toggleMute = useCallback(() => {
+    const muted = !stateRef.current.muted
+    setGain(gainNodeRef.current, stateRef.current.volume, muted)
+    updateState({ muted })
+  }, [updateState])
+
+  const setPlaybackSpeed = useCallback((speed: number) => {
+    const nextSpeed = Math.max(0.25, Math.min(speed, 3))
+    if (playingRef.current) {
+      const audioContext = audioContextRef.current
+      if (audioContext) {
+        playbackTimeAtStartRef.current = getPlaybackTime()
+        audioContextStartTimeRef.current = audioContext.currentTime
+      }
+    }
+    playbackRateRef.current = nextSpeed
+    queuedAudioNodesRef.current.forEach((node) => {
+      node.playbackRate.value = nextSpeed
+    })
+    updateState({ playbackSpeed: nextSpeed })
+  }, [getPlaybackTime, updateState])
+
+  const setAudioTrack = useCallback((id: string | null) => {
+    updateState({ selectedAudioTrackId: id })
+  }, [updateState])
+
+  const toggle = useCallback(() => {
+    if (playingRef.current) {
+      pause(true)
+    } else {
+      void play()
+    }
+  }, [pause, play])
+
+  return useMemo(() => ({
+    state,
+    play,
+    pause,
+    seek,
+    setVolume,
+    setAudioTrack,
+    setPlaybackSpeed,
+    toggleMute,
+    toggle,
+  }), [pause, play, seek, setAudioTrack, setPlaybackSpeed, setVolume, state, toggle, toggleMute])
+}
+
+function setGain(gainNode: GainNode | null, volume: number, muted: boolean) {
+  if (!gainNode) {
+    return
+  }
+  const actualVolume = muted ? 0 : volume
+  gainNode.gain.value = actualVolume ** 2
+}
+
+type DecodableTrack = {
+  codec: string | null
+  getCodecParameterString: () => Promise<string | null>
+}
+
+async function resolveTrackCodec(track: DecodableTrack) {
+  if (track.codec) {
+    return track.codec
+  }
+  try {
+    const codec = await track.getCodecParameterString()
+    return codec || 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+async function waitUntilNearPlaybackTime(timestamp: number, getPlaybackTime: () => number) {
+  while (timestamp - getPlaybackTime() >= 1) {
+    await new Promise((resolve) => window.setTimeout(resolve, 100))
+  }
+}
+
+function getAudioContextConstructor() {
+  const webkitWindow = window as Window & {
+    webkitAudioContext?: typeof AudioContext
+  }
+  return window.AudioContext ?? webkitWindow.webkitAudioContext!
+}
+
+function toggleFullscreen(element: HTMLElement | null) {
+  if (!element) {
+    return
+  }
+  if (document.fullscreenElement) {
+    void document.exitFullscreen()
+  } else {
+    void element.requestFullscreen()
+  }
+}
+
+function finiteDuration(duration: number) {
+  return Number.isFinite(duration) && duration > 0 ? duration : null
+}
+
+function compactAudioLabel(label: string) {
+  const compact = label.replace(/\s+/g, " ").trim()
+  if (compact.length <= 12) {
+    return compact
+  }
+  return `${compact.slice(0, 11)}…`
+}
+
+function formatSpeedLabel(speed: number) {
+  const rounded = Number.isInteger(speed) ? String(speed) : speed.toFixed(2).replace(/0+$/, "").replace(/\.$/, "")
+  return rounded
+}
+
+function formatTimestamp(seconds: number) {
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    return '0:00'
+  }
+
+  const rounded = Math.floor(seconds)
+  const hours = Math.floor(rounded / 3600)
+  const minutes = Math.floor((rounded % 3600) / 60)
+  const remainingSeconds = rounded % 60
+
+  if (hours > 0) {
+    return `${hours}:${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`
+  }
+
+  return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
+}
+
+function formatDuration(duration: number) {
+  if (!Number.isFinite(duration)) {
+    return 'Unknown duration'
+  }
+
+  const minutes = Math.round(duration / 60)
+  return `${minutes} min`
+}
