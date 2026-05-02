@@ -18,7 +18,7 @@ export function MediaCard({
   progress?: { position: number; duration?: number | null }
 }) {
   const title = 'name' in media ? media.name : media.title
-  const type = 'type' in media ? media.type : media.media_type
+  const type = ('type' in media ? media.type : media.media_type)  === 'series' ? 'Series' : 'Movies'
   const poster = media.poster ?? undefined
   const release = 'name' in media ? media.releaseInfo : media.release_info
 
@@ -56,7 +56,7 @@ export function MediaCard({
           </span>
         ) : null}
       </button>
-      <div className="flex min-w-0 justify-between gap-2.5">
+      <div className="flex min-w-0 justify-between gap-1">
         <div className="min-w-0">
           <h3 className="m-0 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[0.95rem] tracking-normal">{title}</h3>
           <p className={cn('mt-1 mb-0 text-[0.82rem] text-muted-foreground')}>
