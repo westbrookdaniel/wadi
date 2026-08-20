@@ -23,7 +23,7 @@ import { SearchPage } from '@/features/catalog/search-page'
 import {
   DetailShellSkeleton,
   MediaDetailPage,
-  MediaPlayerPage,
+  StreamPlaybackPage,
   type PlaybackTarget,
   type PlayableStream,
 } from '@/features/media/detail'
@@ -320,7 +320,7 @@ function MediaRoute() {
           onNavigate={(path) => navigate({ to: path })}
         >
           {selectedStream && selectedPlaybackTarget ? (
-            <MediaPlayerPage
+            <StreamPlaybackPage
               media={displayMedia}
               stream={selectedStream}
               target={selectedPlaybackTarget}

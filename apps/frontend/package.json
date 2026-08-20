@@ -24,7 +24,6 @@
     "clsx": "^2.1.1",
     "fuzzysort": "^3.1.0",
     "lucide-react": "^1.9.0",
-    "mediabunny": "^1.40.1",
     "radix-ui": "^1.4.3",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
