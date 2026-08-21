@@ -1,12 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Check, Clipboard, ExternalLink } from 'lucide-react'
+import { Check, Clipboard, ExternalLink, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import { playbackPreferencesQuery } from '@/api/queries'
 import type { MediaPreview } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { mutedText, pagePadding, stateBlock } from '@/lib/styles'
+import { mutedText, stateBlock } from '@/lib/styles'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/components/ui/toast'
 
@@ -67,18 +67,30 @@ export function StreamPlaybackPage({
   }
 
   return (
-    <div className="min-h-svh bg-background">
-      <main className={cn('mx-auto grid min-h-svh w-full max-w-[860px] content-center gap-6', pagePadding)}>
-        <Button className="w-fit" variant="ghost" type="button" onClick={onBack}>
-          <ArrowLeft aria-hidden="true" />
-          Back to details
-        </Button>
+    <div
+      className="fixed inset-0 z-50 overflow-y-auto bg-background/80 p-4 backdrop-blur-sm sm:p-8"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Playback options"
+      onClick={onBack}
+    >
+      <div className="grid min-h-full place-items-center">
+        <section
+          className="relative grid w-full max-w-[860px] gap-6 rounded-3xl border border-border bg-card p-5 shadow-2xl sm:p-8"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <Button
+            className="absolute top-4 right-4"
+            variant="ghost"
+            size="icon"
+            type="button"
+            aria-label="Close playback options"
+            onClick={onBack}
+          >
+            <X aria-hidden="true" />
+          </Button>
 
-        <section className="grid gap-6 rounded-3xl border border-border bg-card/70 p-5 shadow-lg sm:p-8" aria-label="External playback">
-          <div className="grid gap-2">
-            <p className="m-0 text-xs font-medium tracking-[0.16em] text-primary uppercase">
-              External playback
-            </p>
+          <div className="grid gap-2 pr-10">
             <h1 className="m-0 text-3xl font-semibold tracking-tight sm:text-4xl">
               {media.name}
             </h1>
@@ -156,7 +168,7 @@ export function StreamPlaybackPage({
             </p>
           ) : null}
         </section>
-      </main>
+      </div>
     </div>
   )
 }
