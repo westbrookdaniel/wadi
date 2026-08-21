@@ -880,7 +880,7 @@ async fn browse_layout_requires_auth_and_roundtrips_normalized_values() {
 }
 
 #[tokio::test]
-async fn player_preferences_roundtrip_and_profile_isolation() {
+async fn playback_preferences_default_to_copy_and_roundtrip() {
     let app = test_app().await;
 
     let (_, auth) = json_request(
@@ -888,7 +888,7 @@ async fn player_preferences_roundtrip_and_profile_isolation() {
         Method::POST,
         "/api/auth/register",
         None,
-        json!({ "email": "player-prefs@example.com", "password": "password123" }),
+        json!({ "email": "playback-prefs@example.com", "password": "password123" }),
     )
     .await;
     let token = auth["token"].as_str().unwrap();
@@ -896,120 +896,29 @@ async fn player_preferences_roundtrip_and_profile_isolation() {
     let (status, defaults) = json_request(
         app.clone(),
         Method::GET,
-        "/api/settings/player-defaults",
+        "/api/settings/playback",
         Some(token),
         Value::Null,
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(defaults["subtitles_enabled"], true);
-    assert_eq!(defaults["subtitle_text_color"], "#FFFFFF");
+    assert_eq!(defaults["stream_action"], "copy");
+    assert_eq!(defaults["external_player_template"], "vlc://{url}");
 
-    let (status, saved_defaults) = json_request(
-        app.clone(),
+    let (status, saved) = json_request(
+        app,
         Method::PUT,
-        "/api/settings/player-defaults",
+        "/api/settings/playback",
         Some(token),
         json!({
-            "subtitles_enabled": false,
-            "subtitle_language": "eng",
-            "subtitle_delay_seconds": 120.0,
-            "subtitle_size": 99.0,
-            "subtitle_text_color": "112233",
-            "subtitle_background_color": "bad",
-            "subtitle_outline_color": "445566",
-            "subtitle_background_opacity": 2.5,
-            "playback_speed": 9.0
+            "stream_action": "copy",
+            "external_player_template": "iina://weblink?url={url}"
         }),
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(saved_defaults["subtitles_enabled"], false);
-    assert_eq!(saved_defaults["subtitle_language"], "eng");
-    assert_eq!(saved_defaults["subtitle_delay_seconds"], 30.0);
-    assert_eq!(saved_defaults["subtitle_size"], 3.0);
-    assert_eq!(saved_defaults["subtitle_text_color"], "#112233");
-    assert_eq!(saved_defaults["subtitle_background_color"], "#000000");
-    assert_eq!(saved_defaults["subtitle_outline_color"], "#445566");
-    assert_eq!(saved_defaults["subtitle_background_opacity"], 1.0);
-    assert_eq!(saved_defaults["playback_speed"], 3.0);
-
-    let (status, second_profile) = json_request(
-        app.clone(),
-        Method::POST,
-        "/api/profiles",
-        Some(token),
-        json!({ "name": "Second", "avatar_key": "avatar-2" }),
-    )
-    .await;
-    assert_eq!(status, StatusCode::CREATED);
-    let second_profile_id = second_profile["id"].as_str().unwrap();
-
-    let (status, _) = json_request(
-        app.clone(),
-        Method::POST,
-        "/api/profiles/select",
-        Some(token),
-        json!({ "profile_id": second_profile_id }),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-
-    let (status, second_defaults) = json_request(
-        app.clone(),
-        Method::GET,
-        "/api/settings/player-defaults",
-        Some(token),
-        Value::Null,
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(second_defaults["subtitles_enabled"], true);
-    assert_eq!(second_defaults["subtitle_language"], Value::Null);
-    assert_eq!(second_defaults["playback_speed"], 1.0);
-
-    let (status, saved_override) = json_request(
-        app.clone(),
-        Method::PUT,
-        "/api/settings/player-override/series/series-1",
-        Some(token),
-        json!({
-            "subtitles_enabled": true,
-            "subtitle_language": "spa",
-            "playback_speed": 1.5,
-            "preferred_audio_language": "spa",
-            "preferred_audio_track_id": "1"
-        }),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(saved_override["subtitle_language"], "spa");
-    assert_eq!(saved_override["preferred_audio_track_id"], "1");
-
-    let (status, fetched_override) = json_request(
-        app.clone(),
-        Method::GET,
-        "/api/settings/player-override/series/series-1",
-        Some(token),
-        Value::Null,
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(fetched_override["subtitle_language"], "spa");
-    assert_eq!(fetched_override["playback_speed"], 1.5);
-
-    let (status, missing_override) = json_request(
-        app.clone(),
-        Method::GET,
-        "/api/settings/player-override/series/series-2",
-        Some(token),
-        Value::Null,
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(missing_override["subtitle_language"], Value::Null);
-    assert_eq!(missing_override["playback_speed"], Value::Null);
-    assert_eq!(missing_override["subtitles_enabled"], Value::Null);
+    assert_eq!(saved["stream_action"], "copy");
+    assert_eq!(saved["external_player_template"], "iina://weblink?url={url}");
 }
 
 #[tokio::test]

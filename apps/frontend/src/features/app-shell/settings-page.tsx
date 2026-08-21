@@ -23,16 +23,16 @@ import {
   logout,
   profilesQuery,
   previewAddon,
+  playbackPreferencesQuery,
   queryKeys,
-  playerDefaultsQuery,
   selectProfile,
-  updatePlayerDefaults,
+  updatePlaybackPreferences,
   updateProfile,
 } from "@/api/queries";
 import type {
   AddonManifest,
   AddonRecord,
-  PlayerOverride,
+  PlaybackPreferences,
   User,
 } from "@/api/types";
 import { EmptyState, ErrorState, LoadingState } from "@/components/status";
@@ -108,7 +108,7 @@ export function ProfileSettingsPage(_props?: { user?: Pick<User, "id" | "email">
       </section>
 
       <section className="grid gap-4 pt-2 pb-6">
-        <PlaybackSubtitleDefaultsSection />
+        <ExternalPlaybackSettingsSection />
       </section>
 
       <section className="grid gap-3 rounded-xl border border-border bg-card/60 p-4">
@@ -131,17 +131,17 @@ export function ProfileSettingsPage(_props?: { user?: Pick<User, "id" | "email">
   );
 }
 
-function PlaybackSubtitleDefaultsSection() {
+function ExternalPlaybackSettingsSection() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const prefs = useQuery(playerDefaultsQuery);
-  const [draft, setDraft] = useState<PlayerOverride | null>(null);
+  const prefs = useQuery(playbackPreferencesQuery);
+  const [draft, setDraft] = useState<PlaybackPreferences | null>(null);
 
   const saveMutation = useMutation({
-    mutationFn: (payload: PlayerOverride) => updatePlayerDefaults(payload),
+    mutationFn: (payload: PlaybackPreferences) => updatePlaybackPreferences(payload),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.playerDefaults });
-      toast({ title: "Playback defaults updated." });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.playbackPreferences });
+      toast({ title: "External playback settings updated." });
     },
   });
 
@@ -151,7 +151,7 @@ function PlaybackSubtitleDefaultsSection() {
     return (
       <div className="grid gap-3 rounded-xl border border-border bg-card/60 p-4">
         <h3 className="m-0 text-[1.05rem] font-[520] tracking-normal">
-          Playback & subtitles defaults
+          External playback
         </h3>
         <p className="m-0 text-sm text-muted-foreground">Loading defaults…</p>
       </div>
@@ -162,9 +162,9 @@ function PlaybackSubtitleDefaultsSection() {
     return null;
   }
 
-  const updateDraft = <K extends keyof PlayerOverride>(
+  const updateDraft = <K extends keyof PlaybackPreferences>(
     key: K,
-    value: PlayerOverride[K],
+    value: PlaybackPreferences[K],
   ) => {
     setDraft((current) => ({ ...(current ?? data), [key]: value }));
   };
@@ -176,202 +176,45 @@ function PlaybackSubtitleDefaultsSection() {
   return (
     <div className="grid gap-4 rounded-xl border border-border bg-card/60 p-4">
       <h3 className="m-0 text-[1.05rem] font-[520] tracking-normal">
-        Playback & subtitles defaults
+        External playback
       </h3>
       <p className="m-0 text-sm text-muted-foreground">
-        Applied to this profile when a title has no per-title override.
+        Streams are handed off to an external player on desktop and mobile. These settings apply to this profile.
       </p>
 
       <div className="grid gap-3 sm:grid-cols-2">
         <Label className="grid gap-1.5">
-          Subtitles default
+          Default stream action
           <Select
-            value={data.subtitles_enabled ? "on" : "off"}
-            onValueChange={(value) => updateDraft("subtitles_enabled", value === "on")}
+            value={data.stream_action}
+            onValueChange={(value) => updateDraft("stream_action", value as PlaybackPreferences["stream_action"])}
           >
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="on">On</SelectItem>
-              <SelectItem value="off">Off</SelectItem>
+              <SelectItem value="external">Open in external player</SelectItem>
+              <SelectItem value="copy">Copy stream link</SelectItem>
             </SelectContent>
           </Select>
         </Label>
 
-        <Label className="grid gap-1.5">
-          Subtitle language
+        <Label className="grid gap-1.5 sm:col-span-2">
+          External player URL template
           <Input
-            value={data.subtitle_language ?? ""}
-            onChange={(event) =>
-              updateDraft("subtitle_language", event.target.value.trim() || null)
-            }
-            placeholder="eng"
+            value={data.external_player_template}
+            onChange={(event) => updateDraft("external_player_template", event.target.value)}
+            placeholder="vlc://{url}"
           />
-        </Label>
-
-        <Label className="grid gap-1.5">
-          Subtitle size
-          <Input
-            type="number"
-            value={String(data.subtitle_size)}
-            onChange={(event) =>
-              updateDraft("subtitle_size", Number(event.target.value) || 1)
-            }
-            min={0.5}
-            max={3}
-            step={0.05}
-          />
-        </Label>
-
-        <Label className="grid gap-1.5">
-          Subtitle delay (seconds)
-          <Input
-            type="number"
-            value={String(data.subtitle_delay_seconds)}
-            onChange={(event) =>
-              updateDraft("subtitle_delay_seconds", Number(event.target.value) || 0)
-            }
-            min={-30}
-            max={30}
-            step={0.1}
-          />
-        </Label>
-
-        <Label className="grid gap-1.5">
-          Subtitle vertical position
-          <Input
-            type="number"
-            value={String(data.subtitle_position)}
-            onChange={(event) =>
-              updateDraft("subtitle_position", Number(event.target.value) || 0)
-            }
-            min={-1}
-            max={1}
-            step={0.05}
-          />
-        </Label>
-
-        <Label className="grid gap-1.5">
-          Playback speed
-          <Input
-            type="number"
-            value={String(data.playback_speed)}
-            onChange={(event) =>
-              updateDraft("playback_speed", Number(event.target.value) || 1)
-            }
-            min={0.25}
-            max={3}
-            step={0.25}
-          />
-        </Label>
-
-        <Label className="grid gap-1.5">
-          Subtitle text color
-          <Input
-            value={data.subtitle_text_color}
-            onChange={(event) => updateDraft("subtitle_text_color", event.target.value)}
-          />
-        </Label>
-
-        <Label className="grid gap-1.5">
-          Subtitle background color
-          <Input
-            value={data.subtitle_background_color}
-            onChange={(event) =>
-              updateDraft("subtitle_background_color", event.target.value)
-            }
-          />
-        </Label>
-
-        <Label className="grid gap-1.5">
-          Subtitle outline color
-          <Input
-            value={data.subtitle_outline_color}
-            onChange={(event) => updateDraft("subtitle_outline_color", event.target.value)}
-          />
-        </Label>
-
-        <Label className="grid gap-1.5">
-          Subtitle outline style
-          <Input
-            value={data.subtitle_outline_style}
-            onChange={(event) =>
-              updateDraft("subtitle_outline_style", event.target.value || "outline")
-            }
-          />
-        </Label>
-
-        <Label className="grid gap-1.5">
-          Subtitle font family
-          <Input
-            value={data.subtitle_font_family}
-            onChange={(event) =>
-              updateDraft("subtitle_font_family", event.target.value || "sans-serif")
-            }
-          />
-        </Label>
-
-        <Label className="grid gap-1.5">
-          Subtitle background opacity
-          <Input
-            type="number"
-            value={String(data.subtitle_background_opacity)}
-            onChange={(event) =>
-              updateDraft(
-                "subtitle_background_opacity",
-                Number(event.target.value) || 0,
-              )
-            }
-            min={0}
-            max={1}
-            step={0.05}
-          />
-        </Label>
-
-        <Label className="grid gap-1.5">
-          Subtitle offset X
-          <Input
-            type="number"
-            value={String(data.subtitle_offset_x)}
-            onChange={(event) =>
-              updateDraft("subtitle_offset_x", Number(event.target.value) || 0)
-            }
-            min={-100}
-            max={100}
-            step={1}
-          />
-        </Label>
-
-        <Label className="grid gap-1.5">
-          Subtitle offset Y
-          <Input
-            type="number"
-            value={String(data.subtitle_offset_y)}
-            onChange={(event) =>
-              updateDraft("subtitle_offset_y", Number(event.target.value) || 0)
-            }
-            min={-100}
-            max={100}
-            step={1}
-          />
-        </Label>
-
-        <Label className="grid gap-1.5">
-          Preferred audio language
-          <Input
-            value={data.preferred_audio_language ?? ""}
-            onChange={(event) =>
-              updateDraft("preferred_audio_language", event.target.value.trim() || null)
-            }
-            placeholder="eng"
-          />
+          <span className="text-xs text-muted-foreground">
+            Include <code>{"{url}"}</code> where the encoded stream URL should go. For example: <code>vlc://{"{url}"}</code>.
+          </span>
         </Label>
       </div>
 
       <div className="flex justify-end">
         <Button type="button" onClick={onSave} disabled={saveMutation.isPending}>
-          Save playback defaults
+          Save external playback settings
         </Button>
       </div>
     </div>

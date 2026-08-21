@@ -91,6 +91,9 @@ export function StreamList({
         <p className={mutedText}>No streams match this filter.</p>
       ) : (
         <div className={cn("flex flex-col gap-2.5 overflow-y-auto pr-1 [scrollbar-width:thin]", bottomPagePadding)}>
+          <p className="m-0 text-xs text-muted-foreground">
+            Showing {filteredRows.length} of {rows.length} streams
+          </p>
           {filteredRows.map(({ stream, index, sourceLabel }, i) => (
             <button
               className="grid h-fit cursor-pointer content-between gap-2.5 rounded-lg border border-border bg-card/80 p-3.5 text-left text-card-foreground hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/30 focus-visible:outline-none [&_small]:text-[0.76rem] [&_small]:text-primary [&_span]:text-muted-foreground"

@@ -12,25 +12,15 @@ import type {
   ContinueWatchingItem,
   ListItem,
   MediaPreview,
-  PlayerOverride,
-  PlayerPreferences,
+  PlaybackPreferences,
   Profile,
   StreamInfo,
-  SubtitleInfo,
   User,
   UserList,
   WatchDataResponse,
-  WatchProgressRequest,
   WatchState,
   WatchStateRequest,
 } from '@/api/types'
-
-export type SubtitleQueryContext = {
-  videoId?: string | null
-  videoHash?: string | null
-  videoSize?: number | null
-  filename?: string | null
-}
 
 export const queryKeys = {
   me: ['me'] as const,
@@ -42,14 +32,11 @@ export const queryKeys = {
   listItems: (listId: string | null) => ['list-items', listId] as const,
   meta: (type: string, id: string) => ['meta', type, id] as const,
   streams: (type: string, id: string) => ['streams', type, id] as const,
-  subtitles: (type: string, id: string, context: Record<string, string> = {}) =>
-    ['subtitles', type, id, context] as const,
   watchData: (type: string, id: string) => ['watch-data', type, id] as const,
   continueWatching: (limit = 20) => ['continue-watching', limit] as const,
   browseLayout: ['browse-layout'] as const,
   profiles: ['profiles'] as const,
-  playerDefaults: ['player-defaults'] as const,
-  playerOverride: (mediaType: string, mediaId: string) => ['player-override', mediaType, mediaId] as const,
+  playbackPreferences: ['playback-preferences'] as const,
 }
 
 export const meQuery = (enabled: boolean) =>
@@ -182,51 +169,10 @@ export const profilesQuery = queryOptions({
   },
 })
 
-export const playerDefaultsQuery = queryOptions({
-  queryKey: queryKeys.playerDefaults,
-  queryFn: () => apiRequest<PlayerPreferences>('/api/settings/player-defaults'),
+export const playbackPreferencesQuery = queryOptions({
+  queryKey: queryKeys.playbackPreferences,
+  queryFn: () => apiRequest<PlaybackPreferences>('/api/settings/playback'),
 })
-
-export const playerOverrideQuery = (mediaType: string, mediaId: string, enabled = true) =>
-  queryOptions({
-    queryKey: queryKeys.playerOverride(mediaType, mediaId),
-    queryFn: () =>
-      apiRequest<PlayerOverride>(
-        `/api/settings/player-override/${encodeURIComponent(mediaType)}/${encodeURIComponent(mediaId)}`,
-      ),
-    enabled,
-  })
-
-export const subtitlesQuery = (
-  contentType: string,
-  mediaId: string,
-  {
-    enabled = true,
-    context,
-  }: {
-    enabled?: boolean
-    context?: SubtitleQueryContext
-  } = {},
-) => {
-  const normalizedContext = normalizeSubtitleQueryContext(context)
-  return queryOptions({
-    queryKey: queryKeys.subtitles(contentType, mediaId, normalizedContext),
-    queryFn: async () => {
-      const search = new URLSearchParams(normalizedContext)
-      const suffix = search.size ? `?${search.toString()}` : ''
-      const data = await apiRequest<ApiResponses<{ subtitles?: SubtitleInfo[] }>>(
-        `/api/subtitles/${encodeURIComponent(contentType)}/${encodeURIComponent(mediaId)}${suffix}`,
-      )
-      return data.responses.flatMap((item) =>
-        (item.response.subtitles ?? []).map((subtitle) => ({
-          ...subtitle,
-          addon_id: item.addon_id,
-        })),
-      )
-    },
-    enabled,
-  })
-}
 
 export function login(email: string, password: string) {
   return apiRequest<AuthResponse>('/api/auth/login', {
@@ -356,25 +302,8 @@ export function setWatchState(payload: WatchStateRequest) {
   })
 }
 
-export function updatePlayerDefaults(payload: PlayerOverride) {
-  return apiRequest<PlayerPreferences>('/api/settings/player-defaults', {
-    method: 'PUT',
-    body: payload,
-  })
-}
-
-export function updatePlayerOverride(mediaType: string, mediaId: string, payload: PlayerOverride) {
-  return apiRequest<PlayerOverride>(
-    `/api/settings/player-override/${encodeURIComponent(mediaType)}/${encodeURIComponent(mediaId)}`,
-    {
-      method: 'PUT',
-      body: payload,
-    },
-  )
-}
-
-export function updateWatchProgress(payload: WatchProgressRequest) {
-  return apiRequest<WatchState>('/api/watch-progress', {
+export function updatePlaybackPreferences(payload: PlaybackPreferences) {
+  return apiRequest<PlaybackPreferences>('/api/settings/playback', {
     method: 'PUT',
     body: payload,
   })
@@ -429,27 +358,4 @@ function flattenMediaResponses(
 
 function stringValue(value: unknown) {
   return typeof value === 'string' && value.trim() ? value : undefined
-}
-
-function normalizeSubtitleQueryContext(context: SubtitleQueryContext | undefined): Record<string, string> {
-  if (!context) {
-    return {}
-  }
-  const normalized: Record<string, string> = {}
-  const trimmedVideoId = context.videoId?.trim()
-  if (trimmedVideoId) {
-    normalized.videoId = trimmedVideoId
-  }
-  const trimmedVideoHash = context.videoHash?.trim()
-  if (trimmedVideoHash) {
-    normalized.videoHash = trimmedVideoHash
-  }
-  if (Number.isFinite(context.videoSize) && (context.videoSize ?? 0) >= 0) {
-    normalized.videoSize = String(context.videoSize)
-  }
-  const trimmedFilename = context.filename?.trim()
-  if (trimmedFilename) {
-    normalized.filename = trimmedFilename
-  }
-  return normalized
 }

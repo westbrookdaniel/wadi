@@ -152,14 +152,6 @@ export type WatchStateRequest = {
   watched: boolean
 }
 
-export type WatchProgressRequest = {
-  media_type: string
-  media_id: string
-  video_id?: string | null
-  position_seconds: number
-  duration_seconds?: number | null
-}
-
 export type StreamInfo = {
   title?: string
   name?: string
@@ -195,23 +187,9 @@ export type BrowseLayout = {
   pages: Record<BrowsePageKey, BrowseLayoutPage>
 }
 
-export type PlayerPreferences = {
-  subtitles_enabled: boolean
-  subtitle_language: string | null
-  subtitle_delay_seconds: number
-  subtitle_size: number
-  subtitle_position: number
-  subtitle_text_color: string
-  subtitle_background_color: string
-  subtitle_background_opacity: number
-  subtitle_outline_color: string
-  subtitle_outline_style: string
-  subtitle_font_family: string
-  subtitle_offset_x: number
-  subtitle_offset_y: number
-  playback_speed: number
-  preferred_audio_language: string | null
-  preferred_audio_track_id: string | null
-}
+export type PlaybackAction = 'external' | 'copy'
 
-export type PlayerOverride = Partial<PlayerPreferences>
+export type PlaybackPreferences = {
+  stream_action: PlaybackAction
+  external_player_template: string
+}

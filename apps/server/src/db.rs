@@ -96,22 +96,10 @@ pub async fn migrate(pool: &SqlitePool) -> sqlx::Result<()> {
             user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             profile_id TEXT REFERENCES profiles(id) ON DELETE CASCADE,
             browse_layout_json TEXT NOT NULL DEFAULT '{}',
-            player_prefs_json TEXT NOT NULL DEFAULT '{}',
+            playback_prefs_json TEXT NOT NULL DEFAULT '{}',
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             updated_at TEXT NOT NULL DEFAULT (datetime('now')),
             PRIMARY KEY (user_id, profile_id)
-        );
-
-        CREATE TABLE IF NOT EXISTS player_overrides (
-            id TEXT PRIMARY KEY NOT NULL,
-            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            profile_id TEXT REFERENCES profiles(id) ON DELETE CASCADE,
-            media_type TEXT NOT NULL,
-            media_id TEXT NOT NULL,
-            settings_json TEXT NOT NULL DEFAULT '{}',
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-            UNIQUE(user_id, profile_id, media_type, media_id)
         );
 
         CREATE INDEX IF NOT EXISTS idx_sessions_token_hash ON sessions(token_hash);
@@ -125,8 +113,6 @@ pub async fn migrate(pool: &SqlitePool) -> sqlx::Result<()> {
             ON watch_states(user_id, profile_id, watched, position_seconds, updated_at);
         CREATE UNIQUE INDEX IF NOT EXISTS idx_watch_states_identity
             ON watch_states(user_id, profile_id, media_type, media_id, COALESCE(video_id, ''));
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_player_overrides_identity
-            ON player_overrides(user_id, profile_id, media_type, media_id);
         "#,
     )
     .execute(pool)
@@ -169,7 +155,7 @@ pub async fn migrate(pool: &SqlitePool) -> sqlx::Result<()> {
     .execute(pool)
     .await;
     let _ = sqlx::query(
-        "ALTER TABLE user_settings ADD COLUMN player_prefs_json TEXT NOT NULL DEFAULT '{}'",
+        "ALTER TABLE user_settings ADD COLUMN playback_prefs_json TEXT NOT NULL DEFAULT '{}'",
     )
     .execute(pool)
     .await;
@@ -253,7 +239,7 @@ pub async fn migrate(pool: &SqlitePool) -> sqlx::Result<()> {
         .as_deref()
         .map(|sql| {
             !sql.contains("PRIMARY KEY (user_id, profile_id)")
-                || !sql.contains("player_prefs_json")
+                || !sql.contains("playback_prefs_json")
         })
         .unwrap_or(false);
 
@@ -311,7 +297,7 @@ pub async fn migrate(pool: &SqlitePool) -> sqlx::Result<()> {
                     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                     profile_id TEXT REFERENCES profiles(id) ON DELETE CASCADE,
                     browse_layout_json TEXT NOT NULL DEFAULT '{}',
-                    player_prefs_json TEXT NOT NULL DEFAULT '{}',
+                    playback_prefs_json TEXT NOT NULL DEFAULT '{}',
                     created_at TEXT NOT NULL DEFAULT (datetime('now')),
                     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
                     PRIMARY KEY (user_id, profile_id)
@@ -322,8 +308,8 @@ pub async fn migrate(pool: &SqlitePool) -> sqlx::Result<()> {
             .await?;
             sqlx::query(
                 r#"
-                INSERT OR REPLACE INTO user_settings_v2 (user_id, profile_id, browse_layout_json, player_prefs_json, created_at, updated_at)
-                SELECT user_id, profile_id, browse_layout_json, COALESCE(player_prefs_json, '{}'), created_at, updated_at FROM user_settings
+                INSERT OR REPLACE INTO user_settings_v2 (user_id, profile_id, browse_layout_json, playback_prefs_json, created_at, updated_at)
+                SELECT user_id, profile_id, browse_layout_json, COALESCE(playback_prefs_json, '{}'), created_at, updated_at FROM user_settings
                 "#,
             )
             .execute(&mut *conn)
@@ -358,12 +344,6 @@ pub async fn migrate(pool: &SqlitePool) -> sqlx::Result<()> {
     )
     .execute(pool)
     .await?;
-    sqlx::query(
-        "CREATE UNIQUE INDEX IF NOT EXISTS idx_player_overrides_identity ON player_overrides(user_id, profile_id, media_type, media_id)",
-    )
-    .execute(pool)
-    .await?;
-
     Ok(())
 }
 

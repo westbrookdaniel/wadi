@@ -86,6 +86,12 @@ describe('SettingsPage dialog flows', () => {
           },
         })
       }
+      if (path === '/api/settings/playback' && !options?.method) {
+        return Promise.resolve({
+          stream_action: 'external',
+          external_player_template: 'vlc://{url}',
+        })
+      }
       if (path === '/api/addons/addon-1/configure' && options?.method === 'POST') {
         return Promise.resolve({ ...addon, config: options.body })
       }
