@@ -24,7 +24,7 @@ export function MediaCard({
   const release = 'name' in media ? media.releaseInfo : media.release_info
 
   return (
-    <article className="media-card-item grid min-w-0 gap-2.5">
+    <article className="media-card-item grid min-w-0 gap-2.5 max-[800px]:gap-1.5">
       <button
         className="relative aspect-[2/3] w-full cursor-pointer overflow-hidden rounded-lg border border-border bg-card text-muted-foreground hover:outline-2 hover:outline-offset-2 hover:outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         aria-label={`Open ${title}`}
@@ -50,8 +50,8 @@ export function MediaCard({
       </button>
       <div className="flex min-w-0 justify-between gap-1">
         <div className="min-w-0">
-          <h3 className="m-0 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[0.95rem] tracking-normal">{title}</h3>
-          <p className={cn('mt-1 mb-0 text-[0.82rem] text-muted-foreground')}>
+          <h3 className="m-0 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[0.95rem] tracking-normal max-[800px]:text-xs">{title}</h3>
+          <p className={cn('mt-1 mb-0 truncate text-[0.82rem] text-muted-foreground max-[800px]:text-[10px]')}>
             {[type, release].filter(Boolean).join(' • ')}
           </p>
         </div>

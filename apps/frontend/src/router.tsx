@@ -318,7 +318,7 @@ function MediaRoute() {
         <AppShell
           activePath={backPath}
           hideNavigation={Boolean(selectedStream)}
-          className="p-0"
+          className="p-0 max-[800px]:p-0"
           label={`${displayMedia.name} page`}
           onNavigate={(path) => navigate({ to: path })}
         >

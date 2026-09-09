@@ -19,7 +19,7 @@ export const mutedText = "text-muted-foreground";
 export const dangerText = "text-destructive";
 
 export const mediaGrid =
-  "grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3.5";
+  "grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3.5 max-[800px]:grid-cols-[repeat(auto-fill,minmax(96px,1fr))] max-[800px]:gap-x-2 max-[800px]:gap-y-4";
 
 export const stateBlock =
   "grid min-h-[min(420px,58svh)] content-center justify-items-center gap-2 text-center text-muted-foreground [&_p]:m-0 [&_p]:max-w-[440px] [&_strong]:text-[clamp(1.35rem,3vw,2.2rem)] [&_strong]:font-bold [&_strong]:tracking-normal [&_strong]:text-foreground";
