@@ -21,10 +21,22 @@ Configuration:
 | `DATABASE_URL` | `wadi.sqlite` relative to server working directory | SQLite path; `sqlite:/path?mode=rwc` is accepted |
 | `SESSION_TTL_DAYS` | `30` | Session lifetime |
 | `IPFS_GATEWAY` | `https://ipfs.io` | IPFS/IPNS addon gateway |
-| `VITE_API_BASE_URL` | `http://127.0.0.1:4000` | Browser API origin |
+| `VITE_API_BASE_URL` | Same origin in development; `http://127.0.0.1:4000` in production | Browser API origin |
 | `VITE_CHROMECAST_RECEIVER_APP_ID` | `CC1AD845` | Google Default Media Receiver, or your registered custom receiver |
 
 For production, serve the frontend and API over HTTPS. The API's media proxy requires a bearer session and preserves byte ranges without buffering entire films.
+
+## Private development access with Tailscale
+
+The development frontend proxies `/api` and `/health` to the local Node server. Requests stay on the page's origin, including when opened from another device over HTTPS.
+
+```sh
+# Use the DNS name shown by your Tailscale client.
+__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS=your-device.your-tailnet.ts.net pnpm dev
+tailscale serve --bg http://127.0.0.1:5173
+```
+
+If Serve is disabled, follow the admin setup link printed by Tailscale. The resulting HTTPS URL is private to your tailnet. Both dev processes remain bound to loopback. HTTPS gives browser media APIs the secure context they require.
 
 ## Playback
 

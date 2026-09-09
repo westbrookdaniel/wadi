@@ -6,6 +6,13 @@ import path from 'path'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  server: {
+    host: '127.0.0.1',
+    proxy: {
+      '/api': 'http://127.0.0.1:4000',
+      '/health': 'http://127.0.0.1:4000',
+    },
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
