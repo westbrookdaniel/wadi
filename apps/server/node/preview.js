@@ -1,0 +1,16 @@
+import express from 'express';
+import { createApp } from './main.js';
+const fixture = express();
+const base='http://127.0.0.1:4011';
+const film={id:'fixture:film',type:'movie',name:'Motion study',description:'A twenty-second picture and sound test. Use the player to seek, change speed, and check captions.',releaseInfo:'2026',genres:['Short film'],poster:base+'/poster.svg',background:base+'/backdrop.svg'};
+fixture.get('/poster.svg',(_req,res)=>res.type('svg').send('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="900"><defs><linearGradient id="g" x2="1" y2="1"><stop stop-color="#092c44"/><stop offset="1" stop-color="#ed7a45"/></linearGradient></defs><path fill="url(#g)" d="M0 0h600v900H0z"/><circle cx="440" cy="250" r="190" fill="#f9c683"/><path d="M0 700L240 300 600 750V900H0" fill="#102f35"/><text x="42" y="800" fill="white" font-family="sans-serif" font-size="62">MOTION STUDY</text></svg>'));
+fixture.get('/backdrop.svg',(_req,res)=>res.type('svg').send('<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900"><defs><linearGradient id="g"><stop stop-color="#0b1726"/><stop offset="1" stop-color="#bf6242"/></linearGradient></defs><path fill="url(#g)" d="M0 0h1600v900H0z"/><circle cx="1100" cy="280" r="210" fill="#e9ad69"/><path d="M400 900L980 270 1600 900" fill="#11313b"/></svg>'));
+fixture.get('/manifest.json',(_req,res)=>res.json({id:'org.wadi.fixture',name:'Wadi screening room',version:'1.0.0',resources:['catalog','meta','stream','subtitles'],types:['movie'],catalogs:[{id:'screening-room',type:'movie',name:'The screening room'}]}));
+fixture.get('/catalog/movie/screening-room.json',(_req,res)=>res.json({metas:[film]}));
+fixture.get('/meta/movie/:id',(_req,res)=>res.json({meta:film}));
+fixture.get('/stream/movie/:id',(_req,res)=>res.json({streams:[{name:'Local screening',title:'540p · H.264 + AAC',url:base+'/playback.mp4',subtitles:[{id:'en',lang:'eng',url:base+'/captions.vtt'}]}]}));
+fixture.get('/subtitles/movie/:id',(_req,res)=>res.json({subtitles:[{id:'en',lang:'eng',url:base+'/captions.vtt'}]}));
+fixture.get('/captions.vtt',(_req,res)=>res.type('text/vtt').send('WEBVTT\n\n00:00:00.000 --> 00:00:10.000\nPicture and sound.\n\n00:00:10.000 --> 00:00:20.000\nSeek, pause, and play.\n'));
+fixture.use(express.static(new URL('./fixtures',import.meta.url).pathname));
+fixture.listen(4011,'127.0.0.1');
+const {app}=createApp();app.listen(4000,'127.0.0.1');

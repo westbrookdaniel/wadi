@@ -202,7 +202,7 @@ export function createApp({ database = ':memory:', sessionDays = 30 } = {}) {
     return JSON.parse(text);
   };
   const manifestSchema = z.object({ id: identity, name: identity, version: identity, resources: z.array(z.union([identity, z.object({ name: identity, types: z.array(identity).default([]), idPrefixes: z.array(identity).default([]) }).passthrough()])).min(1), types: z.array(identity).default([]), idPrefixes: z.array(identity).default([]), catalogs: z.array(z.object({ id: identity, type: identity }).passthrough()).default([]) }).passthrough();
-  const addonView = ({ manifest_json, config_json, user_id, ...row }) => ({ ...row, manifest: JSON.parse(manifest_json), config: config_json ? JSON.parse(config_json) : null });
+  const addonView = ({ manifest_json, config_json, user_id, ...row }) => ({ ...row, manifest: manifestSchema.parse(JSON.parse(manifest_json)), config: config_json ? JSON.parse(config_json) : null });
   const userAddons = req => all('SELECT * FROM addons WHERE user_id=? ORDER BY installed_at', req.user.id).map(addonView);
   const ownAddon = (req, id) => addonView(get('SELECT * FROM addons WHERE id=? AND user_id=?', id, req.user.id) ?? fail(404, 'Addon not found'));
   app.get('/api/addons', (req, res) => res.json({ items: userAddons(req) }));
@@ -255,7 +255,7 @@ export function createApp({ database = ':memory:', sessionDays = 30 } = {}) {
   });
   app.use((err, _req, res, _next) => {
     if (res.headersSent) return res.destroy(err);
-    const status = err instanceof z.ZodError ? 400 : err.status ?? (err.code?.includes('CONSTRAINT') ? 409 : 500);
+    const status = err instanceof z.ZodError ? 400 : err.status ?? ((err.code?.includes('CONSTRAINT') || [19, 1555, 2067].includes(err.errcode)) ? 409 : 500);
     res.status(status).json({ error: status === 500 ? 'Server error' : err.message });
   });
   return { app, db };

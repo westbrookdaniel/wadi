@@ -57,3 +57,16 @@ test('Node API preserves auth, profile isolation, lists, progress, addons and by
  await request('/api/auth/logout','POST',undefined,204);await request('/api/auth/me','GET',undefined,401);
  const login=await request('/api/auth/login','POST',{email:'test@example.com',password:'test-password'});assert.ok(login.token);
 });
+
+test('existing SQLite accounts and sessions survive a Node server restart', async t => {
+ const { mkdtempSync, rmSync }=await import('node:fs'); const { tmpdir }=await import('node:os'); const { join }=await import('node:path');
+ const directory=mkdtempSync(join(tmpdir(),'wadi-test-'));t.after(()=>rmSync(directory,{recursive:true,force:true}));
+ const database=join(directory,'wadi.sqlite');
+ let runtime=createApp({database}); let server=createServer(runtime.app);let base=await start(server);
+ const auth=await fetch(base+'/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:'persist@example.com',password:'persist-password'})}).then(r=>r.json());
+ server.closeAllConnections(); await new Promise(resolve=>server.close(resolve));runtime.db.close();
+ runtime=createApp({database});server=createServer(runtime.app);base=await start(server);
+ t.after(()=>{server.closeAllConnections();server.close();runtime.db.close();});
+ const response=await fetch(base+'/api/auth/me',{headers:{Authorization:`Bearer ${auth.token}`}});assert.equal(response.status,200);assert.equal((await response.json()).id,auth.user.id);
+ const login=await fetch(base+'/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:'persist@example.com',password:'persist-password'})});assert.equal(login.status,200);
+});
