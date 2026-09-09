@@ -5,10 +5,11 @@ import { Artwork } from '@/components/artwork'
 import { mediaPreviewFromMeta } from './media-preview'
 
 export function ContinuePanel({ items, onOpen }: { items: ContinueWatchingItem[]; onOpen: (media: MediaPreview, videoId?: string | null) => void }) {
+  if (!items.length) return null
   return <section className="continue-panel" aria-label="Continue Watching">
     <h2 className="text-sm font-medium text-muted-foreground">Continue Watching</h2>
     <div className="mt-3 grid content-start gap-2 overflow-y-auto pr-1">
-      {items.length ? items.map(item => <ContinueItem key={`${item.media_type}:${item.media_id}:${item.video_id}`} item={item} onOpen={onOpen} />) : <p className="max-w-xs py-8 text-sm leading-6 text-muted-foreground">Start a film or episode and pick up where you left off here.</p>}
+      {items.map(item => <ContinueItem key={`${item.media_type}:${item.media_id}:${item.video_id}`} item={item} onOpen={onOpen} />)}
     </div>
   </section>
 }

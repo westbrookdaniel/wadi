@@ -39,6 +39,7 @@ export function HomePage({
   const continueItems = continueWatching.data ?? []
   const hasCatalogs = Boolean(catalogs.data?.length)
   const hasContinueWatching = Boolean(continueItems.length)
+  const showContinueWatching = hasContinueWatching && rows.some(row => row.kind === 'continue')
   const hasWatchlistContent = Object.values(listItemsByListId).some((items) => items.length > 0)
   const listItemsError = listItems.find((query) => query.error)?.error ?? null
   const isLoading =
@@ -77,9 +78,9 @@ export function HomePage({
         />
       ) : null}
 
-      {!isLoading && !showSetup ? <div className={rows.some(row => row.kind === 'continue') ? 'home-top' : undefined}>
+      {!isLoading && !showSetup ? <div className={showContinueWatching && hasCatalogs ? 'home-top' : undefined}>
         {catalogs.data?.[0] ? <FeaturedFilm entry={catalogs.data[0]} onOpen={onOpenMedia} /> : null}
-        {rows.some(row => row.kind === 'continue') ? <ContinuePanel items={continueItems} onOpen={onOpenMedia} /> : null}
+        {showContinueWatching ? <ContinuePanel items={continueItems} onOpen={onOpenMedia} /> : null}
       </div> : null}
       {!showSetup ? (
         <BrowseSections

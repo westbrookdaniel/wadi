@@ -433,13 +433,13 @@ function ProfileManager() {
           Profiles
         </h3>
       </div>
-      <div className="flex gap-2 flex-wrap">
+      <div className="flex gap-2 flex-wrap max-[800px]:flex-col">
         {profileList.map((profile) => {
           const isActive = profile.id === activeProfileId;
           return (
-            <div key={profile.id} className="grid justify-items-center p-2">
+            <div key={profile.id} className="grid justify-items-center p-2 max-[800px]:justify-items-stretch max-[800px]:px-0">
               <div
-                className={cn("grid justify-items-center gap-3 rounded-lg p-1")}
+                className={cn("grid justify-items-center gap-3 rounded-lg p-1 max-[800px]:grid-cols-[auto_minmax(0,1fr)] max-[800px]:justify-items-stretch")}
               >
                 <button
                   type="button"
@@ -454,14 +454,14 @@ function ProfileManager() {
                     avatarKey={profile.avatar_key}
                     themeColor={profile.theme_color}
                     className={cn(
-                      "size-14 text-lg",
+                      "size-14 text-lg max-[800px]:size-11",
                       "transition ring-0 hover:ring-4 ring-muted-foreground/40",
                       isActive && "ring-4 ring-primary/60",
                     )}
                   />
                 </button>
-                <div className="flex items-center gap-1 ml-3">
-                  <span className="text-sm font-medium">{profile.name}</span>
+                <div className="flex min-w-0 items-center gap-1 ml-3 max-[800px]:ml-1 max-[800px]:justify-between">
+                  <span className="truncate text-sm font-medium">{profile.name}</span>
                   <ProfileActionsMenu
                     open={openMenuProfileId === profile.id}
                     onToggle={() =>
@@ -484,16 +484,17 @@ function ProfileManager() {
           );
         })}
         {isAtLimit ? null : (
-          <div className={cn("grid justify-items-center gap-2 p-3")}>
+          <div className={cn("grid justify-items-center gap-2 p-3 max-[800px]:justify-items-stretch max-[800px]:p-0 max-[800px]:pt-2")}>
             <button
               onClick={() => setCreateOpen(true)}
               type="button"
               aria-label="Add profile"
-              className="grid size-14 place-items-center rounded-full border border-dashed border-border bg-muted/40 hover:bg-muted transition"
+              className="grid size-14 place-items-center rounded-full border border-dashed border-border bg-muted/40 hover:bg-muted transition max-[800px]:flex max-[800px]:h-11 max-[800px]:w-full max-[800px]:justify-center max-[800px]:gap-2 max-[800px]:rounded-lg"
             >
-              <Plus aria-hidden="true" />
+              <Plus aria-hidden="true" className="size-5" />
+              <span className="hidden max-[800px]:inline text-sm font-medium">Add profile</span>
             </button>
-            <span className="text-sm font-medium">Add profile</span>
+            <span className="text-sm font-medium max-[800px]:hidden">Add profile</span>
           </div>
         )}
       </div>
@@ -614,7 +615,7 @@ function ProfileActionsMenu({
         <Ellipsis aria-hidden="true" />
       </Button>
       {open ? (
-        <div className="absolute top-full z-20 mt-1 grid min-w-[138px] gap-1 rounded-lg border border-border bg-popover p-1 shadow-lg">
+        <div className="absolute top-full max-[800px]:right-0 z-20 mt-1 grid min-w-[138px] gap-1 rounded-lg border border-border bg-popover p-1 shadow-lg">
           <Button
             variant="ghost"
             type="button"

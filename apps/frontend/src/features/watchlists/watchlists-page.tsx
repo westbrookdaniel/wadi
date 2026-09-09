@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Settings, Trash2, Search, Bookmark } from 'lucide-react'
-import { useState } from 'react'
+import { Plus, Settings, Search, Bookmark, X } from 'lucide-react'
+import { useRef, useState } from 'react'
 
-import { createList, deleteList, deleteListItem, listItemsQuery, listsQuery, queryKeys, updateList } from '@/api/queries'
+import { createList, deleteList, listItemsQuery, listsQuery, queryKeys, updateList } from '@/api/queries'
 import type { ListItem, MediaPreview } from '@/api/types'
 import { useDialogManager } from '@/components/dialogs'
 import { EmptyState, ErrorState, LoadingState } from '@/components/status'
@@ -28,6 +28,8 @@ export function WatchlistsPage({ onOpenMedia }: { onOpenMedia: (media: MediaPrev
   const items = useQuery(listItemsQuery(activeListId))
 
   const [filter, setFilter] = useState('')
+  const [searchExpanded, setSearchExpanded] = useState(false)
+  const searchInput = useRef<HTMLInputElement>(null)
   const [sort, setSort] = useState('recent')
 
   const createMutation = useMutation({
@@ -50,13 +52,6 @@ export function WatchlistsPage({ onOpenMedia }: { onOpenMedia: (media: MediaPrev
     onSuccess: async () => {
       setSelectedListId(defaultList?.id ?? null)
       await queryClient.invalidateQueries({ queryKey: queryKeys.lists })
-    },
-  })
-
-  const removeItemMutation = useMutation({
-    mutationFn: ({ listId, itemId }: { listId: string; itemId: string }) => deleteListItem(listId, itemId),
-    onSuccess: async (_result, values) => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.listItems(values.listId) })
     },
   })
 
@@ -88,28 +83,35 @@ export function WatchlistsPage({ onOpenMedia }: { onOpenMedia: (media: MediaPrev
 
   const visibleItems = (items.data ?? []).filter(item => item.title.toLocaleLowerCase().includes(filter.trim().toLocaleLowerCase()))
   if (sort === 'az') visibleItems.sort((a, b) => a.title.localeCompare(b.title))
-  const mutationError = createMutation.error ?? renameMutation.error ?? deleteListMutation.error ?? removeItemMutation.error
+  const mutationError = createMutation.error ?? renameMutation.error ?? deleteListMutation.error
 
   return (
-    <div className={cn(pageStack, 'gap-6')}>
+    <div className={cn(pageStack, 'gap-5 max-[800px]:gap-3')}>
       <header className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="m-0 text-2xl font-medium tracking-tight">Watchlists</h1>
         <Button size="sm" className="rounded-lg" onClick={() => void openCreateListDialog()} disabled={createMutation.isPending}><Plus aria-hidden="true" />New list</Button>
       </header>
-      <nav aria-label="Watchlists" className="flex gap-2 overflow-x-auto pb-1">
-        {(lists.data ?? []).map(list => <button key={list.id} type="button" onClick={() => { setSelectedListId(list.id); setFilter('') }} aria-pressed={activeListId === list.id} className={cn('flex shrink-0 items-center gap-2 rounded-lg border px-4 py-2.5 text-sm transition', activeListId === list.id ? 'border-white/20 bg-white/10 text-white' : 'border-transparent text-muted-foreground hover:bg-white/5')}>
-          {list.is_default ? <Bookmark className="size-3.5" aria-hidden="true" /> : null}{list.name}
-        </button>)}
-      </nav>
-      {activeList ? <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/8 pb-4">
-        <div className="flex items-center gap-3"><span className="text-xs text-muted-foreground">{items.data?.length ?? 0} {(items.data?.length ?? 0) === 1 ? "title" : "titles"}</span>
-          {!activeList.is_default ? <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" aria-label="List settings" onClick={() => void openListSettingsDialog()}><Settings className="size-3.5" />Manage list</Button> : null}
+      <div className="flex min-w-0 items-center gap-3 max-[800px]:flex-col max-[800px]:items-stretch max-[800px]:gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-1">
+          <nav aria-label="Watchlists" className="flex min-w-0 flex-1 gap-1 overflow-x-auto">
+            {(lists.data ?? []).map(list => <button key={list.id} type="button" onClick={() => { setSelectedListId(list.id); setFilter('') }} aria-pressed={activeListId === list.id} className={cn('flex h-9 shrink-0 items-center gap-2 rounded-lg border px-3 text-sm transition', activeListId === list.id ? 'border-white/20 bg-white/10 text-white' : 'border-transparent text-muted-foreground hover:bg-white/5')}>
+              {list.is_default ? <Bookmark className="size-3.5" aria-hidden="true" /> : null}{list.name}
+            </button>)}
+          </nav>
+          {activeList && !activeList.is_default ? <Button variant="ghost" size="icon-sm" className="text-muted-foreground" aria-label="List settings" title="Manage list" onClick={() => void openListSettingsDialog()}><Settings className="size-3.5" /></Button> : null}
         </div>
-        <div className="flex flex-wrap gap-2">
-          <label className="flex items-center gap-2 rounded-lg border border-white/10 px-3"><Search className="size-3.5 text-muted-foreground" /><Input aria-label="Search this list" placeholder="Search this list" value={filter} onChange={event => setFilter(event.target.value)} className="h-9 w-40 border-0 bg-transparent px-0 text-sm focus-visible:ring-0" /></label>
-          <Select value={sort} onValueChange={setSort}><SelectTrigger aria-label="Sort watchlist" className="h-9 w-44 rounded-lg text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="recent">Recently added</SelectItem><SelectItem value="az">Title A–Z</SelectItem></SelectContent></Select>
-        </div>
-      </div> : null}
+        {activeList ? <div className="flex min-w-0 items-center gap-2">
+          <Button variant="ghost" size="sm" className={cn('hidden flex-1 justify-start border border-white/10 text-muted-foreground', !searchExpanded && 'max-[800px]:flex')} onClick={() => { setSearchExpanded(true); requestAnimationFrame(() => searchInput.current?.focus()) }}><Search className="size-3.5" />Search this list</Button>
+          <label className={cn('flex h-9 min-w-0 items-center gap-2 rounded-lg border border-white/10 px-3 max-[800px]:flex-1', !searchExpanded && 'max-[800px]:hidden')}>
+            <Search className="size-3.5 shrink-0 text-muted-foreground" />
+            <Input ref={searchInput} aria-label="Search this list" placeholder="Search this list" value={filter} onChange={event => setFilter(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') { setFilter(''); setSearchExpanded(false) } }} className="h-full w-40 border-0 bg-transparent px-0 text-sm focus-visible:ring-0 max-[800px]:w-full" />
+            <button type="button" aria-label="Close list search" className="hidden max-[800px]:grid size-6 shrink-0 place-items-center text-muted-foreground" onClick={() => { setFilter(''); setSearchExpanded(false) }}><X className="size-3.5" /></button>
+          </label>
+          <div className={cn(searchExpanded && 'max-[800px]:hidden')}>
+            <Select value={sort} onValueChange={setSort}><SelectTrigger aria-label="Sort watchlist" className="h-9 w-40 rounded-lg text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="recent">Recently added</SelectItem><SelectItem value="az">Title A–Z</SelectItem></SelectContent></Select>
+          </div>
+        </div> : null}
+      </div>
       {mutationError ? <ErrorState error={mutationError} /> : null}
       <section className={contentSection}>
         {lists.isLoading ? <LoadingState label="Loading lists" /> : null}
@@ -123,18 +125,6 @@ export function WatchlistsPage({ onOpenMedia }: { onOpenMedia: (media: MediaPrev
                 key={item.id}
                 media={mediaFromListItem(item)}
                 onOpen={() => onOpenMedia(mediaFromListItem(item))}
-                action={
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    type="button"
-                    aria-label={`Remove ${item.title}`}
-                    disabled={removeItemMutation.isPending}
-                    onClick={() => activeListId && removeItemMutation.mutate({ listId: activeListId, itemId: item.id })}
-                  >
-                    <Trash2 aria-hidden="true" />
-                  </Button>
-                }
               />
             ))}
           </div>
