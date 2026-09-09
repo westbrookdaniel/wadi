@@ -59,3 +59,12 @@ describe('rankMediaByQuery', () => {
     expect(ranked.map((entry) => entry.item.id)).toEqual(['1', '2'])
   })
 })
+
+it('ranks misspelled Mushiko above unrelated provider results without penalizing years', () => {
+  const ranked = rankMediaByQuery([item('a', 'Mushi-Shi'), item('b', 'Mushoku Tensei: Jobless Reincarnation', '2021–'), item('c', 'Bushido'), item('d', 'Michiko & Hatchin')], 'mushiko')
+  expect(ranked[0]?.item.id).toBe('b')
+})
+it('deduplicates providers and preserves non-Latin title matches', () => {
+  expect(rankMediaByQuery([item('1', '進撃の巨人'), item('1', '進撃の巨人'), item('2', 'Other')], '進撃')[0]?.item.id).toBe('1')
+  expect(rankMediaByQuery([item('1', 'Dune'), item('1', 'Dune')], 'Dune')).toHaveLength(1)
+})

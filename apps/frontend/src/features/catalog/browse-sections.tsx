@@ -9,6 +9,7 @@ import { contentSection, sectionHeading } from '@/lib/styles'
 import type { BrowseRowCandidate } from './browse-layout'
 import { filterWatchlistItemsForPage } from './browse-layout'
 import { CatalogSection } from './catalog-section'
+import { mediaPreviewFromMeta } from './media-preview'
 
 export function BrowseSections({
   page,
@@ -132,56 +133,6 @@ function ContinueWatchingCard({
   )
 }
 
-function mediaPreviewFromMeta(
-  item: ContinueWatchingItem,
-  data: unknown,
-): MediaPreview | null {
-  const responses =
-    data &&
-    typeof data === 'object' &&
-    'responses' in data &&
-    Array.isArray(data.responses)
-      ? data.responses
-      : []
-
-  for (const response of responses) {
-    if (!response || typeof response !== 'object') {
-      continue
-    }
-
-    const body = 'response' in response ? response.response : null
-    const meta =
-      body &&
-      typeof body === 'object' &&
-      'meta' in body &&
-      body.meta &&
-      typeof body.meta === 'object'
-        ? (body.meta as Record<string, unknown>)
-        : null
-
-    if (!meta) {
-      continue
-    }
-
-    const name = stringValue(meta.name) ?? stringValue(meta.title)
-    if (!name) {
-      continue
-    }
-
-    return {
-      id: stringValue(meta.id) ?? item.media_id,
-      type: stringValue(meta.type) ?? item.media_type,
-      name,
-      poster: stringValue(meta.poster),
-      releaseInfo: stringValue(meta.releaseInfo) ?? stringValue(meta.year),
-      description: stringValue(meta.description),
-      raw: meta,
-    }
-  }
-
-  return null
-}
-
 function mediaFromListItem(item: ListItem): MediaPreview {
   return {
     id: item.media_id,
@@ -195,8 +146,4 @@ function mediaFromListItem(item: ListItem): MediaPreview {
       name: item.title,
     },
   }
-}
-
-function stringValue(value: unknown) {
-  return typeof value === 'string' && value.trim() ? value : undefined
 }

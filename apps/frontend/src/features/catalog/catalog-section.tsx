@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { catalogQuery } from "@/api/queries";
@@ -19,14 +20,25 @@ export function CatalogSection({
   showTypeBadge?: boolean;
   onOpen: (media: MediaPreview) => void;
 }) {
+  const section = useRef<HTMLElement>(null);
+  const [nearViewport, setNearViewport] = useState(() => typeof IntersectionObserver === 'undefined');
+  useEffect(() => {
+    if (!section.current) return;
+    if (typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) { setNearViewport(true); observer.disconnect(); }
+    }, { rootMargin: '600px' });
+    observer.observe(section.current);
+    return () => observer.disconnect();
+  }, []);
   const extras: Record<string, string> = search ? { search } : {};
   const catalog = useQuery(
-    catalogQuery(entry.catalog.type, entry.catalog.id, extras),
+    catalogQuery(entry.catalog.type, entry.catalog.id, extras, nearViewport),
   );
   const title = entry.catalog.name ?? entry.catalog.id;
 
   return (
-    <section className={contentSection}>
+    <section ref={section} className={contentSection}>
       <div className={sectionHeading}>
         <div>
           <h2 className="m-0 flex items-center gap-2 tracking-normal">
@@ -41,7 +53,7 @@ export function CatalogSection({
         </div>
       </div>
 
-      {catalog.isLoading ? <PosterSkeletonRow /> : null}
+      {!nearViewport || catalog.isLoading ? <PosterSkeletonRow /> : null}
       {catalog.error ? <ErrorState error={catalog.error} /> : null}
       {catalog.data?.length ? (
         <MediaRow>
@@ -53,7 +65,7 @@ export function CatalogSection({
             />
           ))}
         </MediaRow>
-      ) : !catalog.isLoading && !catalog.error ? (
+      ) : nearViewport && !catalog.isLoading && !catalog.error ? (
         <EmptyState title="No items returned" />
       ) : null}
     </section>

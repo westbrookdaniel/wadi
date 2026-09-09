@@ -93,11 +93,12 @@ export const catalogQuery = (
 ) =>
   queryOptions({
     queryKey: queryKeys.catalog(contentType, catalogId, extras),
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const search = new URLSearchParams(extras)
       const suffix = search.size ? `?${search.toString()}` : ''
       const data = await apiRequest<ApiResponses<{ metas?: unknown[] }>>(
         `/api/catalog/${contentType}/${catalogId}${suffix}`,
+        { signal },
       )
       return flattenMediaResponses(data, contentType)
     },

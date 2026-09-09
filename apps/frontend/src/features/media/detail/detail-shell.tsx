@@ -1,3 +1,4 @@
+import { Artwork } from '@/components/artwork'
 import { ArrowLeft } from "lucide-react";
 
 import type { MediaPreview } from "@/api/types";
@@ -32,6 +33,7 @@ export function DetailShell({
               size="icon-lg"
               variant="ghost"
               type="button"
+              aria-label="Back"
               onClick={onBack}
             >
               <ArrowLeft aria-hidden="true" />
@@ -44,10 +46,10 @@ export function DetailShell({
             )}
           >
             {media.poster ? (
-              <img
+              <Artwork
+                backdropSource="detail"
                 className="aspect-[2/3] w-full rounded-lg object-cover shadow-[0_28px_80px_hsl(0_0%_0%/42%)] max-[800px]:w-[min(220px,70vw)]"
                 src={media.poster}
-                data-bg-source="detail"
                 alt=""
               />
             ) : null}

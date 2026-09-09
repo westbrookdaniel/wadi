@@ -69,23 +69,25 @@ export function useDynamicBackdropColor(
       }
 
       activeController?.abort()
-      activeController = new AbortController()
+      const controller = new AbortController()
+      activeController = controller
       const cached = accentCache.get(source)
       if (cached !== undefined) {
         setAccent({ path: pathname, color: cached })
         return
       }
 
-      extractAccent(source, activeController.signal)
+      extractAccent(source, controller.signal)
         .then((color) => {
-          if (isCancelled || activeController?.signal.aborted) {
+          if (isCancelled || controller.signal.aborted) {
             return
           }
+          if (accentCache.size >= 100) accentCache.delete(accentCache.keys().next().value ?? '')
           accentCache.set(source, color)
           setAccent({ path: pathname, color })
         })
         .catch(() => {
-          if (isCancelled || activeController?.signal.aborted) {
+          if (isCancelled || controller.signal.aborted) {
             return
           }
           accentCache.set(source, null)

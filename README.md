@@ -1,6 +1,6 @@
 # Wadi
 
-A Stremio-compatible library with a Node.js API, SQLite accounts and profiles, and an integrated MediaBunny player.
+A Stremio-compatible library served by one Next.js application, with SQLite accounts and profiles and an integrated MediaBunny player.
 
 ## Run
 
@@ -11,32 +11,35 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-The frontend runs on http://localhost:5173 and the API on http://127.0.0.1:4000. The backend stores its database at `apps/server/wadi.sqlite` when started through pnpm. Set `DATABASE_URL` to an absolute path to use an existing Wadi database. The current Rust-era SQLite schema, Argon2 password hashes, and hashed session tokens are retained. Back up the database before switching server versions. Do not run both servers against it at once.
+Next serves both the browser app and `/api` at http://127.0.0.1:5173. There is no separate API process. The existing React/TanStack screens run inside a Next page; a Next API route invokes the Node handlers directly. Node 24 is required for SQLite.
+
+The database is `apps/frontend/data/wadi.sqlite`, excluded from Git. Set `DATABASE_URL` to an absolute path to use another database. Existing account hashes, profiles, addons and watch progress remain compatible. For an old checkout, stop its server and copy `apps/server/wadi.sqlite` into the new data directory before starting Next.
+
+Production uses `pnpm build` then `pnpm start`, also on port 5173. Keep the SQLite data directory on persistent storage; this application needs a long-running Node host rather than ephemeral serverless storage.
 
 Configuration:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `BIND_ADDR` | `127.0.0.1:4000` | API listener |
-| `DATABASE_URL` | `wadi.sqlite` relative to server working directory | SQLite path; `sqlite:/path?mode=rwc` is accepted |
+| `DATABASE_URL` | `apps/frontend/data/wadi.sqlite` | SQLite path; `sqlite:/path?mode=rwc` is accepted |
 | `SESSION_TTL_DAYS` | `30` | Session lifetime |
 | `IPFS_GATEWAY` | `https://ipfs.io` | IPFS/IPNS addon gateway |
-| `VITE_API_BASE_URL` | Same origin in development; `http://127.0.0.1:4000` in production | Browser API origin |
-| `VITE_CHROMECAST_RECEIVER_APP_ID` | `CC1AD845` | Google Default Media Receiver, or your registered custom receiver |
+| `NEXT_PUBLIC_API_BASE_URL` | Same origin | Browser API origin |
+| `NEXT_PUBLIC_CHROMECAST_RECEIVER_APP_ID` | `CC1AD845` | Google Default Media Receiver, or your registered custom receiver |
 
 For production, serve the frontend and API over HTTPS. The API's media proxy requires a bearer session and preserves byte ranges without buffering entire films.
 
 ## Private development access with Tailscale
 
-The development frontend proxies `/api` and `/health` to the local Node server. Requests stay on the page's origin, including when opened from another device over HTTPS.
+Next serves `/api` and `/health` directly. Requests stay on the page's origin, including when opened from another device over HTTPS.
 
 ```sh
 # Use the DNS name shown by your Tailscale client.
-__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS=your-device.your-tailnet.ts.net pnpm dev
+pnpm build && pnpm start
 tailscale serve --bg http://127.0.0.1:5173
 ```
 
-If Serve is disabled, follow the admin setup link printed by Tailscale. The resulting HTTPS URL is private to your tailnet. Both dev processes remain bound to loopback. HTTPS gives browser media APIs the secure context they require.
+If Serve is disabled, follow the admin setup link printed by Tailscale. The resulting HTTPS URL is private to your tailnet. The Next process remains bound to loopback. HTTPS gives browser media APIs the secure context they require.
 
 ## Playback
 
@@ -50,7 +53,7 @@ Playback depends on browser WebCodecs support for the stream's codecs. This is n
 
 The sender uses Google's Default Media Receiver without requiring a registered application ID. It sends the original stream URL, resume position and subtitle tracks, and controls pause, seeking, volume and mute. A successful load pauses local playback. The TV must be able to reach the stream and subtitle URLs; loopback URLs are rejected. Upstream CORS, format and codec compatibility still apply. Default-receiver playback speed and audio-track switching are not implemented; use the custom receiver for these controls.
 
-To use the recovered Wadi custom receiver, host `apps/frontend/public/chromecast-receiver/` over HTTPS, register its URL in the Google Cast SDK Developer Console, and set `VITE_CHROMECAST_RECEIVER_APP_ID` before building. A physical Chromecast/TV is needed to verify receiver playback. SDK tests validate sender requests and failures, not hardware decoding.
+To use the recovered Wadi custom receiver, host `apps/frontend/public/chromecast-receiver/` over HTTPS, register its URL in the Google Cast SDK Developer Console, and set `NEXT_PUBLIC_CHROMECAST_RECEIVER_APP_ID` before building. A physical Chromecast/TV is needed to verify receiver playback. SDK tests validate sender requests and failures, not hardware decoding.
 
 References: [MediaBunny media sinks](https://mediabunny.dev/guide/media-sinks), [Google Cast sender integration](https://developers.google.com/cast/docs/web_sender/integrate).
 
@@ -60,6 +63,7 @@ References: [MediaBunny media sinks](https://mediabunny.dev/guide/media-sinks), 
 pnpm build
 pnpm test
 pnpm lint
+pnpm test:next # production integration smoke, after build
 ```
 
 The backend integration tests start actual HTTP listeners and exercise authentication, profile isolation, lists, addon catalogs and streams, byte-range responses, saved preferences and SQLite persistence across restarts. Frontend tests cover the player preferences, subtitle parser, Cast sender and existing library behavior.
@@ -67,14 +71,14 @@ The backend integration tests start actual HTTP listeners and exercise authentic
 For a repeatable browser check without third-party content:
 
 ```sh
-node apps/server/node/preview.js
+node apps/frontend/server/preview.js
 pnpm --filter frontend dev
 ```
 
-Create a disposable account in this in-memory preview, then install `http://127.0.0.1:4011/manifest.json` in Account settings → Add addon. Open Motion study and choose its local stream. The included 20-second H.264/AAC fixture has captions, allowing checks of seek, pause, speed, subtitle toggling, and Continue Watching. Stop the normal API before starting the preview because both use port 4000. Preview accounts disappear when it exits.
+Create a disposable account in this in-memory preview, then install `http://127.0.0.1:4011/manifest.json` in Account settings → Add addon. Open Motion study and choose its local stream. The included 20-second H.264/AAC fixture has captions, allowing checks of seek, pause, speed, subtitle toggling, and Continue Watching. The fixture process on port 4011 only serves test media and an addon; the app and API remain in Next. Use `DATABASE_URL=:memory: pnpm dev` for disposable accounts without affecting your library.
 
 Regenerate the fixture with:
 
 ```sh
-ffmpeg -f lavfi -i testsrc2=size=960x540:rate=24 -f lavfi -i sine=frequency=440:sample_rate=48000 -t 20 -c:v libx264 -pix_fmt yuv420p -c:a aac -movflags +faststart apps/server/node/fixtures/playback.mp4
+ffmpeg -f lavfi -i testsrc2=size=960x540:rate=24 -f lavfi -i sine=frequency=440:sample_rate=48000 -t 20 -c:v libx264 -pix_fmt yuv420p -c:a aac -movflags +faststart apps/frontend/server/fixtures/playback.mp4
 ```

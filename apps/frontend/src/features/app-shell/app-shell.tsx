@@ -99,7 +99,7 @@ export function AppShell({
 
       <main
         className={cn(
-          "ml-[88px] min-h-svh max-[800px]:ml-0 max-[800px]:mb-[72px] max-[800px]:min-h-[calc(100svh-72px)]",
+          "app-page ml-[88px] min-h-svh max-[800px]:ml-0 max-[800px]:mb-[72px] max-[800px]:min-h-[calc(100svh-72px)]",
           pagePadding,
           hideNavigation &&
             "p-0 max-[800px]:p-0 ml-0 mb-0 min-h-svh max-[800px]:mb-0",
@@ -107,7 +107,7 @@ export function AppShell({
         )}
         aria-label={label}
       >
-        {children}
+        <div key={location.pathname} className={hideNavigation ? undefined : "route-arrival"}>{children}</div>
       </main>
     </div>
   );

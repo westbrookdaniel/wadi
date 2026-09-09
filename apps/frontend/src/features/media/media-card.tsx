@@ -1,5 +1,6 @@
 import type { ListItem, MediaPreview } from '@/api/types'
 
+import { Artwork } from '@/components/artwork'
 import { cn } from '@/lib/utils'
 
 type CardMedia = MediaPreview | ListItem
@@ -32,17 +33,7 @@ export function MediaCard({
         data-bg-source="catalog"
         data-has-poster={poster ? 'true' : 'false'}
       >
-        {poster ? (
-          <img
-            className="size-full object-cover"
-            src={poster}
-            alt=""
-            loading="lazy"
-            data-bg-source="catalog"
-          />
-        ) : (
-          <span className="grid h-full place-items-center text-[1.4rem] font-bold">{title.slice(0, 2)}</span>
-        )}
+        <Artwork backdropSource="catalog" src={poster} className="size-full" />
         {watched ? (
           <span className="absolute top-2 right-2 rounded-full bg-[hsl(142_72%_36%)] px-2 py-1 text-[0.72rem] font-semibold text-white">
             Watched

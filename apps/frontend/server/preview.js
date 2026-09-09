@@ -1,5 +1,4 @@
 import express from 'express';
-import { createApp } from './main.js';
 const fixture = express();
 const base='http://127.0.0.1:4011';
 const film={id:'fixture:film',type:'movie',name:'Motion study',description:'A twenty-second picture and sound test. Use the player to seek, change speed, and check captions.',releaseInfo:'2026',genres:['Short film'],poster:base+'/poster.svg',background:base+'/backdrop.svg'};
@@ -13,4 +12,3 @@ fixture.get('/subtitles/movie/:id',(_req,res)=>res.json({subtitles:[{id:'en',lan
 fixture.get('/captions.vtt',(_req,res)=>res.type('text/vtt').send('WEBVTT\n\n00:00:00.000 --> 00:00:10.000\nPicture and sound.\n\n00:00:10.000 --> 00:00:20.000\nSeek, pause, and play.\n'));
 fixture.use(express.static(new URL('./fixtures',import.meta.url).pathname));
 fixture.listen(4011,'127.0.0.1');
-const {app}=createApp();app.listen(4000,'127.0.0.1');

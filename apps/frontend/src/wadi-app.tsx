@@ -1,8 +1,6 @@
 import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { RouterProvider } from '@tanstack/react-router'
-import './index.css'
 import { router } from './router'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { ToastProvider } from '@/components/ui/toast'
@@ -17,7 +15,7 @@ const queryClient = new QueryClient({
   },
 })
 
-createRoot(document.getElementById('root')!).render(
+export default function WadiApp() { return (
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
@@ -28,5 +26,5 @@ createRoot(document.getElementById('root')!).render(
         </ToastProvider>
       </TooltipProvider>
     </QueryClientProvider>
-  </StrictMode>,
-)
+  </StrictMode>
+) }

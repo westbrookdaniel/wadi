@@ -35,6 +35,7 @@ export function AuthPage({ mode, onModeChange }: { mode: AuthMode; onModeChange:
     mutationFn: (value: z.infer<typeof authSchema>) =>
       mode === 'login' ? login(value.email, value.password) : register(value.email, value.password),
     onSuccess: async (data) => {
+      queryClient.clear()
       setToken(data.token)
       setActiveProfileId(data.active_profile_id ?? data.user.active_profile_id)
       await queryClient.invalidateQueries({ queryKey: queryKeys.me })
@@ -48,7 +49,7 @@ export function AuthPage({ mode, onModeChange }: { mode: AuthMode; onModeChange:
       confirmPassword: '',
     },
     validators: {
-      onSubmit: authSchema,
+      onSubmit: mode === 'register' ? authSchema.refine(value => value.confirmPassword === value.password, { message: 'Repeat your password.', path: ['confirmPassword'] }) : authSchema,
     },
     onSubmit: ({ value }) => mutation.mutate(value),
   })
@@ -56,35 +57,36 @@ export function AuthPage({ mode, onModeChange }: { mode: AuthMode; onModeChange:
   const title = mode === 'login' ? 'Welcome back' : 'Create account'
   const body =
     mode === 'login'
-      ? 'Sign in to browse your addons, lists, movies, and series.'
-      : 'Create a Wadi account to start building your media library.'
+      ? 'Your films, shows, and saved moments.'
+      : 'Make a little room for everything you love to watch.'
 
   return (
     <main
       className={cn(
-        'grid min-h-svh content-center justify-items-center gap-[clamp(34px,7vh,72px)] px-6 py-[clamp(36px,8vw,96px)]',
+        'auth-screen grid min-h-dvh content-center justify-items-center px-5 py-12',
         'dark',
         authBackground,
       )}
     >
-      <div className="text-sm font-bold uppercase leading-none text-muted-foreground">Wadi</div>
       <form
-        className="grid w-[min(640px,100%)] gap-7 border-0 bg-transparent p-0 shadow-none"
+        className="auth-form grid w-full max-w-[420px] gap-5 rounded-2xl border border-white/8 bg-card/60 p-7 shadow-2xl sm:p-9"
         onSubmit={(event) => {
           event.preventDefault()
           void form.handleSubmit()
         }}
       >
-        <div className="grid gap-4 text-center">
-          <h1 className="m-0 text-[clamp(2rem,4vw,3.25rem)] leading-[0.95] tracking-normal">{title}</h1>
-          <p className="w-[min(560px,100%)] justify-self-center text-[clamp(1rem,1.5vw,1.18rem)] text-muted-foreground">{body}</p>
+        <div className="mb-2 grid gap-3 text-left">
+          <img src="/favicon.svg" alt="Wadi" className="mb-3 size-14" />
+          <h1 className="m-0 text-[28px] font-medium leading-tight tracking-tight">{title}</h1>
+          <p className="text-sm leading-relaxed text-muted-foreground">{body}</p>
         </div>
 
         <form.Field name="email">
           {(field) => (
-            <div className="grid w-[min(420px,100%)] justify-self-center gap-2">
+            <div className="grid w-full justify-self-center gap-2">
               <Label htmlFor={field.name}>Email</Label>
               <Input
+                className="h-11 rounded-lg border border-white/8 bg-background/70 px-3 text-base"
                 id={field.name}
                 type="email"
                 autoComplete="email"
@@ -100,9 +102,10 @@ export function AuthPage({ mode, onModeChange }: { mode: AuthMode; onModeChange:
 
         <form.Field name="password">
           {(field) => (
-            <div className="grid w-[min(420px,100%)] justify-self-center gap-2">
+            <div className="grid w-full justify-self-center gap-2">
               <Label htmlFor={field.name}>Password</Label>
               <Input
+                className="h-11 rounded-lg border border-white/8 bg-background/70 px-3 text-base"
                 id={field.name}
                 type="password"
                 autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
@@ -119,9 +122,10 @@ export function AuthPage({ mode, onModeChange }: { mode: AuthMode; onModeChange:
         {mode === 'register' ? (
           <form.Field name="confirmPassword">
             {(field) => (
-              <div className="grid w-[min(420px,100%)] justify-self-center gap-2">
+              <div className="grid w-full justify-self-center gap-2">
                 <Label htmlFor={field.name}>Repeat password</Label>
                 <Input
+                className="h-11 rounded-lg border border-white/8 bg-background/70 px-3 text-base"
                   id={field.name}
                   type="password"
                   autoComplete="new-password"
@@ -136,11 +140,11 @@ export function AuthPage({ mode, onModeChange }: { mode: AuthMode; onModeChange:
           </form.Field>
         ) : null}
 
-        {mutation.error ? <p className="w-[min(420px,100%)] justify-self-center text-destructive">{authError(mutation.error)}</p> : null}
+        {mutation.error ? <p className="w-full justify-self-center text-destructive">{authError(mutation.error)}</p> : null}
 
         <form.Subscribe selector={(state) => ({ canSubmit: state.canSubmit, isSubmitting: state.isSubmitting })}>
           {(state) => (
-            <Button className="w-[min(420px,100%)] justify-self-center" type="submit" disabled={!canSubmitForm(state, mutation.isPending)}>
+            <Button className="mt-1 h-11 w-full justify-self-center rounded-lg font-medium" type="submit" disabled={!canSubmitForm(state, mutation.isPending)}>
               {mutation.isPending ? 'Working' : mode === 'login' ? 'Login' : 'Register'}
               <ArrowRight aria-hidden="true" />
             </Button>
@@ -148,7 +152,7 @@ export function AuthPage({ mode, onModeChange }: { mode: AuthMode; onModeChange:
         </form.Subscribe>
 
         <Button
-          className="w-[min(420px,100%)] justify-self-center"
+          className="w-full justify-self-center"
           variant="link"
           type="button"
           onClick={() => onModeChange(mode === 'login' ? 'register' : 'login')}

@@ -11,3 +11,7 @@ target
 
 .DS_Store
 *.log
+
+.next/
+*.tsbuildinfo
+apps/frontend/data/

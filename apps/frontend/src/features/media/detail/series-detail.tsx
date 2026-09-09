@@ -1,3 +1,4 @@
+import { Artwork } from '@/components/artwork'
 import { uniqueSeasons, defaultSeason, seasonValue, parseSeasonValue, seasonLabel } from './episode-labels'
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -278,8 +279,6 @@ function EpisodeButton({
   watchState?: { position_seconds: number };
   onClick: () => void;
 }) {
-  const [imageError, setImageError] = useState(false);
-  const showImage = Boolean(episode.thumbnail) && !imageError;
 
   return (
     <div className="rounded-lg border border-border bg-card/70">
@@ -288,24 +287,7 @@ function EpisodeButton({
         type="button"
         onClick={onClick}
       >
-        {showImage ? (
-          <div className="h-16 w-24 rounded-l-lg overflow-hidden">
-            <img
-              src={episode.thumbnail}
-              alt={episode.title}
-              className="h-16 w-24 object-cover"
-              loading="lazy"
-              onError={() => setImageError(true)}
-            />
-          </div>
-        ) : (
-          <div
-            className="grid h-16 w-24 rounded-l-lg place-items-center bg-muted text-[0.65rem] uppercase tracking-wide text-muted-foreground"
-            aria-hidden="true"
-          >
-            No Image
-          </div>
-        )}
+        <Artwork src={episode.thumbnail} className="h-16 w-24 rounded-l-lg" />
         <div className="min-w-0 flex flex-col justify-center px-4 p-2.5">
           <strong className="block overflow-hidden text-ellipsis whitespace-nowrap">
             {episode.title}

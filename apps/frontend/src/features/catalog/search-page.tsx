@@ -1,6 +1,6 @@
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { Search } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 
 import { catalogQuery, catalogsQuery } from '@/api/queries'
 import type { MediaPreview } from '@/api/types'
@@ -28,36 +28,43 @@ export function SearchPage({ onOpenMedia }: { onOpenMedia: (media: MediaPreview)
     ),
   })
 
-  const media = useMemo(
-    () => rankMediaByQuery(results.flatMap((result) => result.data ?? []), debouncedQuery).map((entry) => entry.item),
-    [debouncedQuery, results],
-  )
+  const media = rankMediaByQuery(results.flatMap((result) => result.data ?? []), debouncedQuery).map(entry => entry.item)
+  const [filter, setFilter] = useState('all')
+  const visibleMedia = media.filter(item => filter === 'all' || item.type === filter)
   const isSearching = results.some((result) => result.isLoading)
 
   return (
     <div className={pageStack}>
-      <label className="flex min-h-[52px] w-[min(760px,100%)] items-center gap-2.5 rounded-full border border-border bg-card/60 px-[18px] shadow-sm ring-1 ring-foreground/5 max-[800px]:flex-col max-[800px]:items-stretch">
+      <div><h1 className="text-3xl font-medium tracking-tight">Search</h1><p className="mt-2 text-sm text-muted-foreground">Find a film, series, or a title you almost remember.</p></div>
+      <label className="flex min-h-[52px] w-[min(760px,100%)] items-center gap-2.5 rounded-full border border-border bg-card/60 px-[18px] shadow-sm ring-1 ring-foreground/5">
         <Search className="size-[18px] text-muted-foreground" aria-hidden="true" />
         <Input
           className="min-h-[50px] border-0 bg-transparent px-0 focus-visible:ring-0"
           type="search"
+          aria-label="Search films and series"
+          maxLength={120}
           placeholder="Search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
       </label>
 
+      {debouncedQuery.length > 1 ? <div className="flex flex-wrap items-center gap-2">
+        {[['all', 'All'], ['movie', 'Films'], ['series', 'Series']].map(([value, label]) => <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value ?? 'all')} className={`rounded-full px-4 py-2 text-xs transition ${filter === value ? 'bg-white text-black' : 'bg-white/5 text-muted-foreground hover:bg-white/10'}`}>{label}</button>)}
+        <p className="ml-2 text-xs text-muted-foreground" role="status">{isSearching ? 'Searching catalogs…' : `${visibleMedia.length} results`}</p>
+      </div> : null}
+      {results.find(result => result.error)?.error ? <ErrorState error={results.find(result => result.error)?.error} /> : null}
       {catalogs.isLoading ? <CatalogSearchSkeleton /> : null}
       {catalogs.error ? <ErrorState error={catalogs.error} /> : null}
       {!catalogs.isLoading && !searchable.length ? (
         <EmptyState title="No searchable catalogs" body="Install an addon with catalog search support." />
       ) : null}
-      {isSearching ? <SearchResultsSkeleton /> : null}
-      {debouncedQuery.length > 1 && !isSearching && !media.length ? <EmptyState title="No results found" /> : null}
+      {isSearching && !media.length ? <SearchResultsSkeleton /> : null}
+      {debouncedQuery.length > 1 && !isSearching && !visibleMedia.length ? <EmptyState title="No results found" /> : null}
 
-      {media.length ? (
+      {visibleMedia.length ? (
         <div className={cn(mediaGrid, 'mt-2')}>
-          {media.map((item) => (
+          {visibleMedia.map((item) => (
             <MediaCard key={`${item.type}-${item.id}`} media={item} onOpen={() => onOpenMedia(item)} />
           ))}
         </div>

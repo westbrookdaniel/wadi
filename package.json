@@ -4,12 +4,11 @@
   "private": true,
   "packageManager": "pnpm@10.33.2",
   "scripts": {
-    "build": "turbo build",
-    "dev": "turbo dev",
-    "lint": "turbo lint",
-    "test": "turbo test"
-  },
-  "devDependencies": {
-    "turbo": "^2.9.6"
+    "dev": "pnpm --filter frontend dev",
+    "build": "pnpm --filter frontend build",
+    "start": "pnpm --filter frontend start",
+    "lint": "pnpm --filter frontend lint",
+    "test": "pnpm --filter frontend test && pnpm --filter frontend test:api",
+    "test:next": "pnpm --filter frontend test:next"
   }
 }

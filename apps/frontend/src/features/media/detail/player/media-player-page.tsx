@@ -1,3 +1,4 @@
+import { Artwork } from '@/components/artwork'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft,
@@ -255,7 +256,7 @@ export function MediaPlayerPage({
   }, [setAudioTrack, playbackState.selectedAudioTrackId])
 
   useEffect(() => {
-    const receiverAppId = import.meta.env.VITE_CHROMECAST_RECEIVER_APP_ID || 'CC1AD845'
+    const receiverAppId = process.env.NEXT_PUBLIC_CHROMECAST_RECEIVER_APP_ID || 'CC1AD845'
     let alive = true
     castTransport
       .setOptions(receiverAppId)
@@ -715,7 +716,7 @@ export function MediaPlayerPage({
             </div>
           ) : null}
 
-          {import.meta.env.DEV && subtitleDebugError ? (
+          {process.env.NODE_ENV === 'development' && subtitleDebugError ? (
             <div className="pointer-events-none absolute right-4 bottom-4 z-[6] rounded bg-black/70 px-2 py-1 text-[11px] text-white/80">
               {subtitleDebugError}
             </div>
@@ -1412,8 +1413,6 @@ function EpisodeSwapperItem({
   active: boolean
   onSelectEpisode: (episode: Episode) => void
 }) {
-  const [imageError, setImageError] = useState(false)
-  const showImage = Boolean(episode.thumbnail) && !imageError
 
   return (
     <div
@@ -1427,24 +1426,7 @@ function EpisodeSwapperItem({
         type="button"
         onClick={() => onSelectEpisode(episode)}
       >
-        {showImage ? (
-          <div className="h-16 w-24 overflow-hidden rounded-l-lg">
-            <img
-              src={episode.thumbnail}
-              alt={episode.title}
-              className="h-16 w-24 object-cover"
-              loading="lazy"
-              onError={() => setImageError(true)}
-            />
-          </div>
-        ) : (
-          <div
-            className="grid h-16 w-24 place-items-center rounded-l-lg bg-muted text-[0.65rem] uppercase tracking-wide text-muted-foreground"
-            aria-hidden="true"
-          >
-            No Image
-          </div>
-        )}
+        <Artwork src={episode.thumbnail} className="h-16 w-24 rounded-l-lg" />
         <div className="min-w-0 px-4 py-2.5">
           <strong className="block overflow-hidden text-ellipsis whitespace-nowrap">
             {episode.title}

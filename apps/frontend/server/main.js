@@ -2,7 +2,7 @@ import express from 'express';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { randomUUID, randomBytes, createHash } from 'node:crypto';
-import { pathToFileURL } from 'node:url';
+import { resolve } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { hash, verify } from '@node-rs/argon2';
@@ -18,7 +18,8 @@ const now = () => new Date().toISOString();
 
 export function createApp({ database = ':memory:', sessionDays = 30 } = {}) {
   const db = new DatabaseSync(database);
-  db.exec(readFileSync(new URL('./schema.sql', import.meta.url), 'utf8'));
+  db.exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;');
+  db.exec(readFileSync(resolve(process.cwd(), 'server/schema.sql'), 'utf8'));
   db.exec(`CREATE TABLE IF NOT EXISTS player_settings (profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE, media_type TEXT NOT NULL DEFAULT '', media_id TEXT NOT NULL DEFAULT '', value TEXT NOT NULL, PRIMARY KEY(profile_id, media_type, media_id));`);
   const get = (sql, ...args) => db.prepare(sql).get(...args);
   const all = (sql, ...args) => db.prepare(sql).all(...args);
@@ -26,6 +27,7 @@ export function createApp({ database = ':memory:', sessionDays = 30 } = {}) {
   const app = express();
   app.disable('x-powered-by');
   app.use((req, res, next) => {
+    res.set('Cache-Control', 'private, no-store');
     res.set('Access-Control-Allow-Origin', '*');
     res.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, Range');
     res.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, PUT, DELETE, OPTIONS');
@@ -34,7 +36,7 @@ export function createApp({ database = ':memory:', sessionDays = 30 } = {}) {
     next();
   });
   app.use(express.json({ limit: '1mb' }));
-  app.get('/health', (_req, res) => res.json({ ok: true }));
+  app.get(['/health', '/api/health'], (_req, res) => res.json({ ok: true }));
   const ensureList = (user, profile) => {
     if (!get('SELECT id FROM lists WHERE user_id=? AND profile_id=? AND lower(name)=?', user, profile, 'saved')) run('INSERT INTO lists(id,user_id,profile_id,name) VALUES(?,?,?,?)', randomUUID(), user, profile, 'Saved');
   };
@@ -146,7 +148,7 @@ export function createApp({ database = ':memory:', sessionDays = 30 } = {}) {
     run("UPDATE watch_states SET watched=?,position_seconds=?,duration_seconds=?,updated_at=? WHERE user_id=? AND profile_id=? AND media_type=? AND media_id=? AND COALESCE(video_id,'')=?", Number(watched), position, duration, now(), req.user.id, req.user.profile_id, b.media_type, b.media_id, b.video_id ?? '');
     res.json(watchView(watch(req, b.media_type, b.media_id, b.video_id)));
   });
-  app.get('/api/continue-watching', (req, res) => res.json({ items: all('SELECT * FROM watch_states WHERE user_id=? AND profile_id=? AND watched=0 AND position_seconds>0 ORDER BY updated_at DESC LIMIT ?', req.user.id, req.user.profile_id, Math.max(1, Math.min(100, Number(req.query.limit) || 20))).map(watchView) }));
+  app.get('/api/continue-watching', (req, res) => res.json({ items: all('SELECT * FROM watch_states WHERE user_id=? AND profile_id=? AND watched=0 AND position_seconds>0 ORDER BY updated_at DESC LIMIT ?', req.user.id, req.user.profile_id, Math.max(1, Math.min(100, Math.floor(Number(req.query.limit)) || 20))).map(watchView) }));
   const emptyPage = () => ({ order: [], hidden: [] });
   const defaults = { subtitles_enabled: true, subtitle_language: null, subtitle_delay_seconds: 0, subtitle_size: 1, subtitle_position: 0, subtitle_text_color: '#FFFFFF', subtitle_background_color: '#000000', subtitle_background_opacity: 0, subtitle_outline_color: '#000000', subtitle_outline_style: 'outline', subtitle_font_family: 'sans-serif', subtitle_offset_x: 0, subtitle_offset_y: 0, playback_speed: 1, preferred_audio_language: null, preferred_audio_track_id: null };
   for (const [route, column, fallback, schema] of [
@@ -197,9 +199,14 @@ export function createApp({ database = ':memory:', sessionDays = 30 } = {}) {
   const fetchJson = async url => {
     const response = await fetch(url, { signal: AbortSignal.timeout(15000), headers: { 'User-Agent': 'wadi-server/0.2' } });
     if (!response.ok) fail(502, `Addon returned HTTP ${response.status}`);
-    const text = await response.text();
-    if (text.length > 8 * 1024 * 1024) fail(502, 'Addon response is too large');
-    return JSON.parse(text);
+    const chunks = [];
+    let size = 0;
+    if (response.body) for await (const chunk of response.body) {
+      size += chunk.byteLength;
+      if (size > 8 * 1024 * 1024) fail(502, 'Addon response is too large');
+      chunks.push(Buffer.from(chunk));
+    }
+    return JSON.parse(Buffer.concat(chunks).toString('utf8'));
   };
   const manifestSchema = z.object({ id: identity, name: identity, version: identity, resources: z.array(z.union([identity, z.object({ name: identity, types: z.array(identity).default([]), idPrefixes: z.array(identity).default([]) }).passthrough()])).min(1), types: z.array(identity).default([]), idPrefixes: z.array(identity).default([]), catalogs: z.array(z.object({ id: identity, type: identity }).passthrough()).default([]) }).passthrough();
   const addonView = ({ manifest_json, config_json, user_id, ...row }) => ({ ...row, manifest: manifestSchema.parse(JSON.parse(manifest_json)), config: config_json ? JSON.parse(config_json) : null });
@@ -247,7 +254,7 @@ export function createApp({ database = ':memory:', sessionDays = 30 } = {}) {
     if (req.headers.range) headers.Range = req.headers.range;
     const upstream = await fetch(url, { method: req.method === 'HEAD' ? 'HEAD' : 'GET', headers, signal: AbortSignal.any([controller.signal, AbortSignal.timeout(300000)]) });
     res.status(upstream.status);
-    for (const name of ['content-type', 'content-length', 'content-range', 'accept-ranges', 'etag', 'last-modified', 'cache-control']) {
+    for (const name of ['content-type', 'content-length', 'content-range', 'accept-ranges', 'etag', 'last-modified']) {
       const value = upstream.headers.get(name); if (value) res.set(name, value);
     }
     if (!upstream.body || req.method === 'HEAD') return res.end();
@@ -259,14 +266,4 @@ export function createApp({ database = ':memory:', sessionDays = 30 } = {}) {
     res.status(status).json({ error: status === 500 ? 'Server error' : err.message });
   });
   return { app, db };
-}
-
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const database = (process.env.DATABASE_URL ?? 'wadi.sqlite').replace(/^sqlite:/, '').replace(/\?.*$/, '');
-  const { app, db } = createApp({ database, sessionDays: Number(process.env.SESSION_TTL_DAYS) || 30 });
-  const bind = process.env.BIND_ADDR ?? '127.0.0.1:4000';
-  const index = bind.lastIndexOf(':');
-  const server = app.listen(Number(bind.slice(index + 1)), bind.slice(0, index));
-  const shutdown = () => server.close(() => { db.close(); process.exit(0); });
-  process.on('SIGTERM', shutdown); process.on('SIGINT', shutdown);
 }

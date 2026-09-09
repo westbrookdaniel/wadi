@@ -7,6 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { pageStack } from '@/lib/styles'
 
+import { ContinuePanel } from './continue-panel'
 import { FeaturedFilm } from './featured-film'
 import { BrowseSections } from './browse-sections'
 import { buildBrowseRowCandidates, createDefaultBrowseLayout, normalizeBrowseLayout, resolveVisibleBrowseRows } from './browse-layout'
@@ -76,11 +77,14 @@ export function HomePage({
         />
       ) : null}
 
-      {!isLoading && catalogs.data?.[0] ? <FeaturedFilm entry={catalogs.data[0]} onOpen={onOpenMedia} /> : null}
+      {!isLoading && !showSetup ? <div className={rows.some(row => row.kind === 'continue') ? 'home-top' : undefined}>
+        {rows.some(row => row.kind === 'continue') ? <ContinuePanel items={continueItems} onOpen={onOpenMedia} /> : null}
+        {catalogs.data?.[0] ? <FeaturedFilm entry={catalogs.data[0]} onOpen={onOpenMedia} /> : null}
+      </div> : null}
       {!showSetup ? (
         <BrowseSections
           page="home"
-          rows={rows}
+          rows={rows.filter(row => row.kind !== 'continue')}
           continueItems={continueItems}
           listItemsByListId={listItemsByListId}
           onOpenMedia={onOpenMedia}

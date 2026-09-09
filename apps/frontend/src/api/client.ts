@@ -5,19 +5,20 @@ export class ApiError extends Error {
   body: unknown
 
   constructor(status: number, body: unknown) {
-    super(typeof body === 'string' ? body : `Request failed with status ${status}`)
+    super(typeof body === 'string' ? body : body && typeof body === 'object' && 'error' in body && typeof body.error === 'string' ? body.error : `Request failed with status ${status}`)
     this.name = 'ApiError'
     this.status = status
     this.body = body
   }
 }
 
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV ? '' : 'http://127.0.0.1:4000')
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? ''
 
 type ApiOptions = {
   method?: string
   body?: unknown
   token?: string | null
+  signal?: AbortSignal
 }
 
 export async function apiRequest<T>(path: string, options: ApiOptions = {}) {
@@ -35,6 +36,7 @@ export async function apiRequest<T>(path: string, options: ApiOptions = {}) {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: options.method ?? 'GET',
     headers,
+    signal: options.signal,
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
   })
 
