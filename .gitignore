@@ -15,3 +15,6 @@ target
 .next/
 *.tsbuildinfo
 apps/frontend/data/
+
+# Next generates different route declarations for dev and production.
+apps/frontend/next-env.d.ts
