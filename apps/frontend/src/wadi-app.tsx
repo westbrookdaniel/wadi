@@ -1,3 +1,4 @@
+import { TvNavigation } from '@/components/tv-navigation'
 import { StrictMode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { RouterProvider } from '@tanstack/react-router'
@@ -21,7 +22,7 @@ export default function WadiApp() { return (
       <TooltipProvider>
         <ToastProvider>
           <DialogManagerProvider>
-            <RouterProvider router={router} />
+            <TvNavigation /><RouterProvider router={router} />
           </DialogManagerProvider>
         </ToastProvider>
       </TooltipProvider>

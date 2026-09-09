@@ -1,8 +1,9 @@
+import { addConversionRoutes } from './conversion.js';
 import express from 'express';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { randomUUID, randomBytes, createHash } from 'node:crypto';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { hash, verify } from '@node-rs/argon2';
@@ -76,6 +77,7 @@ export function createApp({ database = ':memory:', sessionDays = 30 } = {}) {
     req.tokenHash = digest(token);
     next();
   });
+  const closeConversions = addConversionRoutes(app, { directory: process.env.WADI_DATA_DIR ?? (database === ':memory:' ? resolve(process.cwd(), 'data') : dirname(database)), enabled: process.env.WADI_ENABLE_CONVERSION === '1' });
   app.get('/api/auth/me', (req, res) => res.json({ id: req.user.id, email: req.user.email, active_profile_id: req.user.profile_id }));
   app.post('/api/auth/logout', (req, res) => { run('DELETE FROM sessions WHERE token_hash=?', req.tokenHash); res.sendStatus(204); });
   const ownProfile = (req, id) => get('SELECT * FROM profiles WHERE id=? AND user_id=?', id, req.user.id) ?? fail(404, 'Profile not found');
@@ -277,5 +279,5 @@ export function createApp({ database = ':memory:', sessionDays = 30 } = {}) {
     const status = err instanceof z.ZodError ? 400 : err.status ?? ((err.code?.includes('CONSTRAINT') || [19, 1555, 2067].includes(err.errcode)) ? 409 : 500);
     res.status(status).json({ error: status === 500 ? 'Server error' : err.message });
   });
-  return { app, db };
+  return { app, db, closeConversions };
 }

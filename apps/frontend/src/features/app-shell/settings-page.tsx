@@ -1,3 +1,4 @@
+import { DeviceSettings } from './device-settings'
 import { RevealedImage } from '@/components/revealed-image'
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
@@ -101,6 +102,7 @@ export function ProfileSettingsPage() {
         <Button variant="secondary" size="sm" onClick={() => navigate({ to: "/settings/account" })}>Account & addons</Button>
       </header>
       <section className="settings-panel"><ProfileManager /></section>
+      <DeviceSettings />
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
         <BrowseLayoutSettings />
         <ExternalPlaybackSettingsSection />

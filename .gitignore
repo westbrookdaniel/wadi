@@ -18,3 +18,5 @@ apps/frontend/data/
 
 # Next generates different route declarations for dev and production.
 apps/frontend/next-env.d.ts
+
+wadi-server.json

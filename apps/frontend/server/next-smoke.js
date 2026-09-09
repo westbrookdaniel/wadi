@@ -3,14 +3,26 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, readFile, cp, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
 const temporary = await mkdtemp(join(tmpdir(), 'wadi-next-'));
+const installation = join(temporary, 'installation');
+await mkdir(join(installation, 'scripts'), { recursive: true });
+await cp('../../scripts/start.mjs', join(installation, 'scripts/start.mjs'));
+await cp('.next/standalone', join(installation, 'apps/frontend/.next/standalone'), { recursive: true, verbatimSymlinks: true });
 const media = Buffer.from('0123456789abcdefghijklmnopqrstuvwxyz');
+const fixture = await readFile('server/fixtures/playback.mp4');
 const upstream = createServer((req, res) => {
+  if (req.url === '/fixture') {
+    const range = /bytes=(\d+)-(\d*)/.exec(req.headers.range ?? '');
+    const start = range ? Number(range[1]) : 0, end = range?.[2] ? Math.min(Number(range[2]), fixture.length - 1) : fixture.length - 1;
+    res.setHeader('Content-Type', 'video/mp4'); res.setHeader('Accept-Ranges', 'bytes'); res.setHeader('Content-Length', end - start + 1);
+    if (range) res.writeHead(206, { 'Content-Range': `bytes ${start}-${end}/${fixture.length}` });
+    res.end(fixture.subarray(start, end + 1)); return;
+  }
   res.setHeader('Content-Type', 'video/mp4');
   res.setHeader('Cache-Control', 'public, max-age=86400');
   res.setHeader('Accept-Ranges', 'bytes');
@@ -27,8 +39,8 @@ await once(reservation, 'listening');
 const port = reservation.address().port;
 await new Promise(resolve => reservation.close(resolve));
 const base = `http://127.0.0.1:${port}`;
-const server = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'start', '-H', '127.0.0.1', '-p', String(port)], {
-  env: { ...process.env, DATABASE_URL: join(temporary, 'wadi.sqlite') }, stdio: ['ignore', 'pipe', 'pipe'],
+const server = spawn(process.execPath, [join(installation, 'scripts/start.mjs')], {
+  env: { ...process.env, DATABASE_URL: join(temporary, 'wadi.sqlite'), WADI_DATA_DIR: temporary, WADI_HOST: '127.0.0.1', PORT: String(port), WADI_ENABLE_CONVERSION: '1' }, stdio: ['ignore', 'pipe', 'pipe'],
 });
 let logs = '';
 server.stdout.on('data', data => { logs = (logs + data).slice(-4000); });
@@ -67,7 +79,20 @@ try {
     assert.equal(page.status, 200, route);
     assert.match(await page.text(), /favicon.svg/);
   }
-  console.info('Next production smoke passed: auth, progress, private byte ranges, HEAD, and deep links.');
+  const conversion = await fetch(base + '/api/conversions', { method: 'POST', headers, body: JSON.stringify({ url: `http://127.0.0.1:${upstream.address().port}/fixture` }) });
+  assert.equal(conversion.status, 202);
+  const job = await conversion.json();
+  let prepared;
+  for (let n = 0; n < 100; n++) {
+    prepared = await (await fetch(base + '/api/conversions/' + job.id, { headers })).json();
+    if (prepared.status !== 'working') break;
+    await delay(200);
+  }
+  assert.equal(prepared.status, 'ready', JSON.stringify(prepared));
+  assert.equal((await fetch(base + '/api/conversions/' + job.id + '/media', { headers: { ...headers, Range: 'bytes=0-31' } })).status, 206);
+  await fetch(base + '/api/conversions/' + job.id, { method: 'DELETE', headers });
+  assert.equal((await fetch(base + '/favicon.svg')).status, 200);
+  console.info('Standalone production smoke passed: conversion, assets, auth, progress, private byte ranges, HEAD, and deep links.');
 } finally {
   const exited = server.exitCode === null ? once(server, 'exit') : Promise.resolve();
   server.kill('SIGTERM');

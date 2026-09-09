@@ -1,3 +1,5 @@
+import { useConvertedStream } from './use-converted-stream'
+import { useDeviceStore } from '@/store/device-store'
 import { RevealedImage } from '@/components/revealed-image'
 import { Artwork } from '@/components/artwork'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -84,12 +86,14 @@ export function MediaPlayerPage({
   target: PlaybackTarget
   onBack: () => void
 }) {
+  const tvMode = useDeviceStore(state => state.tvMode)
   const queryClient = useQueryClient()
   const [activeStream, setActiveStream] = useState(stream)
   const [activeTarget, setActiveTarget] = useState(target)
   const streamUrl = activeStream.url
   const token = useAppStore((state) => state.token)
-  const proxiedStreamUrl = streamUrl ? buildStreamProxyUrl(streamUrl) : undefined
+  const conversion = useConvertedStream(streamUrl)
+  const proxiedStreamUrl = conversion.enabled ? conversion.url : streamUrl ? buildStreamProxyUrl(streamUrl) : undefined
   const watchData = useQuery(
     watchDataQuery(
       activeTarget.mediaType,
@@ -589,19 +593,21 @@ export function MediaPlayerPage({
             aria-label={`Playing ${media.name}`}
           />
 
-          {(player.state.status === 'loading' || player.state.status === 'idle') && !player.state.error ? (
+          {(player.state.status === 'loading' || player.state.status === 'idle') && !player.state.error && !conversion.error ? (
             <div className="player-loading pointer-events-none absolute inset-0 z-[4] grid place-content-center justify-items-center gap-6 bg-black text-center" role="status" aria-label="Loading stream">
               {typeof media.raw.logo === 'string' && media.raw.logo ? <RevealedImage className="player-loading-mark max-h-36 w-[min(55vw,360px)] object-contain" src={media.raw.logo} alt={media.name} /> : <strong className="player-loading-mark max-w-[70vw] text-2xl font-medium tracking-tight">{media.name}</strong>}
-              <span className="text-xs tracking-wide text-white/45">Opening stream</span>
+              <span className="text-xs tracking-wide text-white/45">{conversion.enabled && !conversion.url ? `Preparing compatible video · ${Math.round(conversion.progress * 100)}%` : 'Opening stream'}</span>
+              {conversion.enabled && !conversion.url && <Button className="pointer-events-auto" variant="secondary" onClick={() => useDeviceStore.getState().setConversion(false)}>Play original stream instead</Button>}
             </div>
-          ) : !player.state.hasVideo && !player.state.error ? (
+          ) : !player.state.hasVideo && !player.state.error && !conversion.error ? (
             <div className="absolute inset-0 grid place-content-center text-center"><strong>{media.name}</strong><p className="text-white/50">Audio playback</p></div>
           ) : null}
 
-          {player.state.error ? (
+          {player.state.error || conversion.error ? (
             <div className={cn(stateBlock, 'absolute inset-0 min-h-0 bg-black/92 px-6')}>
               <strong>Unable to play this stream</strong>
-              <p>{player.state.error}</p>
+              <p>{conversion.error ?? player.state.error}</p>
+              {conversion.enabled && <Button onClick={() => useDeviceStore.getState().setConversion(false)}>Play original stream</Button>}
               {stream.externalUrl ? (
                 <Button size="sm" asChild>
                   <a href={stream.externalUrl} target="_blank" rel="noreferrer">
@@ -619,7 +625,7 @@ export function MediaPlayerPage({
             warning={effectiveState.warning}
             episodeContext={activeTarget.episodeContext ?? null}
             hasEpisodeSwapper={Boolean(activeTarget.seriesEpisodes?.length)}
-            forceVisible={controlsVisible || !player.state.playing || episodeSheetOpen}
+            forceVisible={tvMode || controlsVisible || !player.state.playing || episodeSheetOpen}
             onOpenEpisodeSwapper={() => setEpisodeSheetOpen(true)}
             subtitleTracks={streamSubtitleList}
             selectedSubtitleId={playbackState.selectedSubtitleId}
@@ -659,9 +665,9 @@ export function MediaPlayerPage({
             onSubtitleOffsetYChange={(value) => updatePlaybackState({ subtitleOffsetY: value })}
             playbackSpeed={playbackState.playbackSpeed}
             onPlaybackSpeedChange={onChangeSpeed}
-            castReady={castReady}
+            castReady={!conversion.enabled && castReady}
             castConnected={castConnected}
-            castUnavailableReason={castUnavailableReason}
+            castUnavailableReason={conversion.enabled ? 'Turn off Prepare compatible video to cast the original stream.' : castUnavailableReason}
             onCastToggle={() => {
               if (castConnected) {
                 castTransport.endCurrentSession(true)
