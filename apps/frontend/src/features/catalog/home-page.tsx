@@ -78,8 +78,8 @@ export function HomePage({
       ) : null}
 
       {!isLoading && !showSetup ? <div className={rows.some(row => row.kind === 'continue') ? 'home-top' : undefined}>
-        {rows.some(row => row.kind === 'continue') ? <ContinuePanel items={continueItems} onOpen={onOpenMedia} /> : null}
         {catalogs.data?.[0] ? <FeaturedFilm entry={catalogs.data[0]} onOpen={onOpenMedia} /> : null}
+        {rows.some(row => row.kind === 'continue') ? <ContinuePanel items={continueItems} onOpen={onOpenMedia} /> : null}
       </div> : null}
       {!showSetup ? (
         <BrowseSections

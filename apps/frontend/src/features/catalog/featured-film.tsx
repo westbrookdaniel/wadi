@@ -30,7 +30,7 @@ export function FeaturedFilm({ entry, onOpen }: { entry: CatalogEntry; onOpen: (
           <p className="mt-3 text-xs text-white/65">{[film.releaseInfo, film.type === 'series' ? 'Series' : 'Film'].filter(Boolean).join(' · ')}</p>
           {film.description ? <p className="mt-3 max-w-md text-[13px] leading-6 text-white/70 line-clamp-2">{film.description}</p> : null}
           <button type="button" onClick={() => onOpen(film)} className="mt-5 inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-xs font-semibold text-black hover:bg-white/85 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white">
-            <Play className="size-3.5 fill-current" aria-hidden="true" /> Explore
+            <Play className="size-3.5 fill-current" aria-hidden="true" /> Watch
           </button>
         </div>
       </div>
