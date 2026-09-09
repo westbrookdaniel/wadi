@@ -5,7 +5,6 @@ import {
   Captions,
   ChevronLeft,
   ChevronRight,
-  Clapperboard,
   Languages,
   Maximize,
   Pause,
@@ -912,7 +911,6 @@ function PlayerChrome({
           </TooltipButton>
           <button type="button" className="player-episode flex items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-white/10" onClick={hasEpisodeSwapper ? onOpenEpisodeSwapper : undefined} disabled={!hasEpisodeSwapper} aria-label={hasEpisodeSwapper ? 'Choose episode' : undefined}>
             <div className="grid gap-0.5"><span className="max-w-[55vw] truncate text-sm font-medium">{mediaName}</span>{episodeContext ? <span className="max-w-[55vw] truncate text-xs text-white/65">{formatEpisodeBadge(episodeContext.season, episodeContext.episode)} · {episodeContext.title}</span> : null}</div>
-            {hasEpisodeSwapper ? <Clapperboard className="size-4 text-white/70" /> : null}
           </button>
         </div>
 
