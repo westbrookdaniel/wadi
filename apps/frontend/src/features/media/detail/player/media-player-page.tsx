@@ -1,3 +1,4 @@
+import { RevealedImage } from '@/components/revealed-image'
 import { Artwork } from '@/components/artwork'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -590,7 +591,7 @@ export function MediaPlayerPage({
 
           {(player.state.status === 'loading' || player.state.status === 'idle') && !player.state.error ? (
             <div className="player-loading pointer-events-none absolute inset-0 z-[4] grid place-content-center justify-items-center gap-6 bg-black text-center" role="status" aria-label="Loading stream">
-              {typeof media.raw.logo === 'string' && media.raw.logo ? <img className="player-loading-mark max-h-36 w-[min(55vw,360px)] object-contain" src={media.raw.logo} alt={media.name} /> : <strong className="player-loading-mark max-w-[70vw] text-2xl font-medium tracking-tight">{media.name}</strong>}
+              {typeof media.raw.logo === 'string' && media.raw.logo ? <RevealedImage className="player-loading-mark max-h-36 w-[min(55vw,360px)] object-contain" src={media.raw.logo} alt={media.name} /> : <strong className="player-loading-mark max-w-[70vw] text-2xl font-medium tracking-tight">{media.name}</strong>}
               <span className="text-xs tracking-wide text-white/45">Opening stream</span>
             </div>
           ) : !player.state.hasVideo && !player.state.error ? (

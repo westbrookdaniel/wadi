@@ -10,7 +10,7 @@ import { z } from 'zod';
 
 const identity = z.string().trim().min(1).max(512);
 const credentials = z.object({ email: z.email().transform(v => v.toLowerCase()), password: z.string().min(8).max(1024) });
-const profileInput = z.object({ name: z.string().trim().min(1).max(40), avatar_key: identity.default('avatar-1'), theme_color: z.string().nullable().optional() });
+const profileInput = z.object({ name: z.string().trim().min(1).max(40), avatar_key: z.string().trim().max(2048).refine(value => /^avatar-[1-6]$/.test(value) || (() => { try { const url = new URL(value); return ['https:', 'http:'].includes(url.protocol) && !url.username && !url.password; } catch { return false; } })(), 'Choose an avatar or enter an HTTP image URL').default('avatar-1'), theme_color: z.string().nullable().optional() });
 const listInput = z.object({ name: z.string().trim().min(1).max(100), description: z.string().nullable().optional() });
 const digest = value => createHash('sha256').update(value).digest('hex');
 const fail = (status, message) => { throw Object.assign(new Error(message), { status }); };
@@ -21,6 +21,7 @@ export function createApp({ database = ':memory:', sessionDays = 30 } = {}) {
   db.exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;');
   db.exec(readFileSync(resolve(process.cwd(), 'server/schema.sql'), 'utf8'));
   db.exec(`CREATE TABLE IF NOT EXISTS player_settings (profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE, media_type TEXT NOT NULL DEFAULT '', media_id TEXT NOT NULL DEFAULT '', value TEXT NOT NULL, PRIMARY KEY(profile_id, media_type, media_id));`);
+  if (!db.prepare('PRAGMA table_info(addons)').all().some(column => column.name === 'sort_order')) db.exec('ALTER TABLE addons ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0');
   const get = (sql, ...args) => db.prepare(sql).get(...args);
   const all = (sql, ...args) => db.prepare(sql).all(...args);
   const run = (sql, ...args) => db.prepare(sql).run(...args);
@@ -152,7 +153,7 @@ export function createApp({ database = ':memory:', sessionDays = 30 } = {}) {
   const emptyPage = () => ({ order: [], hidden: [] });
   const defaults = { subtitles_enabled: true, subtitle_language: null, subtitle_delay_seconds: 0, subtitle_size: 1, subtitle_position: 0, subtitle_text_color: '#FFFFFF', subtitle_background_color: '#000000', subtitle_background_opacity: 0, subtitle_outline_color: '#000000', subtitle_outline_style: 'outline', subtitle_font_family: 'sans-serif', subtitle_offset_x: 0, subtitle_offset_y: 0, playback_speed: 1, preferred_audio_language: null, preferred_audio_track_id: null };
   for (const [route, column, fallback, schema] of [
-    ['browse-layout', 'browse_layout_json', { pages: { home: emptyPage(), movies: emptyPage(), series: emptyPage() } }, z.object({ pages: z.object(Object.fromEntries(['home', 'movies', 'series'].map(key => [key, z.object({ order: z.array(identity).default([]), hidden: z.array(identity).default([]) }).default(emptyPage())]))).default({}) })],
+    ['browse-layout', 'browse_layout_json', { pages: { home: emptyPage(), movies: emptyPage(), series: emptyPage() } }, z.object({ pages: z.object(Object.fromEntries(['home', 'movies', 'series'].map(key => [key, z.object({ order: z.array(identity).default([]), hidden: z.array(identity).default([]), catalogModes: z.record(z.string(), z.enum(["combined", "movie", "series"])).optional() }).default(emptyPage())]))).default({}) })],
     ['playback', 'playback_prefs_json', { stream_action: 'copy', external_player_template: 'vlc://{url}' }, z.object({ stream_action: z.enum(['copy', 'external']), external_player_template: z.string().refine(v => /^[a-z][a-z\d+.-]*:/i.test(v) && v.includes('{url}') && !/^(javascript|data|vbscript):/i.test(v)) })],
   ]) {
     app.get(`/api/settings/${route}`, (req, res) => {
@@ -210,9 +211,20 @@ export function createApp({ database = ':memory:', sessionDays = 30 } = {}) {
   };
   const manifestSchema = z.object({ id: identity, name: identity, version: identity, resources: z.array(z.union([identity, z.object({ name: identity, types: z.array(identity).default([]), idPrefixes: z.array(identity).default([]) }).passthrough()])).min(1), types: z.array(identity).default([]), idPrefixes: z.array(identity).default([]), catalogs: z.array(z.object({ id: identity, type: identity }).passthrough()).default([]) }).passthrough();
   const addonView = ({ manifest_json, config_json, user_id, ...row }) => ({ ...row, manifest: manifestSchema.parse(JSON.parse(manifest_json)), config: config_json ? JSON.parse(config_json) : null });
-  const userAddons = req => all('SELECT * FROM addons WHERE user_id=? ORDER BY installed_at', req.user.id).map(addonView);
+  const userAddons = req => all('SELECT * FROM addons WHERE user_id=? ORDER BY sort_order, installed_at, id', req.user.id).map(addonView);
   const ownAddon = (req, id) => addonView(get('SELECT * FROM addons WHERE id=? AND user_id=?', id, req.user.id) ?? fail(404, 'Addon not found'));
   app.get('/api/addons', (req, res) => res.json({ items: userAddons(req) }));
+  app.put('/api/addons/order', (req, res) => {
+    const ids = z.object({ ids: z.array(identity).max(200) }).parse(req.body).ids;
+    const owned = all('SELECT id FROM addons WHERE user_id=?', req.user.id).map(addon => addon.id);
+    if (ids.length !== owned.length || new Set(ids).size !== ids.length || ids.some(id => !owned.includes(id))) fail(400, 'Order must contain each installed addon exactly once');
+    db.exec('BEGIN');
+    try {
+      ids.forEach((id, position) => run('UPDATE addons SET sort_order=? WHERE id=? AND user_id=?', position, id, req.user.id));
+      db.exec('COMMIT');
+    } catch (error) { db.exec('ROLLBACK'); throw error; }
+    res.json({ items: userAddons(req) });
+  });
   for (const action of ['preview', 'install']) app.post(`/api/addons/${action}`, async (req, res) => {
     const source = identity.parse(req.body.url), url = manifestUrl(source);
     const manifest = manifestSchema.parse(await fetchJson(url));
@@ -220,7 +232,7 @@ export function createApp({ database = ':memory:', sessionDays = 30 } = {}) {
     const transport = /^ip[fn]s:/.test(source) ? 'ipfs' : /\/stremio\/v1\/?$/.test(source) ? 'legacy' : 'http';
     if (action === 'preview') return res.json({ source_url: source, transport, manifest, favicon_url: manifest.logo ?? new URL('/favicon.ico', url).href, installed_addon_id: existing?.id ?? null });
     const id = existing?.id ?? randomUUID();
-    run("INSERT INTO addons(id,user_id,source_url,transport,manifest_json) VALUES(?,?,?,?,?) ON CONFLICT(user_id,source_url) DO UPDATE SET manifest_json=excluded.manifest_json,transport=excluded.transport,updated_at=datetime('now')", id, req.user.id, source, transport, JSON.stringify(manifest));
+    run("INSERT INTO addons(id,user_id,source_url,transport,manifest_json,sort_order) VALUES(?,?,?,?,?,(SELECT COALESCE(MAX(sort_order),-1)+1 FROM addons)) ON CONFLICT(user_id,source_url) DO UPDATE SET manifest_json=excluded.manifest_json,transport=excluded.transport,updated_at=datetime('now')", id, req.user.id, source, transport, JSON.stringify(manifest));
     res.status(201).json(ownAddon(req, id));
   });
   app.get('/api/addons/:id', (req, res) => res.json(ownAddon(req, req.params.id)));

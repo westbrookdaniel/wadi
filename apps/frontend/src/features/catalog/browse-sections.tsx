@@ -32,7 +32,7 @@ export function BrowseSections({
             <CatalogSection
               key={row.key}
               entry={row.catalogEntry}
-              showTypeBadge={page === 'home'}
+              entries={row.catalogEntries}
               onOpen={(media) => onOpenMedia(media, null)}
             />
           )

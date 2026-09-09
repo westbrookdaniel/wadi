@@ -180,6 +180,7 @@ export type SubtitleInfo = {
 export type BrowsePageKey = 'home' | 'movies' | 'series'
 
 export type BrowseLayoutPage = {
+  catalogModes?: Record<string, "combined" | "movie" | "series">
   order: string[]
   hidden: string[]
 }

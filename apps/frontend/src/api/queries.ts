@@ -468,3 +468,7 @@ function normalizeSubtitleQueryContext(context: SubtitleQueryContext | undefined
   }
   return normalized
 }
+
+export async function reorderAddons(ids: string[]) {
+  return apiRequest<ApiListResponse<AddonRecord>>('/api/addons/order', { method: 'PUT', body: { ids } })
+}

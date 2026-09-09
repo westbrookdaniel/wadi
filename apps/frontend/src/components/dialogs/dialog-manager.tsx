@@ -181,10 +181,11 @@ function WatchlistCreateDialog({
     <Dialog open onOpenChange={(open) => !open && onResolve({ action: 'cancel' })}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{params.title ?? 'Create List'}</DialogTitle>
+          <DialogTitle>{params.title ?? 'New watchlist'}</DialogTitle>
+          <DialogDescription>Give your collection a name.</DialogDescription>
         </DialogHeader>
         <form
-          className="grid gap-3"
+          className="grid gap-5"
           onSubmit={(event) => {
             event.preventDefault()
             void form.handleSubmit()
@@ -193,7 +194,8 @@ function WatchlistCreateDialog({
           <form.Field name="name">
             {(field) => (
               <div className="grid gap-2">
-                <Input value={field.state.value} onChange={(event) => field.handleChange(event.target.value)} onBlur={field.handleBlur} />
+                <Label className="text-xs" htmlFor="watchlist-name">Name</Label>
+                <Input id="watchlist-name" aria-label="List name" placeholder="List name" maxLength={100} value={field.state.value} onChange={(event) => field.handleChange(event.target.value)} onBlur={field.handleBlur} />
                 {fieldError(field) ? <p className={fieldErrorClass}>{fieldError(field)}</p> : null}
               </div>
             )}
@@ -201,8 +203,9 @@ function WatchlistCreateDialog({
           <form.Subscribe selector={(formState) => ({ canSubmit: formState.canSubmit, isSubmitting: formState.isSubmitting })}>
             {(formState) => (
               <DialogFooter>
-                <Button variant="secondary" type="submit" disabled={!canSubmitForm(formState, false)}>
-                  Create
+                <Button variant="ghost" type="button" onClick={() => onResolve({ action: 'cancel' })}>Cancel</Button>
+                <Button type="submit" disabled={!canSubmitForm(formState, false)}>
+                  Create list
                 </Button>
               </DialogFooter>
             )}
@@ -230,11 +233,11 @@ function WatchlistSettingsDialog({
     <Dialog open onOpenChange={(open) => !open && onResolve({ action: 'cancel' })}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>List Settings</DialogTitle>
+          <DialogTitle>Manage watchlist</DialogTitle>
           <DialogDescription>Rename this list or delete it.</DialogDescription>
         </DialogHeader>
         <form
-          className="grid gap-3"
+          className="grid gap-5"
           onSubmit={(event) => {
             event.preventDefault()
             void form.handleSubmit()
@@ -243,7 +246,8 @@ function WatchlistSettingsDialog({
           <form.Field name="name">
             {(field) => (
               <div className="grid gap-2">
-                <Input value={field.state.value} onChange={(event) => field.handleChange(event.target.value)} onBlur={field.handleBlur} />
+                <Label className="text-xs" htmlFor="watchlist-name">Name</Label>
+                <Input id="watchlist-name" aria-label="List name" placeholder="List name" maxLength={100} value={field.state.value} onChange={(event) => field.handleChange(event.target.value)} onBlur={field.handleBlur} />
                 {fieldError(field) ? <p className={fieldErrorClass}>{fieldError(field)}</p> : null}
               </div>
             )}

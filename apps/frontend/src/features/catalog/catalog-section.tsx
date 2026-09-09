@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries } from "@tanstack/react-query";
 
 import { catalogQuery } from "@/api/queries";
 import type { CatalogEntry, MediaPreview } from "@/api/types";
@@ -12,12 +12,12 @@ import { MediaRow } from "@/components/media-row";
 export function CatalogSection({
   entry,
   search,
-  showTypeBadge = false,
+  entries,
   onOpen,
 }: {
   entry: CatalogEntry;
   search?: string;
-  showTypeBadge?: boolean;
+  entries?: CatalogEntry[];
   onOpen: (media: MediaPreview) => void;
 }) {
   const section = useRef<HTMLElement>(null);
@@ -32,9 +32,18 @@ export function CatalogSection({
     return () => observer.disconnect();
   }, []);
   const extras: Record<string, string> = search ? { search } : {};
-  const catalog = useQuery(
-    catalogQuery(entry.catalog.type, entry.catalog.id, extras, nearViewport),
-  );
+  const catalogs = useQueries({ queries: (entries ?? [entry]).map(item =>
+    catalogQuery(item.catalog.type, item.catalog.id, extras, nearViewport)) });
+  const seen = new Set<string>();
+  const results = catalogs.map(result => result.data ?? []);
+  const data = Array.from({ length: Math.max(0, ...results.map(items => items.length)) }).flatMap((_, index) =>
+    results.flatMap(items => {
+      const media = items[index];
+      if (!media || seen.has(`${media.type}:${media.id}`)) return [];
+      seen.add(`${media.type}:${media.id}`);
+      return [media];
+    }));
+  const catalog = { data, isLoading: catalogs.some(result => result.isLoading), error: catalogs.find(result => result.error)?.error };
   const title = entry.catalog.name ?? entry.catalog.id;
 
   return (
@@ -43,11 +52,6 @@ export function CatalogSection({
         <div>
           <h2 className="m-0 flex items-center gap-2 tracking-normal">
             <span>{title}</span>
-            {showTypeBadge ? (
-              <span className="rounded-full border border-border px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-                {entry.catalog.type === "series" ? "Series" : "Movies"}
-              </span>
-            ) : null}
           </h2>
           <p className={mutedText}>{entry.addon_name}</p>
         </div>

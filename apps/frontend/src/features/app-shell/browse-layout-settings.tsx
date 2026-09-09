@@ -22,6 +22,7 @@ import { useMemo, useState } from 'react'
 import { browseLayoutQuery, catalogsQuery, listsQuery, queryKeys, updateBrowseLayout } from '@/api/queries'
 import type { BrowseLayout, BrowsePageKey } from '@/api/types'
 import { EmptyState, ErrorState, LoadingState } from '@/components/status'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -60,7 +61,8 @@ export function BrowseLayoutSettings() {
     () => buildBrowseRowCandidates(activePage, catalogs.data ?? [], lists.data ?? []),
     [activePage, catalogs.data, lists.data],
   )
-  const orderedRows = resolveOrderedBrowseRows(candidates, activeLayout.pages[activePage])
+  const resolvedRows = resolveOrderedBrowseRows(candidates, activeLayout.pages[activePage])
+  const orderedRows = [...resolvedRows.filter(row => row.kind === 'continue'), ...resolvedRows.filter(row => row.kind !== 'continue')]
 
   const saveMutation = useMutation({
     mutationFn: updateBrowseLayout,
@@ -88,7 +90,7 @@ export function BrowseLayoutSettings() {
     }
 
     const pageLayout = activeLayout.pages[activePage]
-    const keys = orderedRows.map((row) => row.key)
+    const keys = orderedRows.filter(row => row.kind !== 'continue').map((row) => row.key)
     const oldIndex = keys.indexOf(String(active.id))
     const newIndex = keys.indexOf(String(over.id))
     if (oldIndex === -1 || newIndex === -1) {
@@ -157,7 +159,7 @@ export function BrowseLayoutSettings() {
             key={option.key}
             type="button"
             size="sm"
-            variant={activePage === option.key ? 'default' : 'secondary'}
+            variant={activePage === option.key ? 'secondary' : 'ghost'}
             onClick={() => setActivePage(option.key)}
           >
             {option.label}
@@ -166,6 +168,7 @@ export function BrowseLayoutSettings() {
       </div>
 
       {isLoading ? <LoadingState label="Loading browse layout" /> : null}
+      {saveMutation.error ? <ErrorState error={saveMutation.error} /> : null}
       {catalogs.error ? <ErrorState error={catalogs.error} /> : null}
       {lists.error ? <ErrorState error={lists.error} /> : null}
       {browseLayout.error ? <ErrorState error={browseLayout.error} /> : null}
@@ -176,15 +179,20 @@ export function BrowseLayoutSettings() {
 
       {!isLoading && !hasError && orderedRows.length ? (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-          <SortableContext items={orderedRows.map((row) => row.key)} strategy={verticalListSortingStrategy}>
-            <ul className="m-0 grid max-h-[360px] list-none gap-2 overflow-y-auto pr-1 p-0">
+          <SortableContext items={orderedRows.filter(row => row.kind !== 'continue').map((row) => row.key)} strategy={verticalListSortingStrategy}>
+            <ul className="m-0 grid min-w-0 max-h-[420px] list-none gap-2 overflow-y-auto pr-1 p-0">
               {orderedRows.map((row) => {
                 const isHidden = activeLayout.pages[activePage].hidden.includes(row.key)
                 return (
                   <SortableLayoutRow
                     key={row.key}
                     row={row}
-                    showCatalogType={activePage === 'home'}
+                    mode={activeLayout.pages[activePage].catalogModes?.[row.key] ?? 'combined'}
+                    onModeChange={mode => setDraftLayout(current => {
+                      const next = current ?? savedLayout;
+                      const page = next.pages[activePage];
+                      return { ...next, pages: { ...next.pages, [activePage]: { ...page, catalogModes: { ...page.catalogModes, [row.key]: mode } } } };
+                    })}
                     hidden={isHidden}
                     onToggleHidden={() => toggleHidden(row.key)}
                   />
@@ -200,16 +208,18 @@ export function BrowseLayoutSettings() {
 
 function SortableLayoutRow({
   row,
-  showCatalogType,
+  mode,
+  onModeChange,
   hidden,
   onToggleHidden,
 }: {
   row: BrowseRowCandidate
-  showCatalogType: boolean
+  mode: "combined" | "movie" | "series"
+  onModeChange: (mode: "combined" | "movie" | "series") => void
   hidden: boolean
   onToggleHidden: () => void
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: row.key })
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: row.key, disabled: row.kind === 'continue' })
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -220,11 +230,11 @@ function SortableLayoutRow({
       ref={setNodeRef}
       style={style}
       className={cn(
-        'flex items-center gap-2 rounded-lg border border-border bg-background/80 p-2.5',
+        'flex min-w-0 items-center gap-1.5 rounded-lg border border-border bg-background/80 p-2.5',
         isDragging && 'shadow-lg',
       )}
     >
-      <button
+      {row.kind !== 'continue' ? <button
         type="button"
         className="grid size-8 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-muted"
         aria-label={`Drag ${row.title}`}
@@ -232,18 +242,19 @@ function SortableLayoutRow({
         {...listeners}
       >
         <GripVertical className="size-4" aria-hidden="true" />
-      </button>
+      </button> : null}
       <div className="min-w-0 flex-1">
         <p className="m-0 flex items-center gap-2 truncate text-sm font-medium">
           <span className="truncate">{row.title}</span>
-          {showCatalogType && row.kind === 'catalog' && row.catalogEntry ? (
-            <span className="shrink-0 rounded-full border border-border px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-              {row.catalogEntry.catalog.type === 'series' ? 'Series' : 'Movies'}
-            </span>
-          ) : null}
         </p>
-        <p className="m-0 truncate text-xs text-muted-foreground">{row.subtitle ?? row.key}</p>
+        <p className="m-0 truncate text-xs text-muted-foreground">{row.subtitle ?? (row.kind === 'continue' ? 'Resume playback' : 'Your list')}</p>
       </div>
+      {(row.catalogEntries?.length ?? 0) > 1 ? (
+        <Select value={mode} onValueChange={value => { if (value === 'combined' || value === 'movie' || value === 'series') onModeChange(value) }}>
+          <SelectTrigger size="sm" className="w-[112px] shrink-0" aria-label={`${row.title} content`}><SelectValue /></SelectTrigger>
+          <SelectContent><SelectItem value="combined">Combined</SelectItem><SelectItem value="movie">Movies</SelectItem><SelectItem value="series">TV shows</SelectItem></SelectContent>
+        </Select>
+      ) : null}
       <Button type="button" size="icon-sm" variant={hidden ? 'secondary' : 'ghost'} onClick={onToggleHidden} aria-label={hidden ? `Show ${row.title}` : `Hide ${row.title}`}>
         {hidden ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
       </Button>

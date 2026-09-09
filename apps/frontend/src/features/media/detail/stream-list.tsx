@@ -70,7 +70,7 @@ export function StreamList({
   }
 
   return (
-    <div className="grid min-h-0 gap-3.5">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="grid gap-2">
         <Select value={activeFilterValue} onValueChange={setFilterValue}>
           <SelectTrigger className="w-full justify-between rounded-lg border border-border bg-card/70 px-2.5 text-sm" aria-label="Source filter">
@@ -90,7 +90,7 @@ export function StreamList({
       {!filteredRows.length ? (
         <p className={mutedText}>No streams match this filter.</p>
       ) : (
-        <div className={cn("flex flex-col gap-2.5 overflow-y-auto pr-1 [scrollbar-width:thin]", bottomPagePadding)}>
+        <div className={cn("flex min-h-0 flex-col gap-2 overflow-y-auto pr-1 [scrollbar-width:thin]", bottomPagePadding)}>
           <p className="m-0 text-xs text-muted-foreground">
             Showing {filteredRows.length} of {rows.length} streams
           </p>
@@ -115,7 +115,7 @@ export function StreamList({
 export function StreamListSkeleton({ count = 5 }: { count?: number }) {
   return (
     <div
-      className={cn("flex flex-col gap-2.5 overflow-y-auto pr-1 [scrollbar-width:thin]", bottomPagePadding)}
+      className={cn("flex min-h-0 flex-col gap-2 overflow-y-auto pr-1 [scrollbar-width:thin]", bottomPagePadding)}
       role="status"
       aria-label="Loading streams"
     >

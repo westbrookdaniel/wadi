@@ -355,3 +355,17 @@ select {
 .auth-form label { font-size: 12px; color: #c3c7ce; }
 @media (max-width: 800px) { .app-page { --page-gutter: 22px; } }
 @media (prefers-reduced-motion: reduce) { .route-arrival, .featured-film-slide { animation: none; } }
+
+.settings-panel { border: 1px solid rgb(255 255 255 / 8%); border-radius: 12px; background: color-mix(in srgb, var(--card) 60%, transparent); padding: 20px; }
+.settings-area { font-size: 14px; }
+.settings-area h3 { font-size: 14px; font-weight: 500; }
+.settings-area button:not([aria-label="Profile actions"]) { border-radius: 8px; }
+.settings-area [data-slot="select-trigger"], .settings-area input { border-radius: 8px; font-size: 13px; }
+.settings-area [data-slot="card-description"] { max-width: 65ch; }
+
+.featured-film::after, .media-card-item > button::after { content: ''; position: absolute; inset: 0; pointer-events: none; border: 1px solid rgb(255 255 255 / 9%); border-radius: inherit; z-index: 2; }
+
+.image-reveal { opacity: 0; filter: blur(8px); transition: opacity 320ms ease, filter 420ms ease; }
+.image-reveal[data-ready="true"] { opacity: 1; filter: blur(0); }
+.artwork { background-image: radial-gradient(ellipse at 50% 35%, rgb(255 255 255 / 5%), transparent 75%); }
+@media (prefers-reduced-motion: reduce) { .image-reveal { transition: none; filter: none; } }

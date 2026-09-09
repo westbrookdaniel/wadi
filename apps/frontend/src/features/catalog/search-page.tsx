@@ -35,8 +35,7 @@ export function SearchPage({ onOpenMedia }: { onOpenMedia: (media: MediaPreview)
 
   return (
     <div className={pageStack}>
-      <div><h1 className="text-3xl font-medium tracking-tight">Search</h1><p className="mt-2 text-sm text-muted-foreground">Find a film, series, or a title you almost remember.</p></div>
-      <label className="flex min-h-[52px] w-[min(760px,100%)] items-center gap-2.5 rounded-full border border-border bg-card/60 px-[18px] shadow-sm ring-1 ring-foreground/5">
+      <label className="flex min-h-[52px] w-[min(760px,100%)] items-center gap-2.5 rounded-xl border border-border bg-card/60 px-[18px] shadow-sm ring-1 ring-foreground/5">
         <Search className="size-[18px] text-muted-foreground" aria-hidden="true" />
         <Input
           className="min-h-[50px] border-0 bg-transparent px-0 focus-visible:ring-0"
@@ -50,7 +49,7 @@ export function SearchPage({ onOpenMedia }: { onOpenMedia: (media: MediaPreview)
       </label>
 
       {debouncedQuery.length > 1 ? <div className="flex flex-wrap items-center gap-2">
-        {[['all', 'All'], ['movie', 'Films'], ['series', 'Series']].map(([value, label]) => <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value ?? 'all')} className={`rounded-full px-4 py-2 text-xs transition ${filter === value ? 'bg-white text-black' : 'bg-white/5 text-muted-foreground hover:bg-white/10'}`}>{label}</button>)}
+        {[['all', 'All'], ['movie', 'Films'], ['series', 'Series']].map(([value, label]) => <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value ?? 'all')} className={`rounded-lg px-4 py-2 text-xs transition ${filter === value ? 'bg-white text-black' : 'bg-white/5 text-muted-foreground hover:bg-white/10'}`}>{label}</button>)}
         <p className="ml-2 text-xs text-muted-foreground" role="status">{isSearching ? 'Searching catalogs…' : `${visibleMedia.length} results`}</p>
       </div> : null}
       {results.find(result => result.error)?.error ? <ErrorState error={results.find(result => result.error)?.error} /> : null}

@@ -26,9 +26,13 @@ export function DetailShell({
 }) {
   return (
     <div className="grid gap-7" aria-label={`${media.name} details`}>
-      <div className="grid grid-cols-[minmax(0,1fr)_minmax(280px,500px)] items-stretch gap-0 max-[800px]:grid-cols-1 max-[800px]:gap-[22px]">
-        <div className={cn("flex flex-col", pagePadding)}>
-          <div className="flex-1">
+      <div className="grid grid-cols-[minmax(0,1fr)_clamp(320px,30vw,460px)] items-stretch gap-0 max-[800px]:grid-cols-1 max-[800px]:gap-[22px]">
+        <div className={cn("relative isolate flex min-h-svh min-w-0 flex-col gap-8 overflow-hidden max-[800px]:min-h-[65svh]", pagePadding)}>
+          <div className="absolute inset-0 -z-10" aria-hidden="true">
+            <Artwork eager src={typeof media.raw.background === 'string' ? media.raw.background : media.poster} className="h-full w-full opacity-65" />
+            <div className="absolute inset-0 bg-gradient-to-t from-background via-background/55 to-background/10" />
+          </div>
+          <div>
             <Button
               size="icon-lg"
               variant="ghost"
@@ -42,25 +46,25 @@ export function DetailShell({
 
           <section
             className={cn(
-              "grid grid-cols-[minmax(180px,280px)_minmax(0,680px)] items-end gap-[clamp(22px,5vw,56px)] max-[800px]:grid-cols-1",
+              "mt-auto grid grid-cols-[minmax(90px,160px)_minmax(0,1fr)] items-end gap-6 max-[1100px]:grid-cols-1",
             )}
           >
             {media.poster ? (
               <Artwork
                 backdropSource="detail"
-                className="aspect-[2/3] w-full rounded-lg object-cover shadow-[0_28px_80px_hsl(0_0%_0%/42%)] max-[800px]:w-[min(220px,70vw)]"
+                className="aspect-[2/3] w-full rounded-lg object-cover shadow-[0_28px_80px_hsl(0_0%_0%/42%)] max-[1100px]:w-[140px]"
                 src={media.poster}
                 alt=""
               />
             ) : null}
             <div className="grid gap-[18px]">
-              <h2 className="m-0 text-[4rem] text-balance leading-[0.95] tracking-normal max-[800px]:text-[clamp(2rem,12vw,3.8rem)]">
+              <h2 className="m-0 text-[clamp(1.6rem,2.6vw,2.5rem)] text-balance leading-tight font-medium tracking-tight">
                 {media.name}
               </h2>
-              <p className={cn("m-0 max-w-[680px]", mutedText)}>
+              <p className={cn("m-0 max-w-[680px] text-sm leading-6", mutedText)}>
                 {[media.type, media.releaseInfo].filter(Boolean).join(" • ")}
               </p>
-              <p className={cn("m-0 max-w-[680px]", mutedText)}>
+              <p className={cn("m-0 max-w-[680px] text-sm leading-6", mutedText)}>
                 {media.description ?? "No description available."}
               </p>
               {children}
@@ -70,13 +74,11 @@ export function DetailShell({
 
         <aside
           className={cn(
-            "grid h-[calc(100svh)] content-start gap-3.5 overflow-hidden bg-[hsl(240_14%_4%/72%)] max-[800px]:h-auto",
-            pagePadding, 
-			'pb-0'
+            "flex h-svh min-w-0 flex-col gap-4 overflow-hidden border-l border-white/8 bg-card/30 p-6 max-[800px]:h-auto max-[800px]:min-h-[60svh] max-[800px]:border-l-0 max-[800px]:border-t"
           )}
           aria-label={sideLabel}
         >
-          <h3 className="m-0 tracking-normal">{sideTitle}</h3>
+          <h3 className="m-0 text-sm font-medium text-muted-foreground">{sideTitle}</h3>
           {sideContent}
         </aside>
       </div>
@@ -87,9 +89,9 @@ export function DetailShell({
 export function DetailShellSkeleton({ onBack }: { onBack: () => void }) {
   return (
     <div className="grid gap-7" aria-label="Loading media details" role="status">
-      <div className="grid grid-cols-[minmax(0,1fr)_minmax(280px,500px)] items-stretch gap-0 max-[800px]:grid-cols-1 max-[800px]:gap-[22px]">
-        <div className={cn("flex flex-col", pagePadding)}>
-          <div className="flex-1">
+      <div className="grid grid-cols-[minmax(0,1fr)_clamp(320px,30vw,460px)] items-stretch gap-0 max-[800px]:grid-cols-1 max-[800px]:gap-[22px]">
+        <div className={cn("relative isolate flex min-h-svh min-w-0 flex-col gap-8 overflow-hidden max-[800px]:min-h-[65svh]", pagePadding)}>
+          <div>
             <Button
               size="icon-lg"
               variant="ghost"
@@ -101,8 +103,8 @@ export function DetailShellSkeleton({ onBack }: { onBack: () => void }) {
             </Button>
           </div>
 
-          <section className="grid grid-cols-[minmax(180px,280px)_minmax(0,680px)] items-end gap-[clamp(22px,5vw,56px)] max-[800px]:grid-cols-1">
-            <Skeleton className="aspect-[2/3] w-full rounded-lg shadow-[0_28px_80px_hsl(0_0%_0%/28%)] max-[800px]:w-[min(220px,70vw)]" />
+          <section className="mt-auto grid grid-cols-[minmax(90px,160px)_minmax(0,1fr)] items-end gap-6 max-[1100px]:grid-cols-1">
+            <Skeleton className="aspect-[2/3] w-full rounded-lg shadow-[0_28px_80px_hsl(0_0%_0%/28%)] max-[1100px]:w-[140px]" />
             <div className="grid gap-[18px]">
               <Skeleton className="h-[clamp(3rem,8vw,6rem)] w-[min(520px,100%)] rounded-lg" />
               <Skeleton className="h-4 w-[min(260px,70%)] rounded-full" />

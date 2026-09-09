@@ -1,12 +1,11 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, Heart, Plus } from 'lucide-react'
+import { Bookmark, Check, Plus } from 'lucide-react'
 
 import { addListItem, createList, deleteListItem, listItemsQuery, listsQuery, queryKeys } from '@/api/queries'
 import type { MediaPreview } from '@/api/types'
 import { useDialogManager } from '@/components/dialogs'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
 const CREATE_LIST_VALUE = '__create_list__'
 
@@ -39,6 +38,7 @@ export function WatchlistAddButton({ media }: { media: MediaPreview }) {
         return null
       }
       const list = await createList(result.name)
+      await queryClient.invalidateQueries({ queryKey: queryKeys.lists })
       await addListItem(list.id, media)
       return list.id
     },
@@ -58,7 +58,7 @@ export function WatchlistAddButton({ media }: { media: MediaPreview }) {
   const isSaved = Boolean(savedDefaultItem)
   const itemsByListId = Object.fromEntries(
     (lists.data ?? []).map((list, index) => [list.id, listItems[index]?.data ?? []]),
-  ) as Record<string, NonNullable<(typeof listItems)[number]['data']>>
+  )
   const customAddedLists = customLists.filter((list) =>
     (itemsByListId[list.id] ?? []).some((item) => item.media_type === media.type && item.media_id === media.id),
   )
@@ -82,51 +82,33 @@ export function WatchlistAddButton({ media }: { media: MediaPreview }) {
       createAndAddMutation.mutate()
       return
     }
-    addMutation.mutate(value)
+    const existing = (itemsByListId[value] ?? []).find(item => item.media_type === media.type && item.media_id === media.id)
+    if (existing) removeMutation.mutate({ listId: value, itemId: existing.id })
+    else addMutation.mutate(value)
   }
 
-  if (lists.isLoading) {
-    return (
-      <div className="flex flex-wrap items-center gap-2">
-        <Button variant="secondary" size="icon-sm" type="button" disabled aria-label="Save to Saved">
-          <Heart aria-hidden="true" />
-        </Button>
-        <Button variant="secondary" size="sm" type="button" disabled>
-          Add to
-        </Button>
-      </div>
-    )
-  }
-
+  const busy = addMutation.isPending || removeMutation.isPending || createAndAddMutation.isPending
+  const error = lists.error ?? listItems.find(result => result.error)?.error ?? addMutation.error ?? removeMutation.error ?? createAndAddMutation.error
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant={isSaved ? 'default' : 'secondary'}
-            size="icon-sm"
-            type="button"
-            aria-label={isSaved ? 'Remove from Saved' : 'Save to Saved'}
-            onClick={toggleDefault}
-            disabled={!defaultList || addMutation.isPending || removeMutation.isPending}
-          >
-            <Heart className={isSaved ? 'fill-current' : undefined} aria-hidden="true" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>{isSaved ? 'Saved' : 'Save to Saved'}</TooltipContent>
-      </Tooltip>
-
+    <div className="grid gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button variant="secondary" size="sm" className="h-9 rounded-lg border border-white/10 bg-white/5 px-3 text-xs" type="button"
+          aria-label={isSaved ? 'Remove from Saved' : 'Save to Saved'} aria-pressed={isSaved}
+          onClick={toggleDefault} disabled={!defaultList || busy || listItems.some(result => result.isLoading || result.isError)}>
+          {isSaved ? <Check aria-hidden="true" /> : <Bookmark aria-hidden="true" />}
+          {isSaved ? 'Saved' : 'Save'}
+        </Button>
       <Select
         value=""
         onValueChange={handleAddToSelect}
-        disabled={addMutation.isPending || createAndAddMutation.isPending}
+        disabled={busy || lists.isLoading || listItems.some(result => result.isLoading || result.isError)}
       >
-        <SelectTrigger className="w-fit max-w-[min(520px,100%)] rounded-full border-border bg-background hover:bg-muted" size="sm" aria-label="Add to watchlist">
+        <SelectTrigger className="w-fit max-w-[min(520px,100%)] h-9 rounded-lg border-white/10 bg-white/5 text-xs hover:bg-white/10" size="sm" aria-label="Add to watchlist">
           {customAddedCount > 0 ? <Check aria-hidden="true" /> : <Plus aria-hidden="true" />}
           <SelectValue
             placeholder={
               customAddedCount === 0
-                ? 'Add to'
+                ? 'Add to list'
                 : customAddedCount === 1
                   ? customAddedLists[0]?.name
                   : `${customAddedCount} lists`
@@ -154,6 +136,8 @@ export function WatchlistAddButton({ media }: { media: MediaPreview }) {
           ))}
         </SelectContent>
       </Select>
+      </div>
+      {error ? <p role="alert" className="text-xs text-destructive">{error instanceof Error ? error.message : 'Could not update your lists. Try again.'}</p> : null}
     </div>
   )
 }

@@ -1,8 +1,13 @@
+import { RevealedImage } from '@/components/revealed-image'
+import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
+import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "@tanstack/react-form";
 import {
   ArrowLeft,
+  GripVertical,
   Copy,
   Ellipsis,
   LogOut,
@@ -15,6 +20,7 @@ import { z } from "zod";
 
 import {
   addonsQuery,
+  reorderAddons,
   createProfile,
   deleteProfile,
   configureAddon,
@@ -70,7 +76,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useToast } from "@/components/ui/toast-context";
 import { useDialogManager } from "@/components/dialogs";
 import { BrowseLayoutSettings } from "./browse-layout-settings";
-import { ProfileAvatar, PROFILE_AVATAR_OPTIONS } from "./profile-avatar";
+import { ProfileAvatar, PROFILE_AVATAR_OPTIONS, isAvatarImageUrl } from "./profile-avatar";
 
 const addonUrlSchema = z.object({
   url: z.url("Enter a valid addon manifest URL."),
@@ -82,51 +88,23 @@ const profileSchema = z.object({
     .trim()
     .min(1, "Enter a profile name.")
     .max(32, "Use 32 characters or fewer."),
-  avatarKey: z.string().trim().min(1),
+  avatarKey: z.string().trim().max(2048).refine(value => PROFILE_AVATAR_OPTIONS.some(option => option.key === value) || isAvatarImageUrl(value), "Choose a colour or enter an HTTP image URL."),
 });
 
 export function ProfileSettingsPage() {
   const navigate = useNavigate();
 
   return (
-    <div className={cn(pageStack, "max-w-[980px]")}>
-      <section className="grid gap-4 pt-2 pb-6">
-        <ProfileManager />
-      </section>
-
-      <header className="grid gap-1">
-        <h1 className="m-0 text-[clamp(1.2rem,2vw,1.7rem)] font-[520] tracking-normal">
-          Profile settings
-        </h1>
-        <p className="m-0 text-sm text-muted-foreground">
-          Applies to this profile.
-        </p>
+    <div className={cn(pageStack, "settings-area max-w-[1040px] gap-6")}>
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-medium tracking-tight">Settings</h1>
+        <Button variant="secondary" size="sm" onClick={() => navigate({ to: "/settings/account" })}>Account & addons</Button>
       </header>
-
-      <section className="grid gap-4 pt-2 pb-6">
+      <section className="settings-panel"><ProfileManager /></section>
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
         <BrowseLayoutSettings />
-      </section>
-
-      <section className="grid gap-4 pt-2 pb-6">
         <ExternalPlaybackSettingsSection />
-      </section>
-
-      <section className="grid gap-3 rounded-xl border border-border bg-card/60 p-4">
-        <h3 className="m-0 text-[1.05rem] font-[520] tracking-normal">
-          Account settings
-        </h3>
-        <p className="m-0 text-sm text-muted-foreground">
-          Applies to your whole account, including addons and sign-out.
-        </p>
-        <div>
-          <Button
-            type="button"
-            onClick={() => navigate({ to: "/settings/account" })}
-          >
-            Open account settings
-          </Button>
-        </div>
-      </section>
+      </div>
     </div>
   );
 }
@@ -159,7 +137,7 @@ function ExternalPlaybackSettingsSection() {
   }
 
   if (!data) {
-    return null;
+    return prefs.error ? <ErrorState error={prefs.error} /> : null;
   }
 
   const updateDraft = <K extends keyof PlaybackPreferences>(
@@ -212,8 +190,9 @@ function ExternalPlaybackSettingsSection() {
         </Label>
       </div>
 
+      {saveMutation.error ? <p role="alert" className="text-sm text-destructive">{saveMutation.error.message}</p> : null}
       <div className="flex justify-end">
-        <Button type="button" onClick={onSave} disabled={saveMutation.isPending}>
+        <Button type="button" onClick={onSave} disabled={saveMutation.isPending || !draft || (draft.stream_action === prefs.data?.stream_action && draft.external_player_template === prefs.data?.external_player_template)}>
           Save external playback settings
         </Button>
       </div>
@@ -227,6 +206,14 @@ export function AccountSettingsPage({ user }: { user: User }) {
   const navigate = useNavigate();
   const addons = useQuery(addonsQuery);
   const [search, setSearch] = useState("");
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
+  const reorderMutation = useMutation({
+    mutationFn: reorderAddons,
+    onSuccess: async result => {
+      queryClient.setQueryData(queryKeys.addons, result.items);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.catalogs });
+    },
+  });
 
   const logoutMutation = useMutation({
     mutationFn: logout,
@@ -253,7 +240,7 @@ export function AccountSettingsPage({ user }: { user: User }) {
   );
 
   return (
-    <div className={cn(pageStack, "max-w-[980px]")}>
+    <div className={cn(pageStack, "settings-area max-w-[1040px]")}>
       <header className="grid gap-6">
         <div>
           <Button
@@ -266,13 +253,13 @@ export function AccountSettingsPage({ user }: { user: User }) {
             Back to profile settings
           </Button>
         </div>
-        <div className="flex min-h-[52px] items-center justify-between gap-[18px]">
+        <div className="flex min-h-[52px] flex-wrap items-center justify-between gap-4">
           <div className="grid gap-1">
             <h1 className="m-0 text-[clamp(1.2rem,2vw,1.7rem)] font-[520] tracking-normal">
               Account settings
             </h1>
             <p className="m-0 text-sm text-muted-foreground">
-              Applies to your account: {user.email}
+              {user.email}
             </p>
           </div>
           <Button
@@ -302,23 +289,36 @@ export function AccountSettingsPage({ user }: { user: User }) {
         <Input
           type="search"
           placeholder="Search installed addons"
-          className="h-[52px] rounded-full px-[18px] text-sm md:text-base"
+          className="h-10 max-w-md rounded-lg px-3 text-sm"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
 
         {addons.isLoading ? <LoadingState label="Loading addons" /> : null}
         {addons.error ? <ErrorState error={addons.error} /> : null}
+        {deleteMutation.error ? <ErrorState error={deleteMutation.error} /> : null}
+        {reorderMutation.error ? <ErrorState error={reorderMutation.error} /> : null}
+        <p className="text-xs text-muted-foreground">{search.trim() ? "Clear search to reorder addons." : "Drag to reorder addons. Changes save automatically."}</p>
         {filtered.length ? (
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={({ active, over }) => {
+            if (!over || active.id === over.id || search.trim() || reorderMutation.isPending) return;
+            const all = addons.data ?? [];
+            const from = all.findIndex(addon => addon.id === active.id), to = all.findIndex(addon => addon.id === over.id);
+            if (from >= 0 && to >= 0) reorderMutation.mutate(arrayMove(all, from, to).map(addon => addon.id));
+          }}>
+          <SortableContext items={filtered.map(addon => addon.id)} strategy={verticalListSortingStrategy}>
           <div className="grid gap-2.5">
             {filtered.map((addon) => (
               <AddonCard
                 addon={addon}
                 key={addon.id}
+                dragDisabled={Boolean(search.trim()) || reorderMutation.isPending}
                 onDelete={() => deleteMutation.mutate(addon.id)}
               />
             ))}
           </div>
+          </SortableContext>
+          </DndContext>
         ) : addons.data?.length && !addons.isLoading ? (
           <EmptyState
             title="No matching addons"
@@ -430,14 +430,14 @@ function ProfileManager() {
     <div className="grid gap-3">
       <div>
         <h3 className="m-0 text-sm text-muted-foreground">
-          Change current profile.
+          Profiles
         </h3>
       </div>
-      <div className="flex gap-3 flex-wrap">
+      <div className="flex gap-2 flex-wrap">
         {profileList.map((profile) => {
           const isActive = profile.id === activeProfileId;
           return (
-            <div key={profile.id} className="grid justify-items-center p-3">
+            <div key={profile.id} className="grid justify-items-center p-2">
               <div
                 className={cn("grid justify-items-center gap-3 rounded-lg p-1")}
               >
@@ -454,7 +454,7 @@ function ProfileManager() {
                     avatarKey={profile.avatar_key}
                     themeColor={profile.theme_color}
                     className={cn(
-                      "size-16 text-xl",
+                      "size-14 text-lg",
                       "transition ring-0 hover:ring-4 ring-muted-foreground/40",
                       isActive && "ring-4 ring-primary/60",
                     )}
@@ -489,7 +489,7 @@ function ProfileManager() {
               onClick={() => setCreateOpen(true)}
               type="button"
               aria-label="Add profile"
-              className="grid size-16 place-items-center rounded-full border border-dashed border-border bg-muted/40 hover:bg-muted transition"
+              className="grid size-14 place-items-center rounded-full border border-dashed border-border bg-muted/40 hover:bg-muted transition"
             >
               <Plus aria-hidden="true" />
             </button>
@@ -497,6 +497,7 @@ function ProfileManager() {
           </div>
         )}
       </div>
+      {createMutation.error || updateMutation.error || deleteMutation.error || selectMutation.error ? <p role="alert" className="text-sm text-destructive">{(createMutation.error ?? updateMutation.error ?? deleteMutation.error ?? selectMutation.error)?.message}</p> : null}
       {isAtLimit ? (
         <p className="m-0 text-sm text-muted-foreground">
           Profile limit reached (5).
@@ -514,6 +515,7 @@ function ProfileManager() {
           <ProfileEditorForm
             submitLabel="Create profile"
             isPending={createMutation.isPending}
+            error={createMutation.error}
             initialName=""
             initialAvatarKey={PROFILE_AVATAR_OPTIONS[0].key}
             onSubmit={(value) => createMutation.mutate(value)}
@@ -536,6 +538,7 @@ function ProfileManager() {
             <ProfileEditorForm
               submitLabel="Save changes"
               isPending={updateMutation.isPending}
+              error={updateMutation.error}
               initialName={editingProfile.name}
               initialAvatarKey={editingProfile.avatar_key}
               onSubmit={(value) =>
@@ -641,12 +644,14 @@ function ProfileEditorForm({
   initialAvatarKey,
   submitLabel,
   isPending,
+  error,
   onSubmit,
 }: {
   initialName: string;
   initialAvatarKey: string;
   submitLabel: string;
   isPending: boolean;
+  error?: Error | null;
   onSubmit: (value: { name: string; avatarKey: string }) => void;
 }) {
   const form = useForm({
@@ -659,7 +664,7 @@ function ProfileEditorForm({
 
   return (
     <form
-      className="grid gap-3"
+      className="grid gap-5"
       onSubmit={(event) => {
         event.preventDefault();
         void form.handleSubmit();
@@ -685,8 +690,11 @@ function ProfileEditorForm({
       <form.Field name="avatarKey">
         {(field) => (
           <div className="grid gap-2">
-            <Label>Avatar</Label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="flex items-center gap-4 rounded-xl bg-white/5 p-4">
+              <form.Subscribe selector={state => state.values.name}>{name => <ProfileAvatar name={name || 'You'} avatarKey={field.state.value} themeColor={null} className="size-16 text-2xl" />}</form.Subscribe>
+              <div><Label>Profile picture</Label><p className="mt-1 text-xs text-muted-foreground">Choose a colour or use your own image.</p></div>
+            </div>
+            <div className="grid grid-cols-3 min-[480px]:grid-cols-6 gap-2">
               {PROFILE_AVATAR_OPTIONS.map((option) => {
                 const selected = field.state.value === option.key;
                 return (
@@ -694,27 +702,34 @@ function ProfileEditorForm({
                     key={option.key}
                     type="button"
                     className={cn(
-                      "grid justify-items-center gap-1 rounded-lg border border-border p-2 transition hover:bg-muted/40",
+                      "grid justify-items-center gap-1 rounded-lg p-1.5 transition hover:bg-muted/40",
                       selected && "ring-2 ring-primary/60",
                     )}
+                    aria-label={`Use ${option.name} avatar`}
+                    aria-pressed={selected}
                     onClick={() => field.handleChange(option.key)}
                   >
                     <ProfileAvatar
                       name={initialName || "P"}
                       avatarKey={option.key}
                       themeColor={null}
-                      className="size-12 text-base"
+                      className="size-9 text-sm"
                     />
                     <span className="text-xs text-muted-foreground">
-                      {option.key}
+                      {option.name}
                     </span>
                   </button>
                 );
               })}
             </div>
+            <Label htmlFor="avatar-url" className="mt-3">Image URL</Label>
+            <Input id="avatar-url" type="url" placeholder="https://example.com/photo.jpg" maxLength={2048} value={field.state.value.startsWith('avatar-') ? '' : field.state.value} onChange={event => field.handleChange(event.target.value || PROFILE_AVATAR_OPTIONS[0].key)} onBlur={field.handleBlur} />
+            <p className="text-xs text-muted-foreground">Paste a direct link to an image. It will be cropped to a circle.</p>
+            {fieldError(field) ? <p role="alert" className={fieldErrorClass}>{fieldError(field)}</p> : null}
           </div>
         )}
       </form.Field>
+      {error ? <ErrorState error={error} /> : null}
       <DialogFooter>
         <Button type="submit" disabled={isPending}>
           {submitLabel}
@@ -766,7 +781,7 @@ export function AddAddonPage() {
   const description = stringValue(preview?.manifest.description);
 
   return (
-    <div className={cn(pageStack, "max-w-[980px]")}>
+    <div className={cn(pageStack, "settings-area max-w-[1040px]")}>
       <section className="grid gap-4 border-b border-border pt-2 pb-6">
         <h1 className="m-0 text-[1.2rem] font-[520] tracking-normal">
           Add addon
@@ -819,7 +834,7 @@ export function AddAddonPage() {
       </section>
 
       {preview ? (
-        <Card size="sm" className="bg-card/70">
+        <Card size="sm" className="rounded-xl border-white/8 bg-card/60 shadow-none">
           <CardHeader>
             <CardTitle className="flex items-center gap-3">
               <AddonAvatar
@@ -828,7 +843,7 @@ export function AddAddonPage() {
                 fallback={title}
               />
               {title}
-              <p className={mutedText}>{version ?? "Unknown"}</p>
+              <span className="text-[11px] font-normal text-muted-foreground">{version ?? "Unknown"}</span>
             </CardTitle>
             <CardDescription>
               {description ?? `${preview.transport} addon`}
@@ -868,11 +883,14 @@ export function AddAddonPage() {
 
 function AddonCard({
   addon,
+  dragDisabled,
   onDelete,
 }: {
   addon: AddonRecord;
+  dragDisabled: boolean;
   onDelete: () => void;
 }) {
+  const { setNodeRef, transform, transition, isDragging, attributes, listeners } = useSortable({ id: addon.id, disabled: dragDisabled });
   const queryClient = useQueryClient();
   const { openDialog } = useDialogManager();
   const { toast } = useToast();
@@ -890,27 +908,31 @@ function AddonCard({
   });
 
   return (
-    <Card size="sm" className="bg-card/70">
+    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition: transition, opacity: isDragging ? 0.6 : 1 }}>
+    <Card size="sm" className="rounded-xl border-white/8 bg-card/60 shadow-none">
       <CardHeader className="gap-3">
-        <CardTitle className="flex items-center gap-2.5">
+        <CardTitle className="flex min-w-0 items-center gap-2 text-sm font-medium">
+          <button type="button" aria-label={`Reorder ${title}`} disabled={dragDisabled} {...attributes} {...listeners} className="touch-none cursor-grab rounded-md p-1 text-muted-foreground hover:bg-white/10 disabled:opacity-30"><GripVertical className="size-4" /></button>
           <AddonAvatar
             manifest={addon.manifest}
             sourceUrl={addon.source_url}
             fallback={title}
           />
-          {title}
-          <p className={mutedText}>{version ?? "Unknown"}</p>
+          <span className="min-w-0 truncate" title={title}>{title}</span>
+          <span className="hidden sm:inline text-[11px] font-normal text-muted-foreground">{version ?? "Unknown"}</span>
         </CardTitle>
-        <CardDescription>{description}</CardDescription>
+        <CardDescription className="col-span-2 line-clamp-2 text-xs leading-5">{description}</CardDescription>
         <CardAction className="flex items-center gap-1">
           <Button
             variant="ghost"
-            size="icon"
+            size="icon-sm"
             type="button"
             aria-label="Share addon link"
             onClick={async () => {
-              await navigator.clipboard.writeText(addon.source_url);
-              toast({ title: "Link copied" });
+              try {
+                await navigator.clipboard.writeText(addon.source_url);
+                toast({ title: "Link copied" });
+              } catch { toast({ title: "Could not copy link. Check clipboard permissions." }); }
             }}
           >
             <Copy aria-hidden="true" />
@@ -918,7 +940,7 @@ function AddonCard({
           {hasConfig ? (
             <Button
               variant="ghost"
-              size="icon"
+              size="icon-sm"
               type="button"
               aria-label="Configure addon"
               onClick={async () => {
@@ -935,7 +957,7 @@ function AddonCard({
           <Button
             className={dangerText}
             variant="ghost"
-            size="icon"
+            size="icon-sm"
             type="button"
             aria-label="Delete addon"
             onClick={onDelete}
@@ -944,7 +966,9 @@ function AddonCard({
           </Button>
         </CardAction>
       </CardHeader>
+      {configureMutation.error ? <CardContent><ErrorState error={configureMutation.error} /></CardContent> : null}
     </Card>
+    </div>
   );
 }
 
@@ -960,10 +984,10 @@ function AddonAvatar({
   const [imageError, setImageError] = useState(false);
   const src = addonImageSrc(manifest, sourceUrl);
   return src && !imageError ? (
-    <img
+    <RevealedImage
       src={src}
       alt=""
-      className="size-7 rounded-sm object-cover"
+      className="size-7 shrink-0 rounded-sm object-cover"
       onError={() => setImageError(true)}
     />
   ) : (

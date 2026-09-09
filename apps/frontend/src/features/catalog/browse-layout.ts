@@ -14,6 +14,7 @@ export type BrowseRowCandidate = {
   kind: BrowseRowKind
   title: string
   subtitle?: string
+  catalogEntries?: CatalogEntry[]
   catalogEntry?: CatalogEntry
   list?: UserList
 }
@@ -46,6 +47,7 @@ export function normalizeBrowseLayoutPage(page: Partial<BrowseLayoutPage> | null
   return {
     order: dedupeRowKeys(page?.order ?? []),
     hidden: dedupeRowKeys(page?.hidden ?? []),
+    ...(page?.catalogModes ? { catalogModes: page.catalogModes } : {}),
   }
 }
 
@@ -93,7 +95,15 @@ export function buildBrowseRowCandidates(
     if (page === 'series' && entry.catalog.type !== 'series') {
       continue
     }
+    const matching = page === 'home' && ['movie', 'series'].includes(entry.catalog.type)
+      ? rows.find(row => row.kind === 'catalog' && row.catalogEntry?.addon_id === entry.addon_id && row.title.toLowerCase() === (entry.catalog.name ?? entry.catalog.id).toLowerCase() && !row.catalogEntries?.some(item => item.catalog.type === entry.catalog.type))
+      : undefined
+    if (matching) {
+      matching.catalogEntries?.push(entry)
+      continue
+    }
     rows.push({
+      catalogEntries: [entry],
       key: catalogRowKey(entry),
       kind: 'catalog',
       title: entry.catalog.name ?? entry.catalog.id,
@@ -121,7 +131,10 @@ export function resolveVisibleBrowseRows(
 ): BrowseRowCandidate[] {
   const ordered = resolveOrderedBrowseRows(candidates, pageLayout)
   const hiddenKeys = new Set(pageLayout.hidden)
-  return ordered.filter((row) => !hiddenKeys.has(row.key))
+  return ordered.filter((row) => !hiddenKeys.has(row.key)).map(row => {
+    const mode = pageLayout.catalogModes?.[row.key] ?? 'combined'
+    return mode === 'combined' ? row : { ...row, catalogEntries: row.catalogEntries?.filter(entry => entry.catalog.type === mode) }
+  })
 }
 
 export function resolveOrderedBrowseRows(

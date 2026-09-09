@@ -11,7 +11,7 @@ test('Node API preserves auth, profile isolation, lists, progress, addons and by
  t.after(() => { server.closeAllConnections(); server.close(); db.close(); });
  const media = Buffer.from('0123456789abcdefghijklmnopqrstuvwxyz');
  const upstream = createServer((req,res) => {
-  if (req.url === '/manifest.json') return res.end(JSON.stringify({id:'fixture',name:'Fixture',version:'1',resources:['catalog','meta','stream'],types:['movie'],catalogs:[{id:'test',type:'movie'}]}));
+  if (req.url === '/manifest.json' || req.url === '/other/manifest.json') return res.end(JSON.stringify({id:'fixture',name:'Fixture',version:'1',resources:['catalog','meta','stream'],types:['movie'],catalogs:[{id:'test',type:'movie'}]}));
   if (req.url === '/catalog/movie/test.json') return res.end(JSON.stringify({metas:[{id:'test:film',type:'movie',name:'Test film'}]}));
   if (req.url === '/stream/movie/test%3Afilm.json') return res.end(JSON.stringify({streams:[{url:`${fixture}/media.mp4`}]}));
   if (req.url === '/media.mp4') {
@@ -45,6 +45,20 @@ test('Node API preserves auth, profile isolation, lists, progress, addons and by
  await request('/api/profiles/select','POST',{profile_id:auth.active_profile_id});
  assert.equal((await request('/api/continue-watching')).items.length,1);
  await request('/api/addons/install','POST',{url:fixture+'/manifest.json'},201);
+ const firstAddon = (await request('/api/addons')).items[0];
+ await request('/api/addons/install','POST',{url:fixture+'/other/manifest.json'},201);
+ const secondAddon = (await request('/api/addons')).items[1];
+ await request('/api/addons/order','PUT',{ids:[secondAddon.id,firstAddon.id]});
+ assert.deepEqual((await request('/api/addons')).items.map(addon=>addon.id),[secondAddon.id,firstAddon.id]);
+ await request('/api/addons/order','PUT',{ids:[firstAddon.id,firstAddon.id]},400);
+ await request('/api/addons/order','PUT',{ids:[firstAddon.id,'foreign']},400);
+ await request('/api/addons/order','PUT',{ids:[]},400);
+ await request(`/api/profiles/${profile.id}`,'PUT',{name:'Second',avatar_key:fixture+'/avatar.png'});
+ assert.equal((await request('/api/profiles')).items.find(item=>item.id===profile.id).avatar_key,fixture+'/avatar.png');
+ await request(`/api/profiles/${profile.id}`,'PUT',{name:'Second',avatar_key:'javascript:alert(1)'},400);
+ const layout = {pages:{home:{order:[],hidden:[],catalogModes:{popular:'series'}},movies:{order:[],hidden:[]},series:{order:[],hidden:[]}}};
+ await request('/api/settings/browse-layout','PUT',layout);
+ assert.equal((await request('/api/settings/browse-layout')).pages.home.catalogModes.popular,'series');
  assert.equal((await request('/api/catalogs')).items[0].catalog.id,'test');
  assert.equal((await request('/api/catalog/movie/test')).responses[0].response.metas[0].name,'Test film');
  const streams=await request('/api/streams/movie/test%3Afilm');assert.equal(streams.responses[0].response.streams[0].url,fixture+'/media.mp4');

@@ -36,7 +36,7 @@ export function FeaturedFilm({ entry, onOpen }: { entry: CatalogEntry; onOpen: (
       </div>
       {films.length > 1 ? <div className="absolute bottom-5 right-5 z-10 flex items-center gap-2">
         {films.map((item, position) => <button key={`${item.type}:${item.id}`} type="button" aria-label={`Show ${item.name}`} aria-pressed={position === index % films.length} onClick={() => { setIndex(position); setPaused(true) }} className="flex h-7 items-center px-1"><span className={`h-1 rounded-full transition-all ${position === index % films.length ? 'w-6 bg-white' : 'w-2 bg-white/35'}`} /></button>)}
-        <button type="button" aria-label={paused ? 'Play suggestions' : 'Pause suggestions'} onClick={() => setPaused(value => !value)} className="p-2 text-white/70">{paused ? <Play className="size-3" /> : <Pause className="size-3" />}</button>
+        <button type="button" aria-label={paused ? 'Play suggestions' : 'Pause suggestions'} onClick={() => setPaused(value => !value)} className="p-2 text-white/70">{paused ? <Play className="size-3 fill-current" /> : <Pause className="size-3 fill-current" />}</button>
       </div> : null}
     </section>
   )

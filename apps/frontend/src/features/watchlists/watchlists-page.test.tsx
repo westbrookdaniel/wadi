@@ -80,8 +80,7 @@ describe('WatchlistsPage dialog flows', () => {
 
     renderPage()
 
-    await user.click(await screen.findByRole('combobox', { name: 'Select watchlist' }))
-    await user.click(await screen.findByRole('option', { name: 'List' }))
+    await user.click(await screen.findByRole('button', { name: 'New list' }))
 
     await waitFor(() => {
       expect(openDialogMock).toHaveBeenCalledWith('watchlistCreate', {})

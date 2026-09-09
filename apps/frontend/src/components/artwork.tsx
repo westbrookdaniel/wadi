@@ -1,3 +1,4 @@
+import { RevealedImage } from '@/components/revealed-image'
 import { Film } from 'lucide-react'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
@@ -16,7 +17,7 @@ export function Artwork({ src, alt = '', className, eager = false, backdropSourc
   return (
     <div className={cn('artwork relative overflow-hidden bg-card', className)}>
       {available ? (
-        <img
+        <RevealedImage
           src={src}
           alt={alt}
           className="size-full object-cover"

@@ -90,3 +90,15 @@ describe('browse-layout helpers', () => {
     expect(filterWatchlistItemsForPage('series', items).map((value) => value.media_type)).toEqual(['series'])
   })
 })
+
+it('combines matching home catalogs only within an addon and persists per-row media choices', () => {
+  const movie = { ...catalog('popular', 'movie'), catalog: { id: 'popular', type: 'movie', name: 'Popular' } };
+  const series = { ...movie, catalog: { id: 'popular', type: 'series', name: 'Popular' } };
+  const other = { ...series, addon_id: 'other' };
+  const rows = buildBrowseRowCandidates('home', [movie, series, other], []);
+  expect(rows).toHaveLength(3);
+  expect(rows[1].catalogEntries).toEqual([movie, series]);
+  const layout = normalizeBrowseLayoutPage({ order: [], hidden: [], catalogModes: { [rows[1].key]: 'series' } });
+  expect(resolveVisibleBrowseRows(rows, layout)[1].catalogEntries).toEqual([series]);
+  expect(buildBrowseRowCandidates('movies', [movie, series], [])[0].catalogEntries).toEqual([movie]);
+});

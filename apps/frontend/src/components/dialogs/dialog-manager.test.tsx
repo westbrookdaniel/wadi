@@ -83,7 +83,7 @@ describe('DialogManagerProvider', () => {
 
     const firstInput = screen.getByRole('textbox')
     await user.type(firstInput, 'First list')
-    await user.click(screen.getByRole('button', { name: 'Create' }))
+    await user.click(screen.getByRole('button', { name: 'Create list' }))
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Second create' })).toBeInTheDocument()

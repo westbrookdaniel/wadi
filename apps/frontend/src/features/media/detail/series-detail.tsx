@@ -1,3 +1,5 @@
+import { WatchedButton } from './watch-state'
+import { useWatchToggle } from './use-watch-toggle'
 import { Artwork } from '@/components/artwork'
 import { uniqueSeasons, defaultSeason, seasonValue, parseSeasonValue, seasonLabel } from './episode-labels'
 import { useQuery } from "@tanstack/react-query";
@@ -123,11 +125,11 @@ export function SeriesDetailPage({
         step === "streams" ? "Available streams" : "Available episodes"
       }
       sideTitle={
-        step === "streams" && selectedEpisode ? selectedEpisode.title : ""
+        step === "streams" && selectedEpisode ? selectedEpisode.title : "Episodes"
       }
       sideContent={
         step === "streams" && selectedEpisode ? (
-          <div className="grid min-h-0 gap-4">
+          <div className="flex min-h-0 flex-1 flex-col gap-3">
             <Button
               className="w-fit"
               type="button"
@@ -142,6 +144,7 @@ export function SeriesDetailPage({
               <ChevronLeft aria-hidden="true" />
               Change Episode
             </Button>
+            {streams.error ? <p role="alert" className="text-xs text-destructive">{streams.error.message}</p> : null}
             <StreamList
               streams={streams.data ?? []}
               isLoading={streams.isLoading}
@@ -163,6 +166,7 @@ export function SeriesDetailPage({
           </div>
         ) : (
           <EpisodeSelector
+            media={media}
             episodes={episodes}
             seasons={seasons}
             selectedSeason={selectedSeason}
@@ -175,11 +179,13 @@ export function SeriesDetailPage({
       }
     >
       {listAction}
+      {watchData.error ? <p role="alert" className="text-xs text-destructive">{watchData.error.message}</p> : null}
     </DetailShell>
   );
 }
 
 function EpisodeSelector({
+  media,
   episodes,
   seasons,
   selectedSeason,
@@ -188,6 +194,7 @@ function EpisodeSelector({
   onSeasonChange,
   onSelectEpisode,
 }: {
+  media: MediaPreview;
   episodes: Episode[];
   seasons: Array<number | null>;
   selectedSeason: number | null;
@@ -207,7 +214,7 @@ function EpisodeSelector({
     currentSeasonIndex >= 0 && currentSeasonIndex < seasons.length - 1;
 
   return (
-    <div className="grid min-h-0 gap-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="grid grid-cols-[auto_1fr_auto] items-center gap-2">
         <Button
           type="button"
@@ -261,7 +268,9 @@ function EpisodeSelector({
           <EpisodeButton
             key={episode.id}
             episode={episode}
+            media={media}
             watchState={findWatchState(watchData, episode.id)}
+            watchUnavailable={!watchData}
             onClick={() => onSelectEpisode(episode)}
           />
         ))}
@@ -271,25 +280,30 @@ function EpisodeSelector({
 }
 
 function EpisodeButton({
+  media,
   episode,
   watchState,
+  watchUnavailable,
   onClick,
 }: {
   episode: Episode;
-  watchState?: { position_seconds: number };
+  media: MediaPreview;
+  watchUnavailable: boolean;
+  watchState?: { position_seconds: number; watched: boolean };
   onClick: () => void;
 }) {
-
+  const toggle = useWatchToggle(media.type, media.id, episode.id)
   return (
-    <div className="rounded-lg border border-border bg-card/70">
+    <div className="rounded-lg border border-white/8 bg-card/50">
+      <div className="flex items-center gap-1 pr-2">
       <button
-        className="grid w-full min-w-0 cursor-pointer grid-cols-[96px_1fr] gap-3 text-left"
+        className="grid flex-1 min-w-0 cursor-pointer grid-cols-[80px_1fr] gap-2 text-left"
         type="button"
         onClick={onClick}
       >
-        <Artwork src={episode.thumbnail} className="h-16 w-24 rounded-l-lg" />
-        <div className="min-w-0 flex flex-col justify-center px-4 p-2.5">
-          <strong className="block overflow-hidden text-ellipsis whitespace-nowrap">
+        <Artwork src={episode.thumbnail} className="h-16 w-20 rounded-l-lg" />
+        <div className="min-w-0 flex flex-col justify-center py-2 pr-1">
+          <strong className="block overflow-hidden text-ellipsis whitespace-nowrap text-xs font-medium">
             {episode.title}
           </strong>
           {formatEpisodeReleaseDate(episode.released) ? <time dateTime={episode.released} className="mt-0.5 block text-xs text-muted-foreground">{formatEpisodeReleaseDate(episode.released)}</time> : null}
@@ -300,6 +314,9 @@ function EpisodeButton({
           ) : null}
         </div>
       </button>
+      <WatchedButton compact title={episode.title} watched={watchState?.watched ?? false} isPending={toggle.isPending || watchUnavailable} onClick={() => toggle.mutate(!watchState?.watched)} />
+      </div>
+      {toggle.error ? <p role="alert" className="px-3 py-2 text-xs text-destructive">{toggle.error.message}</p> : null}
     </div>
   );
 }

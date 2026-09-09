@@ -47,14 +47,17 @@ export function MovieDetailPage({
         />
       }
     >
+      <div className="flex flex-wrap items-start gap-2">
       {media.type === 'movie' ? (
         <WatchedButton
           watched={watchState.watched}
-          isPending={toggleWatched.isPending}
+          isPending={toggleWatched.isPending || watchData.isLoading || watchData.isError}
           onClick={() => toggleWatched.mutate(!watchState.watched)}
         />
       ) : null}
       {listAction}
+      </div>
+      {toggleWatched.error || watchData.error || streams.error ? <p role="alert" className="text-xs text-destructive">{(toggleWatched.error ?? watchData.error ?? streams.error)?.message}</p> : null}
     </DetailShell>
   )
 }

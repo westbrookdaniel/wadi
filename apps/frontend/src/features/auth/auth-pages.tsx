@@ -1,3 +1,4 @@
+import { RevealedImage } from '@/components/revealed-image'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from '@tanstack/react-form'
 import { ArrowRight } from 'lucide-react'
@@ -76,7 +77,7 @@ export function AuthPage({ mode, onModeChange }: { mode: AuthMode; onModeChange:
         }}
       >
         <div className="mb-2 grid gap-3 text-left">
-          <img src="/favicon.svg" alt="Wadi" className="mb-3 size-14" />
+          <RevealedImage src="/favicon.svg" alt="Wadi" className="mb-3 size-14" />
           <h1 className="m-0 text-[28px] font-medium leading-tight tracking-tight">{title}</h1>
           <p className="text-sm leading-relaxed text-muted-foreground">{body}</p>
         </div>
