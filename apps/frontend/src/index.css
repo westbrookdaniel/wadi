@@ -312,7 +312,6 @@ select {
   min-height: 44px;
 }
 @media (pointer: coarse) {
-  .player-viewport .player-chrome { opacity: 1; transform: none; }
   .player-chrome button, .player-sheet button { min-width: 44px; min-height: 44px; }
   .player-chrome [role="slider"] { min-height: 44px; }
   .player-sheet input, .player-sheet [role="combobox"] { min-height: 44px; font-size: 16px; }
@@ -321,3 +320,22 @@ select {
   .player-top-controls { padding-top: max(.5rem, env(safe-area-inset-top)); }
   .player-bottom-controls { gap: 0; padding-bottom: max(.5rem, env(safe-area-inset-bottom)); }
 }
+
+.player-viewport { --player-controls-height: 112px; }
+.player-top-controls { background: linear-gradient(#0009, transparent); padding-bottom: 2rem; }
+.player-bottom-controls { background: linear-gradient(transparent, #000c); padding-top: 2rem; }
+.player-captions { line-height: 1.35; font-weight: 500; transition: bottom 180ms ease; padding-inline: 4vw; }
+.player-track-option { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-radius: 5px; padding: .6rem .65rem; text-align: left; font-size: 13px; }
+.player-track-option:hover { background: #ffffff14; }
+.player-track-option[aria-pressed="true"] { background: #ffffff20; color: white; }
+.player-menu { background: #14171bf5; border-color: #ffffff18; border-radius: 10px; box-shadow: 0 12px 48px #0008; }
+.player-loading-mark { animation: player-breathe 1.8s ease-in-out infinite; }
+@keyframes player-breathe { 0%, 100% { opacity: .45; transform: scale(.98); } 50% { opacity: 1; transform: scale(1); } }
+@media (max-width: 620px) { .player-viewport { --player-controls-height: 155px; } }
+@media (prefers-reduced-motion: reduce) { .player-loading-mark { animation: none; } .player-captions { transition: none; } }
+
+.player-viewport:has(.player-chrome[data-visible="true"]), .player-viewport:has(:focus-visible) { --player-caption-bottom: var(--player-controls-height); }
+.player-chrome:has(:focus-visible) { opacity: 1; transform: none; }
+.player-chrome:has(:focus-visible) * { pointer-events: auto !important; }
+
+.player-viewport:has(.player-loading) .player-bottom-controls { visibility: hidden; }

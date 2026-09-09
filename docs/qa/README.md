@@ -41,3 +41,11 @@ The fixture uses a single H.264 video track and AAC audio track. Other codecs, m
 ![Mobile library](mobile-library.png)
 
 ![Mobile player paused at five seconds](mobile-player.png)
+
+## Player revision, 9 September
+
+- Replaced the overlapping startup messages with one pulsing show logo or title, and hid the inactive transport controls during startup.
+- Checked actual Japanese-audio episode playback with English captions. Legacy font tags no longer appear as text; captions sit above the timeline and overlapping cues retain separate lines.
+- Checked the readable subtitle menu and the episode selector beside the title. Explicit subtitle choices are remembered for the show; otherwise Japanese audio selects English subtitles and English audio selects none.
+- Browser refresh reopened the selected stream and episode at the paused 13:02 position. The URL holds an opaque playback-session key; the stream descriptor stays in profile-scoped tab storage, and local progress checkpoints are recorded once per second alongside the existing server progress updates. The session link is not a cross-device sharing link, and expired upstream stream URLs still require choosing a fresh stream.
+- Production build, ESLint and 66 frontend tests passed, including session restoration, profile and episode isolation, subtitle defaults and legacy markup cleanup. The existing bundle-size warning remains.

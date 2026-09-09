@@ -8,7 +8,8 @@ import {
   useNavigate,
 } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useMemo } from 'react'
+import { readPlaybackSession, savePlaybackSession } from '@/features/media/detail/playback-session'
 
 import { metaQuery } from '@/api/queries'
 import type { MediaPreview } from '@/api/types'
@@ -132,7 +133,8 @@ const addAddonRoute = createRoute({
 const mediaRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/media/$type/$id',
-  validateSearch: (search: Record<string, unknown>) => ({
+  validateSearch: (search: Record<string, unknown>): { playback?: string; videoId?: string; episode?: string; season?: string; from?: string } => ({
+    playback: stringSearchParam(search.playback),
     videoId: stringSearchParam(search.videoId),
     episode: stringSearchParam(search.episode),
     season: stringSearchParam(search.season),
@@ -277,9 +279,10 @@ function BrowseRoute({
 function MediaRoute() {
   const navigate = useNavigate()
   const { type, id } = mediaRoute.useParams()
-  const { videoId, episode, season, from } = mediaRoute.useSearch()
-  const [selectedStream, setSelectedStream] = useState<PlayableStream | null>(null)
-  const [selectedPlaybackTarget, setSelectedPlaybackTarget] = useState<PlaybackTarget | null>(null)
+  const { videoId, episode, season, from, playback } = mediaRoute.useSearch()
+  const session = useMemo(() => readPlaybackSession(playback, type, id), [playback, type, id])
+  const selectedStream = session?.stream
+  const selectedPlaybackTarget = session?.target
   const routeMedia = useQuery(metaQuery(type, id, true))
   const selectedMedia = mediaPreviewFromParams(type, id)
   const displayMedia = mediaPreviewFromMeta(selectedMedia, routeMedia.data) ?? selectedMedia
@@ -287,8 +290,8 @@ function MediaRoute() {
   const backPath = browsePath(from)
 
   const playStream = (stream: PlayableStream, target: PlaybackTarget) => {
-    setSelectedPlaybackTarget(target)
-    setSelectedStream(stream)
+    const key = savePlaybackSession(stream, target)
+    void navigate({ to: '/media/$type/$id', params: { type, id }, search: previous => ({ ...previous, playback: key, episode: target.videoId ?? undefined, season: target.episodeContext?.season?.toString() }), replace: Boolean(playback) })
   }
 
   const updateSeriesSelection = ({
@@ -324,9 +327,9 @@ function MediaRoute() {
               media={displayMedia}
               stream={selectedStream}
               target={selectedPlaybackTarget}
+              onPlaybackChange={playStream}
               onBack={() => {
-                setSelectedStream(null)
-                setSelectedPlaybackTarget(null)
+                void navigate({ to: '/media/$type/$id', params: { type, id }, search: previous => ({ ...previous, playback: undefined }), replace: true })
               }}
             />
           ) : isLoadingMediaDetails ? (

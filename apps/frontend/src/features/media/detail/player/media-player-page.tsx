@@ -63,7 +63,8 @@ import { useAppStore } from '@/store/app-store'
 import { getChromecastTransport } from '../chromecast'
 import { buildStreamProxyUrl, buildSubtitleProxyUrl } from '../stream-playback'
 import type { Episode, PlaybackTarget, PlayableStream } from '../types'
-import { mergeSubtitleTracks, parseSubtitleText, type SubtitleCue } from './subtitle-utils'
+import { readSubtitleChoice, saveSubtitleChoice, readPlaybackPosition, savePlaybackPosition } from '../playback-session'
+import { defaultSubtitleForAudio, languageName, normalizeLanguage, mergeSubtitleTracks, parseSubtitleText, type SubtitleCue } from './subtitle-utils'
 import { usePlayerKeyboardShortcuts } from './use-player-keyboard-shortcuts'
 import { usePlayerPreferences } from './use-player-preferences'
 import { initialPlayerState, type CastStateData, type PlayerState } from './state'
@@ -73,7 +74,9 @@ export function MediaPlayerPage({
   stream,
   target,
   onBack,
+  onPlaybackChange,
 }: {
+  onPlaybackChange?: (stream: PlayableStream, target: PlaybackTarget) => void
   media: MediaPreview
   stream: PlayableStream
   target: PlaybackTarget
@@ -197,21 +200,47 @@ export function MediaPlayerPage({
     if (!Number.isFinite(position)) {
       return
     }
+    savePlaybackPosition(activeTarget, position)
     lastSavedRef.current = position
     progressMutateRef.current?.({ position, duration: finiteDuration(duration) })
-  }, [])
+  }, [activeTarget])
 
   const player = useMediabunnyPlayer({
     canvasRef,
     url: proxiedStreamUrl,
     authToken: token,
-    savedPosition: watchState.position_seconds,
+    savedPosition: readPlaybackPosition(activeTarget) ?? watchState.position_seconds,
     watched: watchState.watched,
     preferredAudioLanguage: playbackState.preferredAudioLanguage,
     selectedAudioTrackId: playbackState.selectedAudioTrackId,
     initialPlaybackSpeed: playbackState.playbackSpeed,
     onProgressCommit: saveProgress,
   })
+
+  const [controlsVisible, setControlsVisible] = useState(true)
+  const hideControlsTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const revealControls = useCallback(() => {
+    setControlsVisible(true)
+    if (hideControlsTimer.current) clearTimeout(hideControlsTimer.current)
+    hideControlsTimer.current = setTimeout(() => setControlsVisible(false), 2800)
+  }, [])
+  useEffect(() => () => { if (hideControlsTimer.current) clearTimeout(hideControlsTimer.current) }, [])
+  const checkpointSecond = Math.floor(player.state.currentTime)
+  useEffect(() => {
+    if (player.state.status === 'ready') savePlaybackPosition(activeTarget, checkpointSecond)
+  }, [activeTarget, checkpointSecond, player.state.status])
+  const automaticAudioRef = useRef<string | null>(null)
+  const manualSubtitleRef = useRef(false)
+  useEffect(() => {
+    const audio = player.state.audioTracks.find(track => track.id === player.state.selectedAudioTrackId)
+    if (!audio || subtitleTracks.isLoading || player.state.status !== 'ready' || automaticAudioRef.current === audio.id) return
+    automaticAudioRef.current = audio.id
+    if (manualSubtitleRef.current) return
+    const savedChoice = readSubtitleChoice(activeTarget)
+    const savedTrack = savedChoice?.language ? streamSubtitleList.find(track => track.id === savedChoice.id) ?? streamSubtitleList.find(track => normalizeLanguage(track.language) === normalizeLanguage(savedChoice.language ?? '')) : undefined
+    const id = savedChoice ? savedTrack?.id ?? null : defaultSubtitleForAudio(audio.language, streamSubtitleList)
+    updatePlaybackState({ subtitlesEnabled: id !== null, selectedSubtitleId: id, preferredSubtitleLanguage: id ? streamSubtitleList.find(track => track.id === id)?.language ?? 'eng' : null })
+  }, [activeTarget, player.state.audioTracks, player.state.selectedAudioTrackId, player.state.status, streamSubtitleList, subtitleTracks.isLoading, updatePlaybackState])
 
   const { setPlaybackSpeed, setAudioTrack, pause: pauseLocal } = player
   useEffect(() => {
@@ -403,9 +432,8 @@ export function MediaPlayerPage({
     const baseTime = castConnected
       ? Number(castState.currentTime ?? 0)
       : player.state.currentTime
-    const time = baseTime + playbackState.subtitleDelay
-    const cue = subtitleCues.find((candidate) => time >= candidate.start && time <= candidate.end)
-    return cue?.text ?? ""
+    const time = baseTime - playbackState.subtitleDelay
+    return subtitleCues.filter(candidate => time >= candidate.start && time < candidate.end).map(cue => cue.text).join("\n")
   }, [
     castConnected,
     castState.currentTime,
@@ -420,21 +448,15 @@ export function MediaPlayerPage({
       return
     }
     const nextStream = episodeStreams.data[0]
-    // Adopt the episode after its asynchronous stream query completes.
+    const nextTarget = { ...activeTarget, videoId: pendingEpisode.id, episodeContext: { season: pendingEpisode.season, episode: pendingEpisode.episode, title: pendingEpisode.title } }
+    saveProgress(player.state.currentTime, player.state.duration)
+    if (onPlaybackChange) onPlaybackChange(nextStream, nextTarget)
+    // Apply the episode returned by the asynchronous stream query.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setActiveTarget((current) => ({
-      ...current,
-      videoId: pendingEpisode.id,
-      episodeContext: {
-        season: pendingEpisode.season,
-        episode: pendingEpisode.episode,
-        title: pendingEpisode.title,
-      },
-    }))
-    setActiveStream(nextStream)
+    else { setActiveTarget(nextTarget); setActiveStream(nextStream) }
     setPendingEpisode(null)
     setEpisodeSheetOpen(false)
-  }, [episodeStreams.data, pendingEpisode])
+  }, [episodeStreams.data, pendingEpisode, activeTarget, onPlaybackChange, player.state.currentTime, player.state.duration, saveProgress])
 
   const onTogglePlay = useCallback(() => {
     if (castConnected) {
@@ -547,7 +569,9 @@ export function MediaPlayerPage({
       <div className="min-h-dvh bg-black">
         <div
           ref={playerRef}
-          className="player-viewport group/player relative grid min-h-dvh overflow-hidden bg-black text-white focus-within:[&_.player-chrome]:translate-y-0 focus-within:[&_.player-chrome]:opacity-100 hover:[&_.player-chrome]:translate-y-0 hover:[&_.player-chrome]:opacity-100"
+          className="player-viewport group/player relative grid h-dvh overflow-hidden bg-black text-white"
+          onPointerMove={revealControls}
+          onPointerDown={revealControls}
           onClick={(event) => {
             if (event.target === event.currentTarget || event.target === canvasRef.current) {
               player.toggle()
@@ -563,19 +587,13 @@ export function MediaPlayerPage({
             aria-label={`Playing ${media.name}`}
           />
 
-          {!player.state.hasVideo ? (
-            <div className="grid min-h-dvh content-center justify-items-center gap-3 px-6 text-center">
-              <strong className="text-2xl font-semibold">{media.name}</strong>
-              <p className="max-w-[420px] text-sm text-white/68">
-                {player.state.hasAudio ? 'Audio stream' : player.state.status === 'loading' ? 'Loading stream' : 'No video track'}
-              </p>
+          {(player.state.status === 'loading' || player.state.status === 'idle') && !player.state.error ? (
+            <div className="player-loading pointer-events-none absolute inset-0 z-[4] grid place-content-center justify-items-center gap-6 bg-black text-center" role="status" aria-label="Loading stream">
+              {typeof media.raw.logo === 'string' && media.raw.logo ? <img className="player-loading-mark max-h-36 w-[min(55vw,360px)] object-contain" src={media.raw.logo} alt={media.name} /> : <strong className="player-loading-mark max-w-[70vw] text-2xl font-medium tracking-tight">{media.name}</strong>}
+              <span className="text-xs tracking-wide text-white/45">Opening stream</span>
             </div>
-          ) : null}
-
-          {player.state.status === 'loading' ? (
-            <div className="pointer-events-none absolute inset-0 grid place-items-center bg-black/35 text-sm font-medium text-white/80">
-              Loading stream
-            </div>
+          ) : !player.state.hasVideo && !player.state.error ? (
+            <div className="absolute inset-0 grid place-content-center text-center"><strong>{media.name}</strong><p className="text-white/50">Audio playback</p></div>
           ) : null}
 
           {player.state.error ? (
@@ -599,11 +617,13 @@ export function MediaPlayerPage({
             warning={effectiveState.warning}
             episodeContext={activeTarget.episodeContext ?? null}
             hasEpisodeSwapper={Boolean(activeTarget.seriesEpisodes?.length)}
-            forceVisible={episodeSheetOpen}
+            forceVisible={controlsVisible || !player.state.playing || episodeSheetOpen}
             onOpenEpisodeSwapper={() => setEpisodeSheetOpen(true)}
             subtitleTracks={streamSubtitleList}
             selectedSubtitleId={playbackState.selectedSubtitleId}
             onSelectSubtitle={(id) => {
+              manualSubtitleRef.current = true
+              saveSubtitleChoice(activeTarget, { id, language: streamSubtitleList.find(track => track.id === id)?.language ?? null })
               updatePlaybackState({ selectedSubtitleId: id, subtitlesEnabled: id !== null })
               if (castConnected) {
                 void castTransport.sendMessage({
@@ -668,11 +688,11 @@ export function MediaPlayerPage({
 
           {subtitleText ? (
             <div
-              className="pointer-events-none absolute inset-x-6 z-[6] text-center"
+              className="player-captions pointer-events-none absolute inset-x-6 z-[4] text-center"
               style={{
-                bottom: `${Math.max(12, (12 + playbackState.subtitlePosition * 100 + playbackState.subtitleOffsetY))}px`,
+                bottom: `calc(${"var(--player-caption-bottom, max(6vh, 28px))"} + ${playbackState.subtitlePosition * 100 + playbackState.subtitleOffsetY}px + env(safe-area-inset-bottom))`,
                 transform: `translateX(${playbackState.subtitleOffsetX}px)`,
-                fontSize: `${playbackState.subtitleSize}rem`,
+                fontSize: `calc(clamp(18px, 2.4vw, 32px) * ${playbackState.subtitleSize})`,
                 color: playbackState.subtitleTextColor,
                 fontFamily: playbackState.subtitleFontFamily,
                 textShadow:
@@ -686,6 +706,8 @@ export function MediaPlayerPage({
                   backgroundColor: hexToRgba(playbackState.subtitleBackgroundColor, playbackState.subtitleBackgroundOpacity),
                   padding: "0.2em 0.45em",
                   borderRadius: 4,
+                  whiteSpace: "pre-line",
+                  boxDecorationBreak: "clone",
                 }}
               >
                 {subtitleText}
@@ -701,9 +723,10 @@ export function MediaPlayerPage({
 
           <Dialog open={episodeSheetOpen} onOpenChange={setEpisodeSheetOpen}>
             <DialogContent
-              showCloseButton={false}
-              className="player-sheet top-0 right-0 left-auto h-dvh max-h-none w-[min(430px,100vw)] translate-x-0 translate-y-0 rounded-none p-0 data-open:slide-in-from-right-full data-closed:slide-out-to-right-full data-open:zoom-in-100 data-closed:zoom-out-100"
+              showCloseButton
+              className="player-sheet top-0 right-0 left-auto h-dvh max-h-none w-[min(430px,100vw)] translate-x-0 translate-y-0 content-start overflow-y-auto rounded-none p-0 data-open:slide-in-from-right-full data-closed:slide-out-to-right-full data-open:zoom-in-100 data-closed:zoom-out-100"
             >
+              <DialogTitle className="pr-12">Episodes</DialogTitle>
               <EpisodeSwapper
                 episodes={activeTarget.seriesEpisodes ?? []}
                 selectedEpisodeId={activeTarget.videoId}
@@ -718,7 +741,7 @@ export function MediaPlayerPage({
           </Dialog>
 
           <span className="absolute size-px overflow-hidden whitespace-nowrap [clip:rect(0,0,0,0)]" aria-live="polite">
-            {effectiveState.status === 'loading' ? 'Loading stream' : null}
+
             {effectiveState.status === 'ready' ? `Playing ${media.name}, ${formatDuration(effectiveState.duration)}` : null}
             {effectiveState.error ? `Playback error: ${effectiveState.error}` : null}
           </span>
@@ -831,7 +854,7 @@ function PlayerChrome({
   const controlsLayerRef = useRef<HTMLDivElement | null>(null)
   const selectedAudioTrack =
     state.audioTracks.find((track) => track.id === state.selectedAudioTrackId) ?? null
-  const audioLabel = selectedAudioTrack ? compactAudioLabel(selectedAudioTrack.label) : 'Default'
+  const audioLabel = selectedAudioTrack ? languageName(selectedAudioTrack.language) : 'Audio'
   const speedLabel = `${formatSpeedLabel(playbackSpeed)}x`
   const controlsPinnedOpen = forceVisible || audioMenuOpen || speedMenuOpen || subtitleMenuOpen || subtitleSettingsOpen
 
@@ -867,9 +890,10 @@ function PlayerChrome({
   return (
     <div
       ref={controlsLayerRef}
+      data-visible={controlsPinnedOpen}
       className={cn(
         "player-chrome pointer-events-none absolute inset-x-0 top-0 bottom-0 z-[5] flex translate-y-1 flex-col justify-between opacity-0 transition-[opacity,transform] duration-200",
-        controlsPinnedOpen && "translate-y-0 opacity-100",
+        controlsPinnedOpen ? "translate-y-0 opacity-100" : "[&_*]:!pointer-events-none",
       )}
     >
       <div className="player-top-controls pointer-events-auto flex items-start justify-between gap-3 p-4 sm:p-6">
@@ -886,14 +910,10 @@ function PlayerChrome({
               <ArrowLeft aria-hidden="true" />
             </Button>
           </TooltipButton>
-          {episodeContext ? (
-            <div className="rounded-md bg-black/55 px-2.5 py-1.5 text-xs text-white/90">
-              <div className="font-medium">
-                {formatEpisodeBadge(episodeContext.season, episodeContext.episode)}
-              </div>
-              <div className="max-w-[46vw] truncate text-white/75">{episodeContext.title}</div>
-            </div>
-          ) : null}
+          <button type="button" className="player-episode flex items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-white/10" onClick={hasEpisodeSwapper ? onOpenEpisodeSwapper : undefined} disabled={!hasEpisodeSwapper} aria-label={hasEpisodeSwapper ? 'Choose episode' : undefined}>
+            <div className="grid gap-0.5"><span className="max-w-[55vw] truncate text-sm font-medium">{mediaName}</span>{episodeContext ? <span className="max-w-[55vw] truncate text-xs text-white/65">{formatEpisodeBadge(episodeContext.season, episodeContext.episode)} · {episodeContext.title}</span> : null}</div>
+            {hasEpisodeSwapper ? <Clapperboard className="size-4 text-white/70" /> : null}
+          </button>
         </div>
 
         {warning ? (
@@ -903,7 +923,7 @@ function PlayerChrome({
         ) : null}
       </div>
 
-      <div className="player-bottom-controls pointer-events-auto grid gap-3 px-4 pb-4 sm:px-6 sm:pb-6">
+      <div className="player-bottom-controls pointer-events-auto grid gap-1 px-4 pb-4 sm:px-6 sm:pb-6">
         <ProgressScrubber
           label={`Seek ${mediaName}`}
           value={state.currentTime}
@@ -912,7 +932,7 @@ function PlayerChrome({
           onChange={onSeek}
         />
 
-        <div className="grid gap-2 rounded-md bg-black/50 px-3 py-2 backdrop-blur-sm">
+        <div className="player-toolbar grid gap-1 px-1 py-1">
           <div className="flex min-h-11 items-center gap-2 max-[620px]:grid max-[620px]:grid-cols-[auto_1fr_auto]">
           <TooltipButton label={state.playing ? 'Pause' : 'Play'}>
             <Button
@@ -1066,19 +1086,6 @@ function PlayerChrome({
                   <Cast aria-hidden="true" />
                 </Button>
               </TooltipButton>
-              {hasEpisodeSwapper ? (
-                <TooltipButton label="Swap episode">
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    className="rounded-full text-white hover:bg-white/14 focus-visible:ring-white/30"
-                    type="button"
-                    onClick={onOpenEpisodeSwapper}
-                  >
-                    <Clapperboard aria-hidden="true" />
-                  </Button>
-                </TooltipButton>
-              ) : null}
               <div className="relative">
                 <TooltipButton label="Subtitles">
                   <Button
@@ -1098,24 +1105,16 @@ function PlayerChrome({
                 </TooltipButton>
                 {subtitleMenuOpen ? (
                   <div className="player-menu absolute right-0 bottom-full z-20 mb-2 grid min-w-[250px] gap-2 rounded-md border border-white/18 bg-black/88 p-2 text-xs shadow-lg backdrop-blur">
-                    <label className="grid gap-1 text-white/78">
-                      <span>Subtitle Track</span>
-                      <select
-                        value={selectedSubtitleId ?? "__off"}
-                        className="h-8 rounded border border-white/20 bg-black/40 px-2 text-white"
-                        onChange={(event) => {
-                          const value = event.target.value
-                          onSelectSubtitle(value === "__off" ? null : value)
-                        }}
-                      >
-                        <option value="__off">No subtitles</option>
-                        {subtitleTracks.map((track) => (
-                          <option value={track.id} key={track.id}>
-                            {track.language} ({track.source})
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                    <div className="px-2 py-1 text-xs font-medium text-white/50">Subtitles</div>
+                    <div role="group" aria-label="Subtitle tracks" className="grid max-h-[min(300px,40dvh)] gap-0.5 overflow-y-auto">
+                      <button type="button" aria-pressed={!selectedSubtitleId} className="player-track-option" onClick={() => onSelectSubtitle(null)}>No subtitles{!selectedSubtitleId ? ' ✓' : ''}</button>
+                      {[...subtitleTracks].sort((a, b) => (languageName(a.language) === 'English' ? -1 : languageName(b.language) === 'English' ? 1 : languageName(a.language).localeCompare(languageName(b.language)))).map((track, index, tracks) => (
+                        <button type="button" key={track.id} aria-pressed={selectedSubtitleId === track.id} className="player-track-option" onClick={() => onSelectSubtitle(track.id)}>
+                          <span>{languageName(track.language)}{selectedSubtitleId === track.id ? ' ✓' : ''}</span>
+                          <span className="text-[11px] text-white/45">{track.source}{tracks.filter(t => t.language === track.language).length > 1 ? ` · ${tracks.slice(0, index + 1).filter(t => t.language === track.language).length}` : ''}</span>
+                        </button>
+                      ))}
+                    </div>
                     <Button
                       type="button"
                       variant="ghost"
@@ -1391,7 +1390,7 @@ function EpisodeSwapper({
           <ChevronRight aria-hidden="true" />
         </Button>
       </div>
-      <div className="grid max-h-[70svh] gap-2 overflow-y-auto pr-1 [scrollbar-width:thin]">
+      <div className="grid max-h-[calc(100dvh-170px)] gap-2 overflow-y-auto pr-1 [scrollbar-width:thin]">
         {visible.map((episode) => (
           <EpisodeSwapperItem
             key={episode.id}
@@ -1425,7 +1424,7 @@ function EpisodeSwapperItem({
       )}
     >
       <button
-        className="grid w-full min-w-0 cursor-pointer grid-cols-[84px_1fr] gap-3 text-left"
+        className="grid w-full min-w-0 cursor-pointer grid-cols-[96px_1fr] gap-3 text-left"
         type="button"
         onClick={() => onSelectEpisode(episode)}
       >
@@ -1452,7 +1451,7 @@ function EpisodeSwapperItem({
             {episode.title}
           </strong>
           <span className="block text-[0.8rem] text-muted-foreground">
-            {formatEpisodeBadge(episode.season, episode.episode)}{episode.released ? ` • ${episode.released}` : ""}
+            {formatEpisodeBadge(episode.season, episode.episode)}{episode.released ? ` · ${new Date(episode.released).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : ""}
           </span>
         </div>
       </button>
@@ -1896,7 +1895,7 @@ function useMediabunnyPlayer({
           selectedAudioTrackId: audioTrack ? String(audioTrack.id) : null,
           audioTracks: audioTracks.map((track) => ({
             id: String(track.id),
-            label: track.name ?? `${track.languageCode.toUpperCase()} • ${track.codec ?? "audio"}`,
+            label: `${languageName(track.languageCode)}${track.name ? ` · ${track.name}` : ''}`,
             language: track.languageCode,
           })),
         })
@@ -2055,14 +2054,6 @@ function toggleFullscreen(element: HTMLElement | null) {
 
 function finiteDuration(duration: number) {
   return Number.isFinite(duration) && duration > 0 ? duration : null
-}
-
-function compactAudioLabel(label: string) {
-  const compact = label.replace(/\s+/g, " ").trim()
-  if (compact.length <= 12) {
-    return compact
-  }
-  return `${compact.slice(0, 11)}…`
 }
 
 function formatSpeedLabel(speed: number) {

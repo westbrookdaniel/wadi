@@ -28,6 +28,7 @@ function ExternalPlaybackPage({
   media: MediaPreview
   stream: PlayableStream
   target: PlaybackTarget
+  onPlaybackChange?: (stream: PlayableStream, target: PlaybackTarget) => void
   onBack: () => void
 }) {
   const { toast } = useToast()

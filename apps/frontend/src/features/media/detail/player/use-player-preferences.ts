@@ -7,6 +7,7 @@ import {
   queryKeys,
   updatePlayerOverride,
 } from '@/api/queries'
+import { normalizeLanguage } from './subtitle-utils'
 import type { PlayerOverride } from '@/api/types'
 
 import {
@@ -213,7 +214,7 @@ function selectPreferredSubtitleTrack(
     return selectedSubtitleId
   }
   if (preferredLanguage) {
-    const preferred = tracks.find((track) => track.language === preferredLanguage)
+    const preferred = tracks.find((track) => normalizeLanguage(track.language) === normalizeLanguage(preferredLanguage))
     if (preferred) {
       return preferred.id
     }

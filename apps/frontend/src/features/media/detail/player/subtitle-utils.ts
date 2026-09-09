@@ -63,7 +63,7 @@ export function parseSrt(text: string): SubtitleCue[] {
       if (!cueText) {
         return []
       }
-      return [{ start, end, text: cueText }]
+      return [{ start, end, text: cleanSubtitleText(cueText) }]
     })
 }
 
@@ -89,7 +89,7 @@ export function parseVtt(text: string): SubtitleCue[] {
       if (!cueText) {
         return []
       }
-      return [{ start, end, text: cueText }]
+      return [{ start, end, text: cleanSubtitleText(cueText) }]
     })
 }
 
@@ -146,4 +146,31 @@ function parseTimestamp(value: string) {
     return NaN
   }
   return hours * 3600 + minutes * 60 + secondsWithMs
+}
+
+const languageAliases: Record<string, string> = { eng: 'en', jpn: 'ja', jap: 'ja', spa: 'es', fre: 'fr', fra: 'fr', ger: 'de', deu: 'de', ita: 'it', por: 'pt', zho: 'zh', chi: 'zh', zht: 'zh-Hant', zhs: 'zh-Hans', kor: 'ko', rus: 'ru', ara: 'ar', hin: 'hi', dut: 'nl', nld: 'nl', pol: 'pl', tur: 'tr', swe: 'sv', nor: 'no', dan: 'da', fin: 'fi', und: 'und' }
+export function normalizeLanguage(language: string) {
+  const code = language.trim().toLowerCase().replace('_', '-')
+  return languageAliases[code] ?? code
+}
+export function languageName(language: string) {
+  const code = normalizeLanguage(language)
+  if (!code || code === 'und') return 'Unknown language'
+  try { return new Intl.DisplayNames(['en'], { type: 'language' }).of(code) ?? 'Unknown language' } catch { return 'Unknown language' }
+}
+export function defaultSubtitleForAudio(language: string, tracks: Array<{ id: string; language: string }>) {
+  if (normalizeLanguage(language).split('-')[0] === 'en') return null
+  return tracks.find(track => normalizeLanguage(track.language).split('-')[0] === 'en')?.id ?? null
+}
+
+// Subtitle files often include legacy font tags or ASS styling. Keep their text,
+// line breaks and entities without injecting any supplied HTML into the page.
+export function cleanSubtitleText(text: string) {
+  const entities: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' }
+  return text.replace(/<br\s*\/?\s*>/gi, '\n').replace(/<[^>]*>/g, '').replace(/\{\\[^}]*\}/g, '').replace(/\\N/g, '\n')
+    .replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos|nbsp);/gi, (whole: string, entity: string) => {
+      if (!entity.startsWith('#')) return entities[entity.toLowerCase()] ?? whole
+      const code = entity[1].toLowerCase() === 'x' ? parseInt(entity.slice(2), 16) : Number(entity.slice(1))
+      return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : ''
+    }).trim()
 }

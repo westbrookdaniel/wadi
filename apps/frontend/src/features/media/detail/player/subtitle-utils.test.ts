@@ -52,3 +52,7 @@ describe('mergeSubtitleTracks', () => {
     ])
   })
 })
+
+it('removes legacy formatting, preserves line breaks and decodes entities safely', () => {
+  expect(parseSubtitleText('1\n00:00:01,000 --> 00:00:03,000\n<font face="Trebuchet MS" size="24">Hello &amp; goodbye.</font>\n<i>Second line.</i>')).toEqual([{ start: 1, end: 3, text: 'Hello & goodbye.\nSecond line.' }])
+})
