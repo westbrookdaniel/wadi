@@ -26,7 +26,6 @@ export function FeaturedFilm({ entry, onOpen }: { entry: CatalogEntry; onOpen: (
         <Artwork className="featured-film-art" src={film.background ?? film.poster} eager />
         <div className="featured-film-shade" />
         <div className="featured-film-copy">
-          <p className="mb-4 text-xs font-medium tracking-widest text-white/60 uppercase">Something to watch</p>
           <h2 className="max-w-lg text-[clamp(1.8rem,3vw,3rem)] leading-[1.08] font-semibold tracking-tight text-white">{film.name}</h2>
           <p className="mt-3 text-xs text-white/65">{[film.releaseInfo, film.type === 'series' ? 'Series' : 'Film'].filter(Boolean).join(' · ')}</p>
           {film.description ? <p className="mt-3 max-w-md text-[13px] leading-6 text-white/70 line-clamp-2">{film.description}</p> : null}
