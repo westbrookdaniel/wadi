@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  readLastSeason, saveLastSeason, formatEpisodeReleaseDate,
   nextSeriesSearchState,
   preferredEpisodeIdFromSearch,
   seasonToSearchParam,
@@ -51,4 +52,17 @@ describe('series URL state helpers', () => {
       episode: undefined,
     })
   })
+})
+
+it('keeps remembered seasons isolated by profile and show, including specials', () => {
+  saveLastSeason('a', 'show', 0)
+  expect(readLastSeason('a', 'show')).toBe(0)
+  expect(readLastSeason('b', 'show')).toBeUndefined()
+  expect(readLastSeason('a', 'another-show')).toBeUndefined()
+  saveLastSeason('a', 'show', null)
+  expect(readLastSeason('a', 'show')).toBeNull()
+})
+it('omits missing and invalid release dates', () => {
+  expect(formatEpisodeReleaseDate(undefined)).toBeNull()
+  expect(formatEpisodeReleaseDate('invalid')).toBeNull()
 })

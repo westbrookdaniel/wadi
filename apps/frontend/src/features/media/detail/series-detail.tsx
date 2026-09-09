@@ -1,7 +1,7 @@
 import { uniqueSeasons, defaultSeason, seasonValue, parseSeasonValue, seasonLabel } from './episode-labels'
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { findWatchState, streamsQuery, watchDataQuery } from "@/api/queries";
 import type { MediaPreview, WatchDataResponse } from "@/api/types";
@@ -16,6 +16,8 @@ import {
 import { bottomPagePadding, mutedText } from "@/lib/styles";
 import { cn } from "@/lib/utils";
 
+import { useAppStore } from '@/store/app-store'
+import { readLastSeason, saveLastSeason, formatEpisodeReleaseDate } from './series-url-state'
 import { DetailShell } from "./detail-shell";
 import { StreamList } from "./stream-list";
 import type { Episode, PlaybackTarget, PlayableStream } from "./types";
@@ -49,15 +51,19 @@ export function SeriesDetailPage({
   const preferredSeasonFromSearch =
     preferredSeason === undefined ? undefined : parseSeasonValue(preferredSeason);
   const [selectedSeasonOverride, setSelectedSeasonOverride] = useState<
-    number | null
-  >(null);
+    number | null | undefined
+  >(undefined);
   const seasons = uniqueSeasons(episodes);
-  const selectedSeason =
-    selectedSeasonOverride ??
-    preferredEpisode?.season ??
-    preferredSeasonFromSearch ??
-    defaultSeason(seasons) ??
-    null;
+  const profileId = useAppStore(state => state.activeProfileId)
+  const rememberedSeason = useMemo(() => readLastSeason(profileId, media.id), [profileId, media.id])
+  const selectedSeason = selectedSeasonOverride !== undefined ? selectedSeasonOverride
+    : preferredEpisode ? preferredEpisode.season
+    : preferredSeasonFromSearch !== undefined ? preferredSeasonFromSearch
+    : rememberedSeason !== undefined && seasons.includes(rememberedSeason) ? rememberedSeason
+    : defaultSeason(seasons) ?? null
+  useEffect(() => {
+    if (episodes.length) saveLastSeason(profileId, media.id, selectedSeason)
+  }, [episodes.length, media.id, profileId, selectedSeason])
   const visibleEpisodes = episodes.filter(
     (episode) => episode.season === selectedSeason,
   );
@@ -278,7 +284,7 @@ function EpisodeButton({
   return (
     <div className="rounded-lg border border-border bg-card/70">
       <button
-        className="grid w-full min-w-0 cursor-pointer grid-cols-[84px_1fr] gap-3 text-left"
+        className="grid w-full min-w-0 cursor-pointer grid-cols-[96px_1fr] gap-3 text-left"
         type="button"
         onClick={onClick}
       >
@@ -304,6 +310,7 @@ function EpisodeButton({
           <strong className="block overflow-hidden text-ellipsis whitespace-nowrap">
             {episode.title}
           </strong>
+          {formatEpisodeReleaseDate(episode.released) ? <time dateTime={episode.released} className="mt-0.5 block text-xs text-muted-foreground">{formatEpisodeReleaseDate(episode.released)}</time> : null}
           {watchState?.position_seconds ? (
             <span className={cn("block text-[0.8rem]", mutedText)}>
               {formatWatchDuration(watchState.position_seconds)}

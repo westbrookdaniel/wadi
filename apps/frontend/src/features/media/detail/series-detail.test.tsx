@@ -89,6 +89,7 @@ function renderSeriesDetailPage({
 
 afterEach(() => {
   apiRequestMock.mockReset();
+  localStorage.clear();
 });
 
 describe("series season helpers", () => {
@@ -140,7 +141,7 @@ describe("series season helpers", () => {
 });
 
 describe("SeriesDetailPage", () => {
-  it("does not render season/episode/date metadata in series details", async () => {
+  it("shows a readable release date below the episode title", async () => {
     apiRequestMock.mockImplementation((path: string) => {
       if (path.startsWith("/api/streams/")) {
         return Promise.resolve({ responses: [] });
@@ -158,13 +159,14 @@ describe("SeriesDetailPage", () => {
       return Promise.resolve({});
     });
 
-    renderSeriesDetailPage({ preferredVideoId: "s1e1" });
+    renderSeriesDetailPage();
 
     await waitFor(() => {
       expect(apiRequestMock).toHaveBeenCalled();
     });
 
     expect(screen.getByText("Pilot")).toBeInTheDocument();
+    expect(screen.getByText("Jan 1, 2024")).toHaveAttribute("datetime", "2024-01-01");
     expect(
       screen.queryByText("S1 • E1 • 2024-01-01"),
     ).not.toBeInTheDocument();
@@ -209,3 +211,18 @@ describe("SeriesDetailPage", () => {
     });
   });
 });
+
+it('remembers a season when returning to the show and respects a URL override', async () => {
+  apiRequestMock.mockResolvedValue({ items: [], responses: [] })
+  const user = userEvent.setup()
+  const first = renderSeriesDetailPage()
+  await user.click(screen.getByRole('combobox', { name: 'Season' }))
+  await user.click(screen.getByRole('option', { name: 'Season 2' }))
+  expect(screen.getByText('Premiere')).toBeInTheDocument()
+  first.unmount()
+  const second = renderSeriesDetailPage()
+  expect(screen.getByRole('combobox', { name: 'Season' })).toHaveTextContent('Season 2')
+  second.unmount()
+  renderSeriesDetailPage({ preferredSeason: '1' })
+  expect(screen.getByRole('combobox', { name: 'Season' })).toHaveTextContent('Season 1')
+})

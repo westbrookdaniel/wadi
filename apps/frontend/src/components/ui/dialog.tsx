@@ -20,7 +20,7 @@ function DialogTrigger({
 function DialogPortal({
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Portal>) {
-  return <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />
+  return <DialogPrimitive.Portal data-slot="dialog-portal" container={typeof document === "undefined" ? undefined : document.fullscreenElement ?? undefined} {...props} />
 }
 
 function DialogClose({

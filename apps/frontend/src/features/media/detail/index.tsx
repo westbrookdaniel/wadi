@@ -36,6 +36,7 @@ export function MediaDetailPage({
   if (media.type === 'series') {
     return (
       <SeriesDetailPage
+        key={media.id}
         media={media}
         listAction={listAction}
         preferredVideoId={preferredVideoId}

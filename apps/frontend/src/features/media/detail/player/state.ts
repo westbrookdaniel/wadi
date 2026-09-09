@@ -76,7 +76,7 @@ export const initialLocalPlaybackState: LocalPlaybackState = {
   subtitlePosition: 0,
   subtitleTextColor: '#FFFFFF',
   subtitleBackgroundColor: '#000000',
-  subtitleBackgroundOpacity: 0.4,
+  subtitleBackgroundOpacity: 0,
   subtitleOutlineColor: '#000000',
   subtitleOutlineStyle: 'outline',
   subtitleFontFamily: 'sans-serif',

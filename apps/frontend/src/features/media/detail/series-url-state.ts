@@ -35,3 +35,22 @@ export function nextSeriesSearchState(
   delete next.videoId
   return next
 }
+
+export function readLastSeason(profileId: string | null, mediaId: string): number | null | undefined {
+  try {
+    const raw = localStorage.getItem(`wadi.last-season.${profileId}.${mediaId}`)
+    if (raw === null) return undefined
+    const value: unknown = JSON.parse(raw)
+    return value === null || typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : undefined
+  } catch { return undefined }
+}
+
+export function saveLastSeason(profileId: string | null, mediaId: string, season: number | null) {
+  try { localStorage.setItem(`wadi.last-season.${profileId}.${mediaId}`, JSON.stringify(season)) } catch { /* Browsing remains available without storage. */ }
+}
+
+export function formatEpisodeReleaseDate(released: string | undefined) {
+  if (!released) return null
+  const date = new Date(released)
+  return Number.isFinite(date.getTime()) ? date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }) : null
+}

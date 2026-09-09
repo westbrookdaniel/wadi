@@ -59,6 +59,7 @@ import { cn } from '@/lib/utils'
 import { stateBlock } from '@/lib/styles'
 import { useAppStore } from '@/store/app-store'
 
+import { formatEpisodeReleaseDate, saveLastSeason } from '../series-url-state'
 import { getChromecastTransport } from '../chromecast'
 import { buildStreamProxyUrl, buildSubtitleProxyUrl } from '../stream-playback'
 import type { Episode, PlaybackTarget, PlayableStream } from '../types'
@@ -691,13 +692,13 @@ export function MediaPlayerPage({
               style={{
                 bottom: `calc(${"var(--player-caption-bottom, max(6vh, 28px))"} + ${playbackState.subtitlePosition * 100 + playbackState.subtitleOffsetY}px + env(safe-area-inset-bottom))`,
                 transform: `translateX(${playbackState.subtitleOffsetX}px)`,
-                fontSize: `calc(clamp(18px, 2.4vw, 32px) * ${playbackState.subtitleSize})`,
+                fontSize: `calc(clamp(20px, 2.65vw, 36px) * ${playbackState.subtitleSize})`,
                 color: playbackState.subtitleTextColor,
                 fontFamily: playbackState.subtitleFontFamily,
                 textShadow:
                   playbackState.subtitleOutlineStyle === "shadow"
                     ? `0 0 8px ${playbackState.subtitleOutlineColor}`
-                    : `1px 1px 0 ${playbackState.subtitleOutlineColor}, -1px -1px 0 ${playbackState.subtitleOutlineColor}, -1px 1px 0 ${playbackState.subtitleOutlineColor}, 1px -1px 0 ${playbackState.subtitleOutlineColor}`,
+                    : `1.5px 0 0 ${playbackState.subtitleOutlineColor}, -1.5px 0 0 ${playbackState.subtitleOutlineColor}, 0 1.5px 0 ${playbackState.subtitleOutlineColor}, 0 -1.5px 0 ${playbackState.subtitleOutlineColor}, 1px 1px 0 ${playbackState.subtitleOutlineColor}, -1px -1px 0 ${playbackState.subtitleOutlineColor}, -1px 1px 0 ${playbackState.subtitleOutlineColor}, 1px -1px 0 ${playbackState.subtitleOutlineColor}`,
               }}
             >
               <span
@@ -730,7 +731,7 @@ export function MediaPlayerPage({
                 episodes={activeTarget.seriesEpisodes ?? []}
                 selectedEpisodeId={activeTarget.videoId}
                 selectedSeason={selectedSwapSeason}
-                onSeasonChange={setSelectedSwapSeason}
+                onSeasonChange={season => { setSelectedSwapSeason(season); saveLastSeason(useAppStore.getState().activeProfileId, activeTarget.mediaId, season) }}
                 onSelectEpisode={setPendingEpisode}
               />
               {pendingEpisode && episodeStreams.isLoading ? (
@@ -1117,7 +1118,7 @@ function PlayerChrome({
                       type="button"
                       variant="ghost"
                       className="h-8 justify-start text-white hover:bg-white/12"
-                      onClick={() => setSubtitleSettingsOpen(true)}
+                      onClick={() => { setSubtitleMenuOpen(false); setSubtitleSettingsOpen(true) }}
                     >
                       <Settings2 className="size-3.5" />
                       Subtitle settings
@@ -1449,7 +1450,7 @@ function EpisodeSwapperItem({
             {episode.title}
           </strong>
           <span className="block text-[0.8rem] text-muted-foreground">
-            {formatEpisodeBadge(episode.season, episode.episode)}{episode.released ? ` · ${new Date(episode.released).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : ""}
+            {formatEpisodeBadge(episode.season, episode.episode)}{formatEpisodeReleaseDate(episode.released) ? ` · ${formatEpisodeReleaseDate(episode.released)}` : ""}
           </span>
         </div>
       </button>
