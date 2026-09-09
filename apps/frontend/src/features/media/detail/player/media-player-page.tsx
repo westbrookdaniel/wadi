@@ -523,8 +523,8 @@ export function MediaPlayerPage({
 
   if (!streamUrl) {
     return (
-      <div className="min-h-svh bg-black">
-        <div className={cn(stateBlock, 'min-h-svh bg-black px-6')}>
+      <div className="min-h-dvh bg-black">
+        <div className={cn(stateBlock, 'min-h-dvh bg-black px-6')}>
           <strong>This stream cannot play directly</strong>
           <p>Only direct stream URLs can be played in the browser right now.</p>
           {stream.externalUrl ? (
@@ -544,10 +544,10 @@ export function MediaPlayerPage({
 
   return (
     <TooltipProvider>
-      <div className="min-h-svh bg-black">
+      <div className="min-h-dvh bg-black">
         <div
           ref={playerRef}
-          className="group/player relative grid min-h-svh overflow-hidden bg-black text-white focus-within:[&_.player-chrome]:translate-y-0 focus-within:[&_.player-chrome]:opacity-100 hover:[&_.player-chrome]:translate-y-0 hover:[&_.player-chrome]:opacity-100"
+          className="player-viewport group/player relative grid min-h-dvh overflow-hidden bg-black text-white focus-within:[&_.player-chrome]:translate-y-0 focus-within:[&_.player-chrome]:opacity-100 hover:[&_.player-chrome]:translate-y-0 hover:[&_.player-chrome]:opacity-100"
           onClick={(event) => {
             if (event.target === event.currentTarget || event.target === canvasRef.current) {
               player.toggle()
@@ -557,14 +557,14 @@ export function MediaPlayerPage({
           <canvas
             ref={canvasRef}
             className={cn(
-              'm-auto block h-svh w-screen bg-black object-contain',
+              'm-auto block h-dvh w-screen bg-black object-contain',
               !player.state.hasVideo && 'hidden',
             )}
             aria-label={`Playing ${media.name}`}
           />
 
           {!player.state.hasVideo ? (
-            <div className="grid min-h-svh content-center justify-items-center gap-3 px-6 text-center">
+            <div className="grid min-h-dvh content-center justify-items-center gap-3 px-6 text-center">
               <strong className="text-2xl font-semibold">{media.name}</strong>
               <p className="max-w-[420px] text-sm text-white/68">
                 {player.state.hasAudio ? 'Audio stream' : player.state.status === 'loading' ? 'Loading stream' : 'No video track'}
@@ -702,7 +702,7 @@ export function MediaPlayerPage({
           <Dialog open={episodeSheetOpen} onOpenChange={setEpisodeSheetOpen}>
             <DialogContent
               showCloseButton={false}
-              className="top-0 right-0 left-auto h-svh max-h-none w-[min(430px,100vw)] translate-y-0 rounded-none p-0 data-open:slide-in-from-right-full data-closed:slide-out-to-right-full data-open:zoom-in-100 data-closed:zoom-out-100"
+              className="player-sheet top-0 right-0 left-auto h-dvh max-h-none w-[min(430px,100vw)] translate-x-0 translate-y-0 rounded-none p-0 data-open:slide-in-from-right-full data-closed:slide-out-to-right-full data-open:zoom-in-100 data-closed:zoom-out-100"
             >
               <EpisodeSwapper
                 episodes={activeTarget.seriesEpisodes ?? []}
@@ -872,7 +872,7 @@ function PlayerChrome({
         controlsPinnedOpen && "translate-y-0 opacity-100",
       )}
     >
-      <div className="pointer-events-auto flex items-start justify-between gap-3 p-4 sm:p-6">
+      <div className="player-top-controls pointer-events-auto flex items-start justify-between gap-3 p-4 sm:p-6">
         <div className="flex min-w-0 items-center gap-3">
           <TooltipButton label="Back">
             <Button
@@ -903,7 +903,7 @@ function PlayerChrome({
         ) : null}
       </div>
 
-      <div className="pointer-events-auto grid gap-3 px-4 pb-4 sm:px-6 sm:pb-6">
+      <div className="player-bottom-controls pointer-events-auto grid gap-3 px-4 pb-4 sm:px-6 sm:pb-6">
         <ProgressScrubber
           label={`Seek ${mediaName}`}
           value={state.currentTime}
@@ -976,7 +976,7 @@ function PlayerChrome({
                   </Button>
                 </TooltipButton>
                 {speedMenuOpen ? (
-                  <div className="absolute right-0 bottom-full z-20 mb-2 grid min-w-[120px] gap-1 rounded-md border border-white/18 bg-black/88 p-1 text-xs shadow-lg backdrop-blur">
+                  <div className="player-menu absolute left-0 bottom-full z-20 mb-2 grid min-w-[120px] gap-1 rounded-md border border-white/18 bg-black/88 p-1 text-xs shadow-lg backdrop-blur">
                     {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((speed) => (
                       <button
                         key={String(speed)}
@@ -1016,7 +1016,7 @@ function PlayerChrome({
                   </Button>
                 </TooltipButton>
                 {audioMenuOpen ? (
-                  <div className="absolute right-0 bottom-full z-20 mb-2 grid min-w-[220px] gap-1 rounded-md border border-white/18 bg-black/88 p-1 text-xs shadow-lg backdrop-blur">
+                  <div className="player-menu absolute left-0 bottom-full z-20 mb-2 grid min-w-[220px] gap-1 rounded-md border border-white/18 bg-black/88 p-1 text-xs shadow-lg backdrop-blur">
                     <button
                       type="button"
                       className={cn(
@@ -1097,7 +1097,7 @@ function PlayerChrome({
                   </Button>
                 </TooltipButton>
                 {subtitleMenuOpen ? (
-                  <div className="absolute right-0 bottom-full z-20 mb-2 grid min-w-[250px] gap-2 rounded-md border border-white/18 bg-black/88 p-2 text-xs shadow-lg backdrop-blur">
+                  <div className="player-menu absolute right-0 bottom-full z-20 mb-2 grid min-w-[250px] gap-2 rounded-md border border-white/18 bg-black/88 p-2 text-xs shadow-lg backdrop-blur">
                     <label className="grid gap-1 text-white/78">
                       <span>Subtitle Track</span>
                       <select
@@ -1146,8 +1146,8 @@ function PlayerChrome({
       </div>
       <Dialog open={subtitleSettingsOpen} onOpenChange={setSubtitleSettingsOpen}>
         <DialogContent
-          showCloseButton={false}
-          className="top-0 right-0 left-auto h-svh max-h-none w-[min(430px,100vw)] translate-y-0 rounded-none p-5 data-open:slide-in-from-right-full data-closed:slide-out-to-right-full data-open:zoom-in-100 data-closed:zoom-out-100"
+          showCloseButton
+          className="player-sheet top-0 right-0 left-auto h-dvh max-h-none w-[min(430px,100vw)] translate-x-0 translate-y-0 content-start overflow-y-auto rounded-none p-5 data-open:slide-in-from-right-full data-closed:slide-out-to-right-full data-open:zoom-in-100 data-closed:zoom-out-100"
         >
           <DialogTitle className="flex items-center gap-2">
             <Captions className="size-4" />
