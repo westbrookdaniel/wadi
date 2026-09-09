@@ -12,7 +12,6 @@ export function FeaturedFilm({ entry, onOpen }: { entry: CatalogEntry; onOpen: (
       <img className="featured-film-art" src={film.background ?? film.poster ?? undefined} alt="" fetchPriority="high" />
       <div className="featured-film-shade" />
       <div className="featured-film-copy">
-        <p className="mb-4 text-[11px] font-medium uppercase tracking-[0.3em] text-white/60">Your evening starts here</p>
         <h1 className="max-w-3xl text-[clamp(2.5rem,6vw,5.5rem)] leading-[1.03] font-semibold tracking-[-0.055em] text-white">{film.name}</h1>
         <p className="mt-5 text-sm text-white/65">{[film.releaseInfo, film.type === 'series' ? 'Series' : 'Film'].filter(Boolean).join(' · ')}</p>
         {film.description ? <p className="mt-4 max-w-xl text-sm leading-7 text-white/75 line-clamp-3 sm:text-base">{film.description}</p> : null}

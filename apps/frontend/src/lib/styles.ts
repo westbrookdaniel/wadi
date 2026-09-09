@@ -1,8 +1,6 @@
-export const appBackground =
-  "bg-[radial-gradient(circle_at_0%_0%,oklch(0.452_0.211_324.591/0.2),transparent_36rem),radial-gradient(circle_at_28%_10%,oklch(0.553_0.013_58.071/0.12),transparent_30rem),linear-gradient(135deg,var(--background)_0%,oklch(0.216_0.006_56.043)_100%)] text-foreground";
+export const appBackground = "bg-background text-foreground";
 
-export const authBackground =
-  "bg-[radial-gradient(circle_at_50%_12%,oklch(0.452_0.211_324.591/0.2),transparent_30rem),radial-gradient(circle_at_18%_78%,oklch(0.268_0.007_34.298/0.36),transparent_24rem),linear-gradient(180deg,oklch(0.216_0.006_56.043)_0%,var(--background)_58%,oklch(0.147_0.004_49.25)_100%)] text-foreground";
+export const authBackground = "bg-background text-foreground";
 
 export const pageStack = "grid min-w-0 grid-cols-[minmax(0,1fr)] gap-8";
 
