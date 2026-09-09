@@ -1,3 +1,5 @@
+import { lazy, Suspense } from 'react'
+const MediaPlayerPage = lazy(() => import('./player').then(module => ({ default: module.MediaPlayerPage })))
 import { useQuery } from '@tanstack/react-query'
 import { Check, Clipboard, ExternalLink, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
@@ -8,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { mutedText, stateBlock } from '@/lib/styles'
 import { cn } from '@/lib/utils'
-import { useToast } from '@/components/ui/toast'
+import { useToast } from '@/components/ui/toast-context'
 
 import {
   buildExternalPlayerUrl,
@@ -17,7 +19,7 @@ import {
 } from './stream-playback'
 import type { PlaybackTarget, PlayableStream } from './types'
 
-export function StreamPlaybackPage({
+function ExternalPlaybackPage({
   media,
   stream,
   target,
@@ -171,4 +173,8 @@ export function StreamPlaybackPage({
       </div>
     </div>
   )
+}
+
+export function StreamPlaybackPage(props: Parameters<typeof ExternalPlaybackPage>[0]) {
+  return props.stream.url && /^https?:\/\//i.test(props.stream.url) ? <Suspense fallback={<div className="fixed inset-0 z-50 grid place-items-center bg-black text-white" role="status">Opening player…</div>}><MediaPlayerPage key={`${props.target.videoId ?? props.target.mediaId}:${props.stream.url}`} {...props} /></Suspense> : <ExternalPlaybackPage {...props} />
 }

@@ -8,7 +8,7 @@ export function MediaRow({ children }: { children: React.ReactNode }) {
     <div
       className={cn(
         mediaRow,
-        "overflow-x-auto overflow-y-hidden -mx-[50vw] pl-[50vw] pr-[150vw] scroll-px-[50vw] no-scrollbar",
+        "min-w-0 max-w-full overflow-x-auto overflow-y-hidden scroll-px-1 no-scrollbar",
       )}
     >
       {children}

@@ -26,6 +26,7 @@ export function MediaCard({
     <article className="media-card-item grid min-w-0 gap-2.5">
       <button
         className="relative aspect-[2/3] w-full cursor-pointer overflow-hidden rounded-lg border border-border bg-card text-muted-foreground hover:outline-2 hover:outline-offset-2 hover:outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        aria-label={`Open ${title}`}
         type="button"
         onClick={onOpen}
         data-bg-source="catalog"

@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '@/api/client'
 import type { PlaybackAction, PlaybackPreferences, StreamInfo } from '@/api/types'
 
 export const DEFAULT_EXTERNAL_PLAYER_TEMPLATE = 'vlc://{url}'
@@ -57,3 +58,6 @@ function normalizeUrl(value: string | undefined) {
   const normalized = value?.trim()
   return normalized ? normalized : null
 }
+
+export function buildStreamProxyUrl(url: string) { return `${API_BASE_URL}/api/stream-proxy?url=${encodeURIComponent(url)}` }
+export function buildSubtitleProxyUrl(url: string) { return `${API_BASE_URL}/api/subtitle-proxy?url=${encodeURIComponent(url)}` }

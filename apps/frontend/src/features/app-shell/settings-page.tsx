@@ -67,7 +67,7 @@ import { canSubmitForm, fieldError, fieldErrorClass } from "@/lib/form";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app-store";
 import { useNavigate } from "@tanstack/react-router";
-import { useToast } from "@/components/ui/toast";
+import { useToast } from "@/components/ui/toast-context";
 import { useDialogManager } from "@/components/dialogs";
 import { BrowseLayoutSettings } from "./browse-layout-settings";
 import { ProfileAvatar, PROFILE_AVATAR_OPTIONS } from "./profile-avatar";
@@ -85,7 +85,7 @@ const profileSchema = z.object({
   avatarKey: z.string().trim().min(1),
 });
 
-export function ProfileSettingsPage(_props?: { user?: Pick<User, "id" | "email"> }) {
+export function ProfileSettingsPage() {
   const navigate = useNavigate();
 
   return (
@@ -179,7 +179,7 @@ function ExternalPlaybackSettingsSection() {
         External playback
       </h3>
       <p className="m-0 text-sm text-muted-foreground">
-        Streams are handed off to an external player on desktop and mobile. These settings apply to this profile.
+        Direct streams play in Wadi. These settings control links that need an external player.
       </p>
 
       <div className="grid gap-3 sm:grid-cols-2">

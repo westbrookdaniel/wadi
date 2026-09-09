@@ -7,14 +7,14 @@ import { afterEach, vi } from "vitest";
 import type { MediaPreview } from "@/api/types";
 
 import {
-  SeriesDetailPage,
   defaultSeason,
   episodeLabel,
   parseSeasonValue,
   seasonLabel,
   seasonValue,
   uniqueSeasons,
-} from "./series-detail";
+} from "./episode-labels";
+import { SeriesDetailPage } from "./series-detail";
 
 const apiRequestMock = vi.fn();
 

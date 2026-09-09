@@ -4,9 +4,9 @@ export const appBackground =
 export const authBackground =
   "bg-[radial-gradient(circle_at_50%_12%,oklch(0.452_0.211_324.591/0.2),transparent_30rem),radial-gradient(circle_at_18%_78%,oklch(0.268_0.007_34.298/0.36),transparent_24rem),linear-gradient(180deg,oklch(0.216_0.006_56.043)_0%,var(--background)_58%,oklch(0.147_0.004_49.25)_100%)] text-foreground";
 
-export const pageStack = "grid gap-8";
+export const pageStack = "grid min-w-0 grid-cols-[minmax(0,1fr)] gap-8";
 
-export const contentSection = "grid gap-3.5";
+export const contentSection = "grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3.5";
 
 export const sectionHeading =
   "flex items-end justify-between gap-[18px] max-[800px]:flex-col max-[800px]:items-stretch";

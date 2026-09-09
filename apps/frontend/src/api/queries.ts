@@ -1,3 +1,4 @@
+import type { PlayerOverride, PlayerPreferences, SubtitleInfo, WatchProgressRequest } from './types'
 import { queryOptions } from '@tanstack/react-query'
 
 import { ApiError, apiRequest } from '@/api/client'
@@ -23,6 +24,9 @@ import type {
 } from '@/api/types'
 
 export const queryKeys = {
+  playerDefaults: ['player-defaults'] as const,
+  playerOverride: (type: string, id: string) => ['player-override', type, id] as const,
+  subtitles: (type: string, id: string, context: Record<string, string> = {}) => ['subtitles', type, id, context] as const,
   me: ['me'] as const,
   addons: ['addons'] as const,
   catalogs: ['catalogs'] as const,
@@ -348,6 +352,7 @@ function flattenMediaResponses(
         type: stringValue(media.type) ?? fallbackType,
         name,
         poster: stringValue(media.poster),
+        background: stringValue(media.background),
         releaseInfo: stringValue(media.releaseInfo) ?? stringValue(media.year),
         description: stringValue(media.description),
         raw: media,
@@ -358,4 +363,107 @@ function flattenMediaResponses(
 
 function stringValue(value: unknown) {
   return typeof value === 'string' && value.trim() ? value : undefined
+}
+
+export type SubtitleQueryContext = {
+  videoId?: string | null
+  videoHash?: string | null
+  videoSize?: number | null
+  filename?: string | null
+}
+
+
+export const playerDefaultsQuery = queryOptions({
+  queryKey: queryKeys.playerDefaults,
+  queryFn: () => apiRequest<PlayerPreferences>('/api/settings/player-defaults'),
+})
+
+export const playerOverrideQuery = (mediaType: string, mediaId: string, enabled = true) =>
+  queryOptions({
+    queryKey: queryKeys.playerOverride(mediaType, mediaId),
+    queryFn: () =>
+      apiRequest<PlayerOverride>(
+        `/api/settings/player-override/${encodeURIComponent(mediaType)}/${encodeURIComponent(mediaId)}`,
+      ),
+    enabled,
+  })
+
+export const subtitlesQuery = (
+  contentType: string,
+  mediaId: string,
+  {
+    enabled = true,
+    context,
+  }: {
+    enabled?: boolean
+    context?: SubtitleQueryContext
+  } = {},
+) => {
+  const normalizedContext = normalizeSubtitleQueryContext(context)
+  return queryOptions({
+    queryKey: queryKeys.subtitles(contentType, mediaId, normalizedContext),
+    queryFn: async () => {
+      const search = new URLSearchParams(normalizedContext)
+      const suffix = search.size ? `?${search.toString()}` : ''
+      const data = await apiRequest<ApiResponses<{ subtitles?: SubtitleInfo[] }>>(
+        `/api/subtitles/${encodeURIComponent(contentType)}/${encodeURIComponent(mediaId)}${suffix}`,
+      )
+      return data.responses.flatMap((item) =>
+        (item.response.subtitles ?? []).map((subtitle) => ({
+          ...subtitle,
+          addon_id: item.addon_id,
+        })),
+      )
+    },
+    enabled,
+  })
+}
+
+
+export function updatePlayerDefaults(payload: PlayerOverride) {
+  return apiRequest<PlayerPreferences>('/api/settings/player-defaults', {
+    method: 'PUT',
+    body: payload,
+  })
+}
+
+export function updatePlayerOverride(mediaType: string, mediaId: string, payload: PlayerOverride) {
+  return apiRequest<PlayerOverride>(
+    `/api/settings/player-override/${encodeURIComponent(mediaType)}/${encodeURIComponent(mediaId)}`,
+    {
+      method: 'PUT',
+      body: payload,
+    },
+  )
+}
+
+export function updateWatchProgress(payload: WatchProgressRequest) {
+  return apiRequest<WatchState>('/api/watch-progress', {
+    method: 'PUT',
+    body: payload,
+  })
+}
+
+
+function normalizeSubtitleQueryContext(context: SubtitleQueryContext | undefined): Record<string, string> {
+  if (!context) {
+    return {}
+  }
+  const normalized: Record<string, string> = {}
+  const trimmedVideoId = context.videoId?.trim()
+  if (trimmedVideoId) {
+    normalized.videoId = trimmedVideoId
+  }
+  const trimmedVideoHash = context.videoHash?.trim()
+  if (trimmedVideoHash) {
+    normalized.videoHash = trimmedVideoHash
+  }
+  if (Number.isFinite(context.videoSize) && (context.videoSize ?? 0) >= 0) {
+    normalized.videoSize = String(context.videoSize)
+  }
+  const trimmedFilename = context.filename?.trim()
+  if (trimmedFilename) {
+    normalized.filename = trimmedFilename
+  }
+  return normalized
 }

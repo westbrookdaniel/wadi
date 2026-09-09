@@ -3,9 +3,11 @@ import { useQueries, useQuery } from '@tanstack/react-query'
 import { browseLayoutQuery, catalogsQuery, continueWatchingQuery, listItemsQuery, listsQuery } from '@/api/queries'
 import type { MediaPreview } from '@/api/types'
 import { EmptyState, ErrorState } from '@/components/status'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { pageStack } from '@/lib/styles'
 
+import { FeaturedFilm } from './featured-film'
 import { BrowseSections } from './browse-sections'
 import { buildBrowseRowCandidates, createDefaultBrowseLayout, normalizeBrowseLayout, resolveVisibleBrowseRows } from './browse-layout'
 
@@ -54,6 +56,14 @@ export function HomePage({
       {browseLayout.error ? <ErrorState error={browseLayout.error} /> : null}
       {listItemsError ? <ErrorState error={listItemsError} /> : null}
 
+      {isLoading && catalogs.data === undefined && continueWatching.data === undefined && lists.data === undefined && browseLayout.data === undefined ? (
+        <div aria-label="Loading home page" className="grid gap-6">
+          <Skeleton className="h-64 w-full rounded-2xl" />
+          <div className="grid grid-cols-3 gap-4 sm:grid-cols-6">
+            {Array.from({ length: 6 }, (_, index) => <Skeleton key={index} className="aspect-[2/3] rounded-xl" />)}
+          </div>
+        </div>
+      ) : null}
       {showSetup ? (
         <EmptyState
           title="Go to Settings to add addons"
@@ -66,6 +76,7 @@ export function HomePage({
         />
       ) : null}
 
+      {!isLoading && catalogs.data?.[0] ? <FeaturedFilm entry={catalogs.data[0]} onOpen={onOpenMedia} /> : null}
       {!showSetup ? (
         <BrowseSections
           page="home"
