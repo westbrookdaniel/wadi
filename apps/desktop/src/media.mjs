@@ -10,7 +10,7 @@ import { pipeline } from 'node:stream/promises';
 import { z } from 'zod';
 const execute = promisify(execFile);
 const sourceSchema = z.object({ url: z.url().refine(value => { const u=new URL(value); return ['http:','https:'].includes(u.protocol) && !u.username && !u.password; }), headers: z.record(z.string().regex(/^[A-Za-z0-9-]+$/), z.string().max(4096).refine(v=>!/[\r\n]/.test(v))).default({}) });
-const inputSchema = sourceSchema.extend({ id:z.string().uuid(), position:z.number().finite().nonnegative().default(0), audio:z.string().nullable().default(null), speed:z.number().min(0.25).max(4).default(1), forceVideo:z.boolean().default(false) });
+const inputSchema = sourceSchema.extend({ id:z.string().uuid(), position:z.number().finite().nonnegative().default(0), audio:z.string().nullable().default(null), speed:z.number().min(0.25).max(4).default(1), forceVideo:z.boolean().default(false), conversionEnabled:z.boolean().default(true) });
 const PROTOCOLS = 'http,https,tcp,tls,crypto';
 export async function createMediaService({ directory, binaries }) {
   await rm(directory, { recursive:true, force:true }); await mkdir(directory, { recursive:true });
@@ -135,10 +135,11 @@ export async function createMediaService({ directory, binaries }) {
     const video=data.streams.find(s=>s.codec_type==='video');
     const audioTracks=data.streams.filter(s=>s.codec_type==='audio');
     const audio=audioTracks.find(s=>String(s.index)===input.audio)??audioTracks[0];
-    for(const job of jobs.values())await stop(job);
-    const id=input.id,path=join(directory,id);await mkdir(path);
     const copyVideo=video?.codec_name==='h264'&&(!video.pix_fmt||video.pix_fmt==='yuv420p')&&!input.forceVideo;
     const copyAudio=!audio||audio.codec_name==='aac';
+    if (!input.conversionEnabled && ((video && !copyVideo) || !copyAudio)) throw new Error('This stream needs audio or video conversion. Enable conversion in device settings or choose another stream.');
+    for(const job of jobs.values())await stop(job);
+    const id=input.id,path=join(directory,id);await mkdir(path);
     const job={id,path,touched:Date.now(),error:null,process:null,abort:new AbortController(),waiters:new Set(),uploads:Promise.resolve(),position:0,producedEnd:0,lastSegment:-1,offset:input.position};jobs.set(id,job);
     const describe = (url,mode,offset) => ({id,url,duration:Number(data.format?.duration)||0,offset,hasVideo:Boolean(video),hasAudio:Boolean(audio),audioTracks:audioTracks.map(s=>({id:String(s.index),label:s.tags?.title??s.tags?.language??`Audio ${s.index}`,language:s.tags?.language??''})),selectedAudioTrackId:audio?String(audio.index):null,mode});
     if(copyVideo&&copyAudio&&audioTracks.length<=1&&data.format?.format_name?.split(',').includes('mp4')) {

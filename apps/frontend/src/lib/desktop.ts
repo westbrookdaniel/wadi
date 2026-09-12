@@ -1,5 +1,6 @@
 export type DesktopUpdate = { kind: 'idle' } | { kind: 'checking' } | { kind: 'downloading'; version: string; percent: number } | { kind: 'ready'; version: string } | { kind: 'error'; message: string }
 export type DesktopBridge = {
+  appVersion: () => Promise<string>
   updateState: () => Promise<DesktopUpdate>
   checkUpdates: () => Promise<DesktopUpdate>
   installUpdate: () => Promise<void>

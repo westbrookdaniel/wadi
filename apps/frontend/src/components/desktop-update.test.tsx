@@ -10,7 +10,7 @@ it('hides idle state, shows progress, and only installs on a ready click', async
   const checkUpdates = vi.fn(async (): Promise<DesktopUpdate> => ({ kind: 'idle' }))
   const unsubscribe = vi.fn()
   window.wadiDesktop = {
-    updateState: async () => ({ kind: 'idle' }), onUpdate: callback => { notify = callback; return unsubscribe }, installUpdate, checkUpdates,
+    appVersion: async () => '0.1.0', updateState: async () => ({ kind: 'idle' }), onUpdate: callback => { notify = callback; return unsubscribe }, installUpdate, checkUpdates,
     updatePlayback: async () => {}, onOpenSettings: () => () => {}, openPage: async () => {}, session: async () => true, signIn: async () => true,
     request: async () => ({ status: 200, body: null }), media: async () => null, openExternal: async () => {},
   }

@@ -155,7 +155,7 @@ function ExternalPlaybackSettingsSection() {
       <h3 className="m-0 text-[1.05rem] font-[520] tracking-normal">
         External playback
       </h3>
-      <p className="m-0 text-sm text-muted-foreground">
+      <p className="m-0 pb-3 text-sm text-muted-foreground">
         Choose where streams open. External apps must be installed and may not report watch progress back to Wadi.
       </p>
 

@@ -99,6 +99,7 @@ export function MediaPlayerPage({
   const token = useAppStore((state) => state.token)
   const externalPreferences = useQuery(playbackPreferencesQuery)
   const desktop = desktopBridge()
+  const conversionEnabled = useDeviceStore(state => state.conversionEnabled)
   const proxiedStreamUrl = desktop ? undefined : streamUrl ? buildStreamProxyUrl(streamUrl) : undefined
   const watchData = useQuery(
     watchDataQuery(
@@ -618,7 +619,7 @@ export function MediaPlayerPage({
             <div className={cn(stateBlock, 'absolute inset-0 min-h-0 bg-black/92 px-6')}>
               <strong>Unable to play this stream</strong>
               <p>{player.state.error}</p>
-              {desktop ? <Button onClick={desktopPlayer.retry}>Retry with full conversion</Button> : <><p>Web playback depends on the source and browser. Try the desktop app or an external player.</p><DesktopDownload /></>}
+              {desktop ? <Button onClick={desktopPlayer.retry}>{conversionEnabled ? 'Retry with full conversion' : 'Retry'}</Button> : <><p>Web playback depends on the source and browser. Try the desktop app or an external player.</p><DesktopDownload /></>}
               {streamUrl && <><Button onClick={() => { void navigator.clipboard.writeText(streamUrl).catch(() => {}) }}>Copy stream link</Button><Button onClick={() => { void openExternalPlayback(streamUrl, normalizePlaybackPreferences(externalPreferences.data)).catch(() => {}) }}>Open external player</Button></>}
               {stream.externalUrl ? (
                 <Button size="sm" asChild>

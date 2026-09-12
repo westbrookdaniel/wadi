@@ -26,8 +26,9 @@ for (const mode of ['audio', 'remux', 'video']) test(`${mode}: retains paused se
     await promisify(execFile)(join(binaries, process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg'), ['-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=64x64:rate=10:duration=180', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=180', '-c:v', 'libx264', '-preset', 'ultrafast', '-g', '40', '-c:a', mode === 'audio' ? 'ac3' : 'aac', '-y', fixture]);
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     service = await createMediaService({ directory: join(directory, 'cache'), binaries });
+    if (mode !== 'remux') await assert.rejects(service.command('start', { id: randomUUID(), url: `http://127.0.0.1:${server.address().port}/source.mkv`, forceVideo: mode === 'video', conversionEnabled: false }), /Enable conversion in device settings/);
     const id = randomUUID();
-    const session = await service.command('start', { id, url: `http://127.0.0.1:${server.address().port}/source.mkv`, forceVideo: mode === 'video' });
+    const session = await service.command('start', { id, url: `http://127.0.0.1:${server.address().port}/source.mkv`, forceVideo: mode === 'video', conversionEnabled: mode !== 'remux' });
     assert.equal(session.mode, mode);
     const playlist = async () => {
       const response = await fetch(session.url);

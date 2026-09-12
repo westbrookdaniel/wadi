@@ -115,6 +115,7 @@ session.defaultSession.setPermissionRequestHandler((webContents, permission, cal
 media = await createMediaService({ directory: join(app.getPath('userData'), 'media-cache'), binaries: app.isPackaged ? join(process.resourcesPath, 'media-bin') : join(here, '../assets') });
 for (const [name, handler] of Object.entries({
   'open-page': path => shell.openExternal(new URL(z.enum(['/terms','/privacy']).parse(path), origin).href),
+  'app-version': () => app.getVersion(),
   'update-state': () => updates?.state() ?? { kind: 'idle' },
   'update-check': () => updates.check(true),
   'update-install': () => updates.install(),

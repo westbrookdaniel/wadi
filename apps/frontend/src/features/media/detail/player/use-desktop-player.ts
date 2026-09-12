@@ -1,3 +1,4 @@
+import { useDeviceStore } from '@/store/device-store'
 import Hls from 'hls.js'
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { z } from 'zod'
@@ -8,6 +9,7 @@ const hintsSchema = z.object({ proxyHeaders: z.object({ request:z.record(z.strin
 export function useDesktopPlayer({ videoRef, source, hints, savedPosition, watched, onProgressCommit }: {
   videoRef:RefObject<HTMLVideoElement | null>; source?:string; hints:unknown; savedPosition:number; watched:boolean; onProgressCommit:(position:number,duration:number)=>void
 }) {
+  const conversionEnabled = useDeviceStore(state => state.conversionEnabled)
   const [state,setState]=useState<PlayerState>(initialPlayerState)
   const stateRef=useRef(state)
   const position=useRef(watched?0:savedPosition)
@@ -56,12 +58,12 @@ export function useDesktopPlayer({ videoRef, source, hints, savedPosition, watch
       if(Date.now()-lastHeartbeat>1000)report()
       if(Date.now()-lastCommit>10000){lastCommit=Date.now();commit.current(position.current,duration)}
     }
-    const failed=()=>{if(!cancelled)update({status:'error',error:'Playback failed. Retry with full conversion or choose another stream.'})}
+    const failed=()=>{if(!cancelled)update({status:'error',error:conversionEnabled ? 'Playback failed. Retry with full conversion or choose another stream.' : 'Playback failed. Enable audio and video conversion in device settings or choose another stream.'})}
     video.addEventListener('error',failed)
     const ended=()=>{playing.current=false;update({playing:false});commit.current(position.current,duration)}
     const playbackChanged=()=>{if(playable){playing.current=!video.paused;sync()}}
     video.addEventListener('play',playbackChanged);video.addEventListener('pause',playbackChanged);video.addEventListener('timeupdate',sync);video.addEventListener('volumechange',sync);video.addEventListener('ended',ended)
-    void desktop.media('start',{id,url:source,headers:JSON.parse(headers),position:position.current,audio:audio.current,speed:speed.current,forceVideo:forceVideo.current}).then(async value=>{
+    void desktop.media('start',{id,url:source,headers:JSON.parse(headers),position:position.current,audio:audio.current,speed:speed.current,forceVideo:conversionEnabled && forceVideo.current,conversionEnabled}).then(async value=>{
       const result=sessionSchema.parse(value)
       if(cancelled){await desktop.media('stop',id);return}
       job.current=id;offset=result.offset;duration=result.duration
@@ -91,7 +93,7 @@ export function useDesktopPlayer({ videoRef, source, hints, savedPosition, watch
       if(id){void desktop.media('stop',id).catch(()=>{});if(job.current===id){job.current=null;session.current=null}}
       if(duration)commit.current(position.current,duration)
     }
-  },[source,headers,generation,videoRef,update])
+  },[source,headers,generation,videoRef,update,conversionEnabled])
   const pause=useCallback((_commit=false)=>{
     playing.current=false
     videoRef.current?.pause()

@@ -5,11 +5,15 @@ import { persist } from 'zustand/middleware'
 export const useDeviceStore = create(persist<{
   theme: 'dark' | 'light' | 'system'
   setTheme: (theme: 'dark' | 'light' | 'system') => void
+  conversionEnabled: boolean
+  setConversionEnabled: (enabled: boolean) => void
   tvMode: boolean
   setTvMode: (enabled: boolean) => void
 }>((set) => ({
   theme: 'system',
   setTheme: (theme) => set({ theme }),
+  conversionEnabled: true,
+  setConversionEnabled: (conversionEnabled) => set({ conversionEnabled }),
   tvMode: false,
   setTvMode: (tvMode) => set({ tvMode }),
 }), { name: 'wadi.device' }))
