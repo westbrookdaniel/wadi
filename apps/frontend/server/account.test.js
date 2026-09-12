@@ -4,7 +4,8 @@ import { createApp } from './main.js';
 import { test } from 'node:test';
 import { testDatabase } from './test-database.js';
 test('account password, export and deletion respect ownership and revoke sessions', async t => {
-const runtime = createApp({ database: await testDatabase(t) });
+let sentCode;
+const runtime = createApp({ database: await testDatabase(t), sendVerificationEmail: async({code})=>{sentCode=code;} });
 const server = runtime.app.listen(0, '127.0.0.1');
 await new Promise(resolve => server.once('listening', resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
@@ -15,7 +16,8 @@ const request = async (path, method, body, token) => {
 };
 try {
   const email = `check-${randomUUID()}@example.com`, password = randomUUID(), replacement = randomUUID();
-  const first = await request('/api/auth/register','POST',{email,password}); assert.equal(first.status,201); id=first.body.user.id;
+  const pending = await request('/api/auth/register','POST',{email,password}); assert.equal(pending.status,202);
+  const first = await request('/api/auth/verify-email','POST',{challenge:pending.body.challenge,code:sentCode}); assert.equal(first.status,200); id=first.body.user.id;
   const token=first.body.token;
   const second=await request('/api/auth/login','POST',{email,password});
   const wrong=await request('/api/account/password','POST',{currentPassword:'wrong',newPassword:replacement},token); assert.equal(wrong.status,400);

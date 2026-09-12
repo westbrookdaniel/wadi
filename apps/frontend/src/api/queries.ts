@@ -8,6 +8,7 @@ import type {
   ApiListResponse,
   ApiResponses,
   AuthResponse,
+  VerificationRequired,
   BrowseLayout,
   CatalogEntry,
   ContinueWatchingItem,
@@ -180,7 +181,7 @@ export const playbackPreferencesQuery = queryOptions({
 })
 
 export function login(email: string, password: string) {
-  return apiRequest<AuthResponse>('/api/auth/login', {
+  return apiRequest<AuthResponse | VerificationRequired>('/api/auth/login', {
     method: 'POST',
     body: { email, password },
     token: null,
@@ -188,7 +189,7 @@ export function login(email: string, password: string) {
 }
 
 export function register(email: string, password: string) {
-  return apiRequest<AuthResponse>('/api/auth/register', {
+  return apiRequest<AuthResponse | VerificationRequired>('/api/auth/register', {
     method: 'POST',
     body: { email, password },
     token: null,

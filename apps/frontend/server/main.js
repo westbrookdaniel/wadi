@@ -1,3 +1,4 @@
+import { emailVerification } from './email-verification.js';
 import { fetchAddonJson } from './addon-fetch.js';
 import { createDatabase } from './database.js';
 import { addDesktopAuth } from './desktop-auth.js';
@@ -20,7 +21,7 @@ const listInput = z.object({ name: z.string().trim().min(1).max(100), descriptio
 const digest = value => createHash('sha256').update(value).digest('hex');
 const fail = (status, message) => { throw Object.assign(new Error(message), { status }); };
 const now = () => new Date().toISOString();
-export function createApp({ database = process.env.DATABASE_URL, sessionDays = 30, allowPrivateAddons = false } = {}) {
+export function createApp({ database = process.env.DATABASE_URL, sessionDays = 30, allowPrivateAddons = false, sendVerificationEmail } = {}) {
     const db = createDatabase(database);
     const { get, all, run } = db;
     const app = express();
@@ -56,27 +57,26 @@ export function createApp({ database = process.env.DATABASE_URL, sessionDays = 3
         res.status(status).json({ token, user: { id: user.id, email: user.email, created_at: user.created_at }, active_profile_id: profile.id });
     };
     addDesktopAuth(app, { db, sessionDays });
+    const verification = emailVerification({ app, db, session, sendEmail: sendVerificationEmail });
     app.post('/api/auth/register', async (req, res) => {
         const body = credentials.parse(req.body);
         if ((await get('SELECT id FROM users WHERE email=?', body.email)))
             fail(409, 'Email is already registered');
-        const password = await hash(body.password);
-        const id = randomUUID();
-        (await run('INSERT INTO users(id,email,password_hash) VALUES(?,?,?)', id, body.email, password));
-        (await session((await get('SELECT * FROM users WHERE id=?', id)), res, 201));
+        res.status(202).json(await verification.begin(req, { email: body.email, passwordHash: await hash(body.password) }));
     });
     app.post('/api/auth/login', async (req, res) => {
         const body = credentials.parse(req.body);
         const user = (await get('SELECT * FROM users WHERE email=?', body.email));
         if (!user || !await verify(user.password_hash, body.password))
             fail(401, 'Invalid email or password');
+        if (!user.email_verified_at) return res.status(202).json(await verification.begin(req, { email: user.email, passwordHash: user.password_hash, userId: user.id }));
         (await session(user, res));
     });
     app.use('/api', async (req, _res, next) => {
         const token = req.headers.authorization?.replace(/^Bearer /, '');
         if (!token)
             return next(Object.assign(new Error('Sign in to continue'), { status: 401 }));
-        const user = (await get('SELECT users.id,users.email,sessions.profile_id FROM sessions JOIN users ON users.id=sessions.user_id WHERE token_hash=? AND expires_at>?', digest(token), now()));
+        const user = (await get('SELECT users.id,users.email,sessions.profile_id FROM sessions JOIN users ON users.id=sessions.user_id WHERE token_hash=? AND expires_at>? AND users.email_verified_at IS NOT NULL', digest(token), now()));
         if (!user)
             return next(Object.assign(new Error('Session expired'), { status: 401 }));
         req.user = user;

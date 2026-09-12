@@ -9,7 +9,7 @@ export function addDesktopAuth(app, { db, sessionDays }) {
     const input = z.object({ challenge: z.string().regex(/^[A-Za-z0-9_-]{43}$/) }).parse(req.body);
     const token = req.headers.authorization?.replace(/^Bearer /, '');
     if (!token) fail();
-    const session = await db.get('SELECT user_id,profile_id FROM sessions WHERE token_hash=? AND expires_at>?', hash(token), new Date().toISOString());
+    const session = await db.get('SELECT user_id,profile_id FROM sessions JOIN users ON users.id=sessions.user_id WHERE token_hash=? AND expires_at>? AND users.email_verified_at IS NOT NULL', hash(token), new Date().toISOString());
     if (!session) fail();
     const code = randomBytes(32).toString('base64url');
     await db.run('DELETE FROM desktop_codes WHERE expires_at<?', new Date().toISOString());
@@ -21,7 +21,7 @@ export function addDesktopAuth(app, { db, sessionDays }) {
     const result = await db.transaction(async tx => {
       // DELETE RETURNING atomically consumes the code only when the verifier matches.
       const code = await tx.get('DELETE FROM desktop_codes WHERE code_hash=? AND challenge=? AND expires_at>? RETURNING user_id,profile_id', hash(input.code), challenge(input.verifier), new Date().toISOString());
-      if (!code) fail();
+      if (!code || !await tx.get('SELECT id FROM users WHERE id=? AND email_verified_at IS NOT NULL', code.user_id)) fail();
       const token = randomBytes(32).toString('base64url');
       await tx.run('INSERT INTO sessions(id,user_id,profile_id,token_hash,expires_at) VALUES(?,?,?,?,?)', randomUUID(), code.user_id, code.profile_id, hash(token), new Date(Date.now()+sessionDays*86400000).toISOString());
       return { token };

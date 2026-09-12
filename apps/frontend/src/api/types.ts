@@ -7,6 +7,8 @@ export type User = {
   created_at?: string
 }
 
+export type VerificationRequired = { verification_required: true; challenge: string; email: string }
+
 export type AuthResponse = {
   token: string
   user: User

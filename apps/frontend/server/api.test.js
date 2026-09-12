@@ -7,7 +7,8 @@ import { createApp } from './main.js';
 
 async function start(server) { server.listen(0, '127.0.0.1'); await once(server, 'listening'); return `http://127.0.0.1:${server.address().port}`; }
 test('Node API preserves auth, profile isolation, lists, progress, addons without cloud video proxying', async t => {
- const { app, db } = createApp({ database: await testDatabase(t), allowPrivateAddons: true });
+ let sentCode;
+ const { app, db } = createApp({ database: await testDatabase(t), allowPrivateAddons: true, sendVerificationEmail: async ({code}) => { sentCode=code; } });
  const server = createServer(app), base = await start(server);
  t.after(async () => { server.closeAllConnections(); server.close(); await db.close(); });
  const media = Buffer.from('0123456789abcdefghijklmnopqrstuvwxyz');
@@ -33,7 +34,8 @@ test('Node API preserves auth, profile isolation, lists, progress, addons withou
   const text=await response.text(); assert.equal(response.status,expected,`${method} ${path}: ${text}`);return text?JSON.parse(text):null;
  }
  await request('/api/auth/me','GET',undefined,401);
- const auth=await request('/api/auth/register','POST',{email:'test@example.com',password:'test-password'},201);token=auth.token;
+ const pending=await request('/api/auth/register','POST',{email:'test@example.com',password:'test-password'},202);
+ const auth=await request('/api/auth/verify-email','POST',{challenge:pending.challenge,code:sentCode});token=auth.token;
  assert.equal((await request('/api/auth/me')).id,auth.user.id);
  const saved=(await request('/api/lists')).items[0];assert.equal(saved.is_default,true);
  await request(`/api/lists/${saved.id}`,'DELETE',undefined,400);
@@ -83,8 +85,10 @@ test('Node API preserves auth, profile isolation, lists, progress, addons withou
 
 test('Postgres accounts and sessions survive a Node server restart', async t => {
  const database=await testDatabase(t);
- let runtime=createApp({database}); let server=createServer(runtime.app);let base=await start(server);
- const auth=await fetch(base+'/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:'persist@example.com',password:'persist-password'})}).then(r=>r.json());
+ let sentCode;
+ let runtime=createApp({database,sendVerificationEmail:async({code})=>{sentCode=code;}}); let server=createServer(runtime.app);let base=await start(server);
+ const pending=await fetch(base+'/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:'persist@example.com',password:'persist-password'})}).then(r=>r.json());
+ const auth=await fetch(base+'/api/auth/verify-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({challenge:pending.challenge,code:sentCode})}).then(r=>r.json());
  server.closeAllConnections(); await new Promise(resolve=>server.close(resolve));await runtime.db.close();
  runtime=createApp({database});server=createServer(runtime.app);base=await start(server);
  t.after(async()=>{server.closeAllConnections();server.close();await runtime.db.close();});

@@ -111,3 +111,20 @@ ALTER TABLE watch_states ADD COLUMN IF NOT EXISTS last_stream_url TEXT;
 ALTER TABLE watch_states ADD COLUMN IF NOT EXISTS recommended_stream_url TEXT;
 ALTER TABLE watch_states ADD COLUMN IF NOT EXISTS recommended_stream_signature TEXT;
 ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS player_prefs_json TEXT NOT NULL DEFAULT '{}';
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at TEXT;
+CREATE TABLE IF NOT EXISTS email_verifications (
+  id TEXT PRIMARY KEY,
+  email TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+  code_hash TEXT NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  expires_at TEXT NOT NULL,
+  sent_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS email_send_limits (
+  key TEXT PRIMARY KEY,
+  count INTEGER NOT NULL,
+  expires_at TEXT NOT NULL
+);

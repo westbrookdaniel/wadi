@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react'
+import { useRef, useState, useEffect, type ReactNode } from 'react'
 import { desktopBridge } from '@/lib/desktop'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from '@tanstack/react-form'
@@ -6,7 +6,8 @@ import { ArrowRight } from 'lucide-react'
 import { z } from 'zod'
 
 import { login, queryKeys, register } from '@/api/queries'
-import { ApiError } from '@/api/client'
+import { ApiError, apiRequest } from '@/api/client'
+import type { AuthResponse, VerificationRequired } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -29,6 +30,7 @@ const authSchema = z
   })
 
 function WebAuthPage({ mode, onModeChange }: { mode: AuthMode; onModeChange: (mode: AuthMode) => void }) {
+  const [pendingVerification, setPendingVerification] = useState<VerificationRequired | null>(null)
   const queryClient = useQueryClient()
   const setToken = useAppStore((state) => state.setToken)
   const setActiveProfileId = useAppStore((state) => state.setActiveProfileId)
@@ -37,6 +39,7 @@ function WebAuthPage({ mode, onModeChange }: { mode: AuthMode; onModeChange: (mo
     mutationFn: (value: z.infer<typeof authSchema>) =>
       mode === 'login' ? login(value.email, value.password) : register(value.email, value.password),
     onSuccess: async (data) => {
+      if ('verification_required' in data) { setPendingVerification(data); return }
       queryClient.clear()
       setToken(data.token)
       setActiveProfileId(data.active_profile_id ?? data.user.active_profile_id)
@@ -55,6 +58,11 @@ function WebAuthPage({ mode, onModeChange }: { mode: AuthMode; onModeChange: (mo
     },
     onSubmit: ({ value }) => mutation.mutate(value),
   })
+
+  if (pendingVerification) return <VerifyEmailForm key={pendingVerification.challenge} pending={pendingVerification} resend={() => mutation.mutate(form.state.values)} resending={mutation.isPending} resendError={mutation.error} back={() => { setPendingVerification(null); mutation.reset() }} onVerified={async data => {
+    queryClient.clear(); setToken(data.token); setActiveProfileId(data.active_profile_id ?? data.user.active_profile_id)
+    await queryClient.invalidateQueries({ queryKey: queryKeys.me })
+  }} />
 
   const title = mode === 'login' ? 'Welcome back' : 'Create account'
   const body =
@@ -164,6 +172,23 @@ function WebAuthPage({ mode, onModeChange }: { mode: AuthMode; onModeChange: (mo
       </form>
     </main>
   )
+}
+
+function VerifyEmailForm({ pending, resend, resending, resendError, back, onVerified }: { pending: VerificationRequired; resend: () => void; resending: boolean; resendError: unknown; back: () => void; onVerified: (data: AuthResponse) => Promise<void> }) {
+  const [code, setCode] = useState('')
+  const [remaining, setRemaining] = useState(60)
+  useEffect(() => { const timer = setInterval(() => setRemaining(value => Math.max(0, value - 1)), 1000); return () => clearInterval(timer) }, [])
+  const verify = useMutation({ mutationFn: () => apiRequest<AuthResponse>('/api/auth/verify-email', { method: 'POST', body: { challenge: pending.challenge, code }, token: null }), onSuccess: onVerified })
+  return <AuthShell title="Check your email" body={`Enter the 8-digit code sent to ${pending.email}. It expires in 15 minutes.`}>
+    <form className="grid gap-4" onSubmit={event => { event.preventDefault(); verify.mutate() }}>
+      <Label htmlFor="verification-code">Verification code</Label>
+      <Input id="verification-code" autoFocus inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{8}" maxLength={8} value={code} onChange={event => setCode(event.target.value.replace(/\D/g, ''))} className="h-12 border border-border bg-background text-center text-xl tracking-[0.35em]" />
+      {(verify.error || resendError) ? <p role="alert" className="text-sm text-destructive">{authError(verify.error || resendError)}</p> : null}
+      <Button type="submit" disabled={code.length !== 8 || verify.isPending}>{verify.isPending ? 'Verifying…' : 'Verify email'}</Button>
+      <Button type="button" variant="ghost" disabled={remaining > 0 || resending} onClick={resend}>{resending ? 'Sending…' : remaining > 0 ? `Resend code in ${remaining}s` : 'Resend code'}</Button>
+      <Button type="button" variant="link" onClick={back}>Use a different email</Button>
+    </form>
+  </AuthShell>
 }
 
 function authError(error: unknown) {

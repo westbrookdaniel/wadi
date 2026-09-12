@@ -36,7 +36,8 @@ The import preserves account IDs, password hashes, sessions, profiles, addons, l
 2. Use the Next.js framework preset and Node 24. Build with `pnpm build`; let Vercel manage the output directory. Install dependencies with the committed lockfile.
 3. Set server-only `DATABASE_URL` to Railway's public Postgres connection URL. Vercel cannot reach Railway private networking. Set DATABASE_SSL_CA to the public root certificate from the database, and DATABASE_SSL_SERVERNAME to postgres.railway.internal. The server verifies that identity through the public TCP proxy. Keep these server-only, and update the CA when rotating database certificates. Never disable certificate verification.
 4. Run `pnpm db:migrate` once against that database before sending users to the app.
-5. Set optional public installer links described below. Keep the Next.js app and database in nearby regions.
+5. Configure a verified Resend domain and server-only RESEND_API_KEY with sending access. EMAIL_FROM defaults to Wadi <noreply@watchwadi.com>. Registration and previously unverified accounts require an emailed code before a session is issued.
+6. Set optional public installer links described below. Keep the Next.js app and database in nearby regions.
 
 `SESSION_TTL_DAYS` defaults to 30. Each warm API instance uses a pool of at most three connections; a pooled database endpoint is advisable as concurrency grows. The app does not create cloud resources or migrate a remote database automatically.
 
@@ -118,3 +119,7 @@ The synthetic local-conversion check runs with `node --test apps/desktop/src/med
 Wadi checks the public GitHub Releases API on launch, every six hours, and from Check for updates. It compares stable versions and shows Download update when a newer release exists. Clicking opens the matching installer in the browser. If no matching build exists, it opens the release page. Users install over the existing app; Wadi does not replace files, restart, or install on quit. User data stays in the existing application data directory.
 
 Releases are unsigned and do not require Apple certificates or notarization. Operating systems may ask users to approve opening the app. The version tag must match apps/desktop/package.json. The workflow builds installers for each platform into a draft release. Publish the complete draft after reviewing it. No updater YAML files or signing secrets are required.
+
+## iOS home-screen app
+
+Open watchwadi.com in Safari, choose Share, then Add to Home Screen. The manifest and Apple touch icon launch Wadi in standalone mode with safe-area spacing. The app requires a network connection; account data and video are not cached for offline use.
