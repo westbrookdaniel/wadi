@@ -11,7 +11,7 @@ function publicAddress(address) {
   // Global unicast only; excludes loopback, link-local, ULA and mapped IPv4.
   return isIP(address) === 6 && /^[23][0-9a-f]{3}:/i.test(address);
 }
-export async function fetchAddonJson(source, { allowPrivate = false } = {}) {
+async function requestAddonJson(source, { allowPrivate = false } = {}) {
   let url = new URL(source);
   const deadline = AbortSignal.timeout(15000);
   for (let redirects=0; redirects<5; redirects++) {
@@ -46,4 +46,23 @@ export async function fetchAddonJson(source, { allowPrivate = false } = {}) {
     url=new URL(result.redirect,url);
   }
   throw new Error('Too many addon redirects');
+}
+
+// Never expose configured paths: addon URLs can contain provider credentials.
+export async function fetchAddonJson(source, options) {
+  try { return await requestAddonJson(source, options); }
+  catch (error) {
+    const host = new URL(source).hostname;
+    const upstreamStatus = /^Addon returned HTTP (\d+)$/.exec(error.message)?.[1];
+    const code = typeof error.code === 'string' && /^[A-Z0-9_]+$/.test(error.code) ? error.code : undefined;
+    console.warn('Addon request failed', { host, upstreamStatus, code });
+    const message = upstreamStatus
+      ? `The addon provider (${host}) returned HTTP ${upstreamStatus}. Please try again later or check the addon URL.`
+      : error.name === 'AbortError'
+        ? `The addon provider (${host}) took too long to respond. Please try again.`
+        : ['Addon must use a public address', 'Invalid addon URL', 'Addon did not return JSON', 'Invalid addon JSON', 'Addon response exceeds 3 MB', 'Too many addon redirects'].includes(error.message)
+          ? error.message
+          : `Could not connect to the addon provider (${host}). Please try again later.`;
+    throw Object.assign(new Error(message), { status: 502 });
+  }
 }
