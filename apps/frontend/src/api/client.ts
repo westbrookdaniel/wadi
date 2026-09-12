@@ -6,7 +6,7 @@ export class ApiError extends Error {
   body: unknown
 
   constructor(status: number, body: unknown) {
-    super(typeof body === 'string' ? body : body && typeof body === 'object' && 'error' in body && typeof body.error === 'string' ? body.error : `Request failed with status ${status}`)
+    super(status >= 500 ? 'Wadi is temporarily unavailable. Please try again in a moment.' : body && typeof body === 'object' && 'error' in body && typeof body.error === 'string' && body.error.length < 200 && !/[<>]/.test(body.error) ? body.error : 'Could not complete the request. Please try again.')
     this.name = 'ApiError'
     this.status = status
     this.body = body
@@ -48,6 +48,9 @@ export async function apiRequest<T>(path: string, options: ApiOptions = {}) {
     headers,
     signal: options.signal,
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
+  }).catch((error: unknown) => {
+    if (options.signal?.aborted) throw error
+    throw new ApiError(503, null)
   })
 
   const text = await response.text()

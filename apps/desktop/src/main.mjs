@@ -11,7 +11,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const config = JSON.parse(await readFile(join(here, '../desktop-config.json'), 'utf8'));
 const origin = new URL(config.origin).origin;
 protocol.registerSchemesAsPrivileged([{ scheme: 'wadi', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }]);
-let window, media, token = null, authServer = null;
+let window, media, token = null, authServer = null, cancelSignIn = null;
 const tokenFile = () => join(app.getPath('userData'), 'session.enc');
 async function saveToken(value) {
   if (value && (!safeStorage.isEncryptionAvailable() || (process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text'))) throw new Error('Unlock an OS keyring before signing in. Wadi will not store an unencrypted session.');
@@ -31,7 +31,9 @@ async function api(path, options = {}) {
   const response = await fetch(url, { method, headers, body, redirect: 'error', signal: AbortSignal.timeout(30000) });
   const text = await response.text();
   if (response.status === 401 || path === '/api/auth/logout' && response.ok) await saveToken(null);
-  return { status: response.status, body: text ? JSON.parse(text) : null };
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch { return { status: 503, body: { error: 'Wadi is temporarily unavailable. Please try again.' } }; }
+  return { status: response.status, body: data };
 }
 function trusted(event) {
   if (event.sender !== window?.webContents || !event.senderFrame || event.senderFrame !== window.webContents.mainFrame || !event.senderFrame.url.startsWith('wadi://app/')) throw new Error('Untrusted caller');
@@ -48,14 +50,15 @@ async function openExternal(url) {
   await shell.openExternal(value);
 }
 async function signIn() {
-  if (authServer) throw new Error('Sign-in is already open in your browser');
+  cancelSignIn?.(new Error('Sign-in restarted'));
   const verifier = randomBytes(32).toString('base64url');
   const state = randomBytes(32).toString('base64url');
   const challenge = createHash('sha256').update(verifier).digest('base64url');
   return new Promise((resolveSignIn, reject) => {
-    let finishing = false;
-    const finish = (error) => { clearTimeout(timer); authServer?.close(); authServer = null; error ? reject(error) : resolveSignIn(true); };
-    authServer = createServer(async (req, res) => {
+    let finishing = false, settled = false;
+    const finish = (error) => { if (settled) return; settled = true; clearTimeout(timer); server.close(); if (authServer === server) { authServer = null; cancelSignIn = null; } error ? reject(error) : resolveSignIn(true); };
+    cancelSignIn = finish;
+    const server = createServer(async (req, res) => {
       const url = new URL(req.url, 'http://127.0.0.1');
       if (req.method !== 'GET' || url.pathname !== '/callback' || url.searchParams.get('state') !== state || finishing) { res.writeHead(400); res.end('Invalid callback'); return; }
       finishing = true;
@@ -63,6 +66,7 @@ async function signIn() {
         const result = await api('/api/auth/desktop/exchange', { method: 'POST', body: { code: url.searchParams.get('code'), verifier } });
         const credentials = z.object({ token: z.string().min(32) }).parse(result.body);
         if (result.status !== 200) throw new Error('Sign-in failed');
+        if (settled) { res.end('This sign-in was restarted. Use the newest browser tab.'); return; }
         await saveToken(credentials.token);
         res.writeHead(200, { 'Content-Type': 'text/html', 'Cache-Control':'no-store', 'Referrer-Policy':'no-referrer', 'Content-Security-Policy': "default-src 'none'" });
         res.end('<h1>Connected to Wadi</h1><p>You can close this tab and return to the desktop app.</p>');
@@ -70,10 +74,11 @@ async function signIn() {
       } catch (error) { res.writeHead(400); res.end('Sign-in failed. Return to Wadi and try again.'); finish(error); }
     });
     const timer = setTimeout(() => finish(new Error('Sign-in timed out')), 180000);
-    authServer.once('error', finish);
-    authServer.listen(0, '127.0.0.1', () => {
+    authServer = server;
+    server.once('error', finish);
+    server.listen(0, '127.0.0.1', () => {
       const url = new URL('/desktop/connect', origin);
-      url.searchParams.set('challenge', challenge); url.searchParams.set('state', state); url.searchParams.set('port', String(authServer.address().port));
+      url.searchParams.set('challenge', challenge); url.searchParams.set('state', state); url.searchParams.set('port', String(server.address().port));
       void shell.openExternal(url.href).catch(finish);
     });
   });

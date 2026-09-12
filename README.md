@@ -2,7 +2,7 @@
 
 Wadi has a shared browsing interface, a lightweight Next.js web app, and an Electron desktop app with local streaming conversion.
 
-**Implementation is awaiting user testing.** The desktop development build and sign-in window have been opened, and the web login page responds. Automated tests, authenticated flows, playback and installers remain unverified. See [the manual checklist](docs/manual-testing.md).
+**Playback and installers are awaiting user testing.** Local Postgres import, web login, desktop authorization and library loading have been verified. See [the manual checklist](docs/manual-testing.md).
 
 ## Architecture
 
@@ -24,6 +24,16 @@ pnpm dev
 ```
 
 The schema command reads the shell environment, not Next.js `.env.local`. The web app runs on port 5173. Database migrations are explicit and do not run on each request. Existing routes are served by the Next.js API catch-all using an Express handler and a small Postgres connection pool.
+
+For a local database, create a root `.env` using `.env.example`, choose a local password, and put the same connection URL in `apps/frontend/.env.local`. Then run:
+
+```sh
+docker compose up -d --wait
+node --env-file=.env scripts/migrate-postgres.mjs
+pnpm dev
+```
+
+Compose stores Postgres data in a persistent named volume and binds port 55432 to loopback only. `docker compose stop` keeps the data. To import the previous local account and library, use `node --env-file=.env scripts/import-sqlite.mjs /absolute/path/to/wadi.sqlite` once against an empty database after migration. Neither local environment file is committed.
 
 ### Import existing Wadi data
 
@@ -109,3 +119,5 @@ TEST_DATABASE_URL=postgresql://... pnpm --filter frontend test:api
 ```
 
 The old SQLite standalone launcher, completed-MP4 conversion and associated smoke test were retired. Existing API tests were adapted for Postgres and the absence of cloud video endpoints; they have not been run. Complete [manual testing](docs/manual-testing.md) before relying on playback or publishing installers.
+
+The local Postgres import and browser-to-desktop login were verified with the existing account. Both sign-in entry pages share the web login styling. Desktop sign-in can be restarted while waiting or retried after a timeout; each restart replaces the previous callback listener and challenge. API startup and non-JSON failure responses show a short retry message instead of HTML or stack traces. Playback testing remains manual.

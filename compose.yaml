@@ -1,0 +1,20 @@
+name: wadi
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: wadi
+      POSTGRES_USER: wadi
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    ports:
+      - '127.0.0.1:55432:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U wadi -d wadi']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+volumes:
+  postgres-data:

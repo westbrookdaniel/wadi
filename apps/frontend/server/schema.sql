@@ -107,3 +107,7 @@ CREATE OR REPLACE FUNCTION wadi_now() RETURNS text LANGUAGE sql AS $$ SELECT to_
 ALTER TABLE addons ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 0;
 CREATE TABLE IF NOT EXISTS player_settings (profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE, media_type TEXT NOT NULL DEFAULT '', media_id TEXT NOT NULL DEFAULT '', value TEXT NOT NULL, PRIMARY KEY(profile_id, media_type, media_id));
 CREATE TABLE IF NOT EXISTS desktop_codes (code_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, profile_id TEXT REFERENCES profiles(id) ON DELETE SET NULL, challenge TEXT NOT NULL, expires_at TEXT NOT NULL);
+ALTER TABLE watch_states ADD COLUMN IF NOT EXISTS last_stream_url TEXT;
+ALTER TABLE watch_states ADD COLUMN IF NOT EXISTS recommended_stream_url TEXT;
+ALTER TABLE watch_states ADD COLUMN IF NOT EXISTS recommended_stream_signature TEXT;
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS player_prefs_json TEXT NOT NULL DEFAULT '{}';

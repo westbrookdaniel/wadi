@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { desktopBridge } from '@/lib/desktop'
 import { RevealedImage } from '@/components/revealed-image'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -72,7 +72,7 @@ function WebAuthPage({ mode, onModeChange }: { mode: AuthMode; onModeChange: (mo
       )}
     >
       <form
-        className="auth-form grid w-full max-w-[420px] gap-5 rounded-2xl border border-white/8 bg-card/60 p-7 shadow-2xl sm:p-9"
+        className="auth-form grid min-w-0 w-full max-w-[420px] gap-5 rounded-2xl border border-white/8 bg-card/60 p-7 shadow-2xl sm:p-9"
         onSubmit={(event) => {
           event.preventDefault()
           void form.handleSubmit()
@@ -143,7 +143,7 @@ function WebAuthPage({ mode, onModeChange }: { mode: AuthMode; onModeChange: (mo
           </form.Field>
         ) : null}
 
-        {mutation.error ? <p className="w-full justify-self-center text-destructive">{authError(mutation.error)}</p> : null}
+        {mutation.error ? <p className="min-w-0 w-full break-words text-sm text-destructive">{authError(mutation.error)}</p> : null}
 
         <form.Subscribe selector={(state) => ({ canSubmit: state.canSubmit, isSubmitting: state.isSubmitting })}>
           {(state) => (
@@ -182,14 +182,32 @@ function authError(error: unknown) {
 export function AuthPage(props: Parameters<typeof WebAuthPage>[0]) {
   return desktopBridge() ? <DesktopLogin /> : <WebAuthPage {...props} />
 }
+export function AuthShell({ title, body, children }: { title: string; body: string; children: ReactNode }) {
+  return <main className={cn('auth-screen dark grid min-h-dvh content-center justify-items-center px-5 py-12', authBackground)}>
+    <section className="grid min-w-0 w-full max-w-[420px] gap-5 rounded-2xl border border-white/8 bg-card/60 p-7 shadow-2xl sm:p-9">
+      <div className="mb-2 grid gap-3 text-left">
+        <RevealedImage src="/favicon.svg" alt="Wadi" className="mb-3 size-14" />
+        <h1 className="m-0 text-[28px] font-medium leading-tight tracking-tight">{title}</h1>
+        <p className="text-sm leading-relaxed text-muted-foreground">{body}</p>
+      </div>
+      {children}
+    </section>
+  </main>
+}
 function DesktopLogin() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const attempt = useRef(0)
   const connect = async () => {
+    const current = ++attempt.current
     setBusy(true); setError('')
     try { if (await desktopBridge()?.signIn()) useAppStore.getState().setToken('desktop-session') }
-    catch (error) { setError(error instanceof Error ? error.message : 'Sign-in failed') }
-    finally { setBusy(false) }
+    catch { if (current === attempt.current) setError('Could not finish signing in. Please try again to open a fresh connection in your browser.') }
+    finally { if (current === attempt.current) setBusy(false) }
   }
-  return <main className="grid min-h-screen place-content-center gap-5 p-8"><h1 className="text-3xl">Welcome to Wadi</h1><p>Sign in securely in your browser to access your library.</p><Button disabled={busy} onClick={() => void connect()}>{busy ? 'Waiting for browser…' : 'Sign in with Wadi'}</Button><p role="alert">{error}</p></main>
+  return <AuthShell title="Welcome to Wadi" body="Your films, shows, and saved moments. Sign in through your browser to bring them here.">
+    <Button className="h-11 w-full rounded-lg" onClick={() => void connect()}>{busy ? 'Restart sign-in' : error ? 'Try again' : 'Sign in with Wadi'}<ArrowRight aria-hidden="true" /></Button>
+    {busy && <p role="status" className="text-sm text-muted-foreground">Waiting for your browser. If the connection expired or the tab closed, restart sign-in above.</p>}
+    {error && <p role="alert" className="min-w-0 break-words text-sm text-destructive">{error}</p>}
+  </AuthShell>
 }

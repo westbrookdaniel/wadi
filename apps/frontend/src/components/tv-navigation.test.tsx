@@ -9,7 +9,7 @@ function rect(element: HTMLElement, x: number, y: number) {
   vi.spyOn(element, 'getClientRects').mockReturnValue({ length: 1, item: () => new DOMRect(x, y, 100, 40), [Symbol.iterator]: () => [new DOMRect(x, y, 100, 40)][Symbol.iterator](), 0: new DOMRect(x, y, 100, 40) })
   element.scrollIntoView = vi.fn()
 }
-beforeEach(() => { useDeviceStore.setState({ tvMode: true, conversion: false }) })
+beforeEach(() => { useDeviceStore.setState({ tvMode: true }) })
 afterEach(() => { cleanup(); useDeviceStore.setState({ tvMode: false }); vi.restoreAllMocks() })
 it('prefers adjacent cards in the same row and does not wrap at the edge', () => {
   const right = document.createElement('button'), below = document.createElement('button')
