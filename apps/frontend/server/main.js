@@ -7,6 +7,7 @@ import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import { hash, verify } from '@node-rs/argon2';
 import { z } from 'zod';
 const identity = z.string().trim().min(1).max(512);
+const addonSource = z.string().trim().min(1).max(16384, 'Addon URL must be 16,384 characters or fewer');
 const credentials = z.object({ email: z.email().transform(v => v.toLowerCase()), password: z.string().min(8).max(1024) });
 const profileInput = z.object({ name: z.string().trim().min(1).max(40), avatar_key: z.string().trim().max(2048).refine(value => /^avatar-[1-6]$/.test(value) || (() => { try {
         const url = new URL(value);
@@ -246,7 +247,7 @@ export function createApp({ database = process.env.DATABASE_URL, sessionDays = 3
     });
     for (const action of ['preview', 'install'])
         app.post(`/api/addons/${action}`, async (req, res) => {
-            const source = identity.parse(req.body.url), url = manifestUrl(source);
+            const source = addonSource.parse(req.body.url), url = manifestUrl(source);
             const manifest = manifestSchema.parse(await fetchJson(url));
             const existing = (await get('SELECT id FROM addons WHERE user_id=? AND source_url=?', req.user.id, source));
             const transport = /^ip[fn]s:/.test(source) ? 'ipfs' : /\/stremio\/v1\/?$/.test(source) ? 'legacy' : 'http';
