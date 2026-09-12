@@ -123,7 +123,7 @@ export function DetailShellSkeleton({ onBack }: { onBack: () => void }) {
 
         <aside
           className={cn(
-            "grid h-[calc(100svh)] content-start gap-3.5 overflow-hidden bg-[hsl(240_14%_4%/72%)] max-[800px]:h-auto",
+            "grid h-[calc(100svh)] content-start gap-3.5 overflow-hidden border-l border-border bg-card/30 max-[800px]:h-auto max-[800px]:border-l-0 max-[800px]:border-t",
             pagePadding,
             "pb-0",
           )}
