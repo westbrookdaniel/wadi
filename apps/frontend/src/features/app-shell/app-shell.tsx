@@ -51,7 +51,7 @@ export function AppShell({
     >
       {hideNavigation ? null : (
         <aside
-          className="fixed inset-y-0 left-0 z-20 grid w-[88px] place-items-center border-r border-sidebar-border bg-sidebar/58 shadow-[16px_0_42px_hsl(0_0%_0%/14%)] backdrop-blur-xl max-[800px]:inset-x-0 max-[800px]:top-auto max-[800px]:bottom-0 max-[800px]:h-[72px] max-[800px]:w-auto max-[800px]:border-t max-[800px]:border-r-0 max-[800px]:shadow-[0_-16px_42px_hsl(0_0%_0%/18%)]"
+          className="fixed inset-y-0 left-0 z-20 grid w-[104px] place-items-center border-r border-sidebar-border bg-sidebar/58 shadow-[16px_0_42px_hsl(0_0%_0%/14%)] backdrop-blur-xl max-[800px]:inset-x-0 max-[800px]:top-auto max-[800px]:bottom-0 max-[800px]:h-[72px] max-[800px]:w-auto max-[800px]:border-t max-[800px]:border-r-0 max-[800px]:shadow-[0_-16px_42px_hsl(0_0%_0%/18%)]"
           aria-label="Primary navigation"
         >
           <nav className="grid gap-3 max-[800px]:flex max-[800px]:gap-2">
@@ -101,7 +101,7 @@ export function AppShell({
 
       <main
         className={cn(
-          "app-page ml-[88px] min-h-svh max-[800px]:ml-0 max-[800px]:mb-[72px] max-[800px]:min-h-[calc(100svh-72px)]",
+          "app-page ml-[104px] min-h-svh max-[800px]:ml-0 max-[800px]:mb-[72px] max-[800px]:min-h-[calc(100svh-72px)]",
           pagePadding,
           hideNavigation &&
             "p-0 max-[800px]:p-0 ml-0 mb-0 min-h-svh max-[800px]:mb-0",

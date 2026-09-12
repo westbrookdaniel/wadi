@@ -1,5 +1,5 @@
 import { externalPlayers, validCustomTemplate } from '@/features/media/detail/external-players'
-import { DeviceSettings } from './device-settings'
+import { DeviceSettings, ExperimentalSettings } from './device-settings'
 import { RevealedImage } from '@/components/revealed-image'
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
@@ -102,6 +102,7 @@ export function ProfileSettingsPage() {
         <BrowseLayoutSettings />
         <ExternalPlaybackSettingsSection />
       </div>
+      <ExperimentalSettings />
     </div>
   );
 }

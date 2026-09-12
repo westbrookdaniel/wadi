@@ -396,3 +396,7 @@ select {
 .desktop-drag-region { position: fixed; inset: 0 0 auto; height: 28px; z-index: 40; background: transparent; -webkit-app-region: drag; }
 .desktop-app:fullscreen body { padding-top: 0; }
 .desktop-app:fullscreen .desktop-drag-region { display: none; }
+
+/* Keep playback navigation below the native desktop window buttons. */
+.desktop-app .player-top-controls { padding-top: max(52px, env(safe-area-inset-top)); }
+.desktop-app:fullscreen .player-top-controls { padding-top: max(1rem, env(safe-area-inset-top)); }
