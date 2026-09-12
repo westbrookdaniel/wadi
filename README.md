@@ -34,7 +34,7 @@ Wadi is a media browser and player for the web and desktop. Browse catalogs from
 
 Wadi uses addons to find catalogs and stream sources. It does not provide a film or TV subscription, host video content, or download torrents. Availability and playback depend on your addons and providers. Use sources you are authorized to access. Wadi is an independent project and is not affiliated with Stremio.
 
-Desktop targets macOS, Windows and Linux. Signed installers and automatic upgrades still require release validation; see the [release guide](docs/development.md#desktop-updates).
+Download Wadi from [GitHub Releases](https://github.com/westbrookdaniel/wadi/releases/latest). Installers are available for Apple Silicon Macs, Windows x64 and Linux x64. Current releases are unsigned, so your operating system may ask you to approve the app. On macOS, download new versions from GitHub rather than relying on automatic updates.
 
 ## Run locally
 
