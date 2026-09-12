@@ -52,7 +52,7 @@ export function SearchPage({ onOpenMedia }: { onOpenMedia: (media: MediaPreview)
       </div>
 
       {debouncedQuery.length > 1 ? <div className="flex flex-wrap items-center gap-2">
-        {[['all', 'All'], ['movie', 'Films'], ['series', 'Series']].map(([value, label]) => <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value ?? 'all')} className={`rounded-lg border px-4 py-2 text-xs transition focus-visible:outline-2 focus-visible:outline-ring ${filter === value ? 'border-primary bg-primary/15 text-foreground' : 'border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground'}`}>{label}</button>)}
+        {[['all', 'All'], ['movie', 'Films'], ['series', 'Series']].map(([value, label]) => <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value ?? 'all')} className={`rounded-lg border px-4 py-2 text-xs transition focus-visible:outline-2 focus-visible:outline-ring ${filter === value ? 'border-border bg-white text-black' : 'border-transparent bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground'}`}>{label}</button>)}
         <p className="ml-2 text-xs text-muted-foreground" role="status">{isSearching ? 'Searching catalogs…' : `${visibleMedia.length} results`}</p>
       </div> : null}
       {results.find(result => result.error)?.error ? <ErrorState error={results.find(result => result.error)?.error} /> : null}
