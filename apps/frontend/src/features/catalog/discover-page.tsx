@@ -54,7 +54,6 @@ export function DiscoverPage({ search, onChange, onOpenMedia }: {
   const change = (next: DiscoverSearch) => { window.scrollTo({ top: 0 }); onChange(next) }
 
   return <div className={pageStack}>
-    <h1 className="m-0 leading-tight">Discover</h1>
     <div className="flex flex-wrap items-end gap-3">
       <label className="grid w-44 gap-1.5 text-sm">Content
         <SettingsSelect aria-label="Content type" value={type} onValueChange={value => change({ catalog: source?.key, type: value || undefined })}>
