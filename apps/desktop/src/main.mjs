@@ -109,7 +109,7 @@ for (const [name, handler] of Object.entries({
   media: (action, payload) => media.command(action, payload),
   external: openExternal,
 })) ipcMain.handle(name, (event, ...args) => { trusted(event); return handler(...args); });
-window = new BrowserWindow({ width: 1440, height: 900, minWidth: 760, minHeight: 520, backgroundColor:'#090909', autoHideMenuBar:true, webPreferences: { preload: join(here,'preload.cjs'), nodeIntegration:false, contextIsolation:true, sandbox:true } });
+window = new BrowserWindow({ titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 16, y: 16 }, width: 1440, height: 900, minWidth: 760, minHeight: 520, backgroundColor:'#090909', autoHideMenuBar:true, webPreferences: { preload: join(here,'preload.cjs'), nodeIntegration:false, contextIsolation:true, sandbox:true } });
 window.webContents.on('will-navigate', (event, url) => { if (!url.startsWith('wadi://app/')) event.preventDefault(); });
 window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 await window.loadURL('wadi://app/');

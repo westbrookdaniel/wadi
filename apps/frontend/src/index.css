@@ -6,7 +6,7 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
   font-family: 'Geist Variable', system-ui, sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -356,7 +356,7 @@ select {
 @media (max-width: 800px) { .app-page { --page-gutter: 22px; } }
 @media (prefers-reduced-motion: reduce) { .route-arrival, .featured-film-slide { animation: none; } }
 
-.settings-panel { border: 1px solid rgb(255 255 255 / 8%); border-radius: 12px; background: color-mix(in srgb, var(--card) 60%, transparent); padding: 20px; }
+.settings-panel { border: 1px solid var(--border); border-radius: 12px; background: color-mix(in srgb, var(--card) 60%, transparent); padding: 20px; }
 .settings-area { font-size: 14px; }
 .settings-area h3 { font-size: 14px; font-weight: 500; }
 .settings-area button:not([aria-label="Profile actions"]) { border-radius: 8px; }
@@ -379,3 +379,20 @@ select {
 .tv-mode :is(button, input:not([type=checkbox]):not([type=radio]), select) { min-height: 44px; }
 .tv-mode { scroll-padding: 16px; }
 .tv-mode .player-controls { opacity: 1; }
+
+/* Shared golden accent in either appearance. */
+:root, .dark {
+  --primary: #eabf48;
+  --primary-foreground: #211a08;
+  --ring: #c79520;
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+}
+.dark { color-scheme: dark; }
+
+/* The desktop window uses inset native controls over the app surface. */
+.desktop-app body { padding-top: 48px; }
+.desktop-app .auth-screen { min-height: calc(100dvh - 48px); }
+.desktop-drag-region { position: fixed; inset: 0 0 auto; height: 48px; z-index: 60; background: var(--background); -webkit-app-region: drag; }
+.desktop-app:fullscreen body { padding-top: 0; }
+.desktop-app:fullscreen .desktop-drag-region { display: none; }

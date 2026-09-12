@@ -163,14 +163,14 @@ function ExternalPlaybackSettingsSection() {
         Choose where streams open. External apps must be installed and may not report watch progress back to Wadi.
       </p>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Label className="grid gap-1.5">
+      <div className="grid min-w-0 grid-cols-1 gap-3">
+        <Label className="grid min-w-0 gap-1.5">
           Default stream action
           <Select
             value={data.stream_action}
             onValueChange={(value) => { if (value === "internal" || value === "external" || value === "copy") updateDraft("stream_action", value) }}
           >
-            <SelectTrigger>
+            <SelectTrigger className="w-full min-w-0">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -181,19 +181,19 @@ function ExternalPlaybackSettingsSection() {
           </Select>
         </Label>
 
-        <Label className="grid gap-1.5">External player
+        <Label className="grid min-w-0 gap-1.5">External player
           <Select value={data.external_player_preset ?? 'custom'} onValueChange={value => updateDraft('external_player_preset', value)}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-full min-w-0"><SelectValue /></SelectTrigger>
             <SelectContent>{externalPlayers.map(player => <SelectItem key={player.id} value={player.id}>{player.label} · {player.platforms}</SelectItem>)}</SelectContent>
           </Select>
         </Label>
-        {(data.external_player_preset ?? 'custom') === 'custom' && <Label className="grid gap-1.5 sm:col-span-2">
+        {(data.external_player_preset ?? 'custom') === 'custom' && <Label className="grid min-w-0 gap-1.5">
           Custom player URL template
           <Input value={data.external_player_template} onChange={event => updateDraft('external_player_template', event.target.value)} placeholder="vlc://{url}" />
           <span className="text-xs text-muted-foreground">Include <code>{'{url}'}</code> where the encoded stream URL should go. Your custom template is retained when switching presets.</span>
           {!validCustomTemplate(data.external_player_template) && <span className="text-xs text-destructive">Enter an app URL containing {'{url}'}.</span>}
         </Label>}
-        <p className="text-xs text-muted-foreground sm:col-span-2">Choose a preset for the device you are using. M3U downloads a playlist you can open in another player. “Play in Wadi” disables automatic external playback.</p>
+        <p className="text-xs text-muted-foreground">Choose a preset for the device you are using. M3U downloads a playlist you can open in another player. “Play in Wadi” disables automatic external playback.</p>
       </div>
 
       {saveMutation.error ? <p role="alert" className="text-sm text-destructive">{saveMutation.error.message}</p> : null}

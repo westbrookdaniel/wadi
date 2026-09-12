@@ -67,12 +67,11 @@ function WebAuthPage({ mode, onModeChange }: { mode: AuthMode; onModeChange: (mo
     <main
       className={cn(
         'auth-screen grid min-h-dvh content-center justify-items-center px-5 py-12',
-        'dark',
         authBackground,
       )}
     >
       <form
-        className="auth-form grid min-w-0 w-full max-w-[420px] gap-5 rounded-2xl border border-white/8 bg-card/60 p-7 shadow-2xl sm:p-9"
+        className="auth-form grid min-w-0 w-full max-w-[420px] gap-5 rounded-2xl border border-border bg-card/60 p-7 shadow-2xl sm:p-9"
         onSubmit={(event) => {
           event.preventDefault()
           void form.handleSubmit()
@@ -89,7 +88,7 @@ function WebAuthPage({ mode, onModeChange }: { mode: AuthMode; onModeChange: (mo
             <div className="grid w-full justify-self-center gap-2">
               <Label htmlFor={field.name}>Email</Label>
               <Input
-                className="h-11 rounded-lg border border-white/8 bg-background/70 px-3 text-base"
+                className="h-11 rounded-lg border border-border bg-background/70 px-3 text-base"
                 id={field.name}
                 type="email"
                 autoComplete="email"
@@ -108,7 +107,7 @@ function WebAuthPage({ mode, onModeChange }: { mode: AuthMode; onModeChange: (mo
             <div className="grid w-full justify-self-center gap-2">
               <Label htmlFor={field.name}>Password</Label>
               <Input
-                className="h-11 rounded-lg border border-white/8 bg-background/70 px-3 text-base"
+                className="h-11 rounded-lg border border-border bg-background/70 px-3 text-base"
                 id={field.name}
                 type="password"
                 autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
@@ -128,7 +127,7 @@ function WebAuthPage({ mode, onModeChange }: { mode: AuthMode; onModeChange: (mo
               <div className="grid w-full justify-self-center gap-2">
                 <Label htmlFor={field.name}>Repeat password</Label>
                 <Input
-                className="h-11 rounded-lg border border-white/8 bg-background/70 px-3 text-base"
+                className="h-11 rounded-lg border border-border bg-background/70 px-3 text-base"
                   id={field.name}
                   type="password"
                   autoComplete="new-password"
@@ -183,8 +182,8 @@ export function AuthPage(props: Parameters<typeof WebAuthPage>[0]) {
   return desktopBridge() ? <DesktopLogin /> : <WebAuthPage {...props} />
 }
 export function AuthShell({ title, body, children }: { title: string; body: string; children: ReactNode }) {
-  return <main className={cn('auth-screen dark grid min-h-dvh content-center justify-items-center px-5 py-12', authBackground)}>
-    <section className="grid min-w-0 w-full max-w-[420px] gap-5 rounded-2xl border border-white/8 bg-card/60 p-7 shadow-2xl sm:p-9">
+  return <main className={cn('auth-screen grid min-h-dvh content-center justify-items-center px-5 py-12', authBackground)}>
+    <section className="grid min-w-0 w-full max-w-[420px] gap-5 rounded-2xl border border-border bg-card/60 p-7 shadow-2xl sm:p-9">
       <div className="mb-2 grid gap-3 text-left">
         <RevealedImage src="/favicon.svg" alt="Wadi" className="mb-3 size-14" />
         <h1 className="m-0 text-[28px] font-medium leading-tight tracking-tight">{title}</h1>
@@ -206,8 +205,11 @@ function DesktopLogin() {
     finally { if (current === attempt.current) setBusy(false) }
   }
   return <AuthShell title="Welcome to Wadi" body="Your films, shows, and saved moments. Sign in through your browser to bring them here.">
-    <Button className="h-11 w-full rounded-lg" onClick={() => void connect()}>{busy ? 'Restart sign-in' : error ? 'Try again' : 'Sign in with Wadi'}<ArrowRight aria-hidden="true" /></Button>
-    {busy && <p role="status" className="text-sm text-muted-foreground">Waiting for your browser. If the connection expired or the tab closed, restart sign-in above.</p>}
+    {busy ? <div className="grid gap-3">
+      <Button className="h-11 w-full rounded-lg" disabled>Waiting for connection…</Button>
+      <Button variant="ghost" size="sm" className="justify-self-center text-muted-foreground" onClick={() => void connect()}>Restart sign-in</Button>
+    </div> : <Button className="h-11 w-full rounded-lg" onClick={() => void connect()}>{error ? 'Try again' : 'Sign in with Wadi'}<ArrowRight aria-hidden="true" /></Button>}
+    {busy && <p role="status" className="text-sm text-muted-foreground">Waiting for your browser. If the connection expired or the tab closed, choose Restart sign-in.</p>}
     {error && <p role="alert" className="min-w-0 break-words text-sm text-destructive">{error}</p>}
   </AuthShell>
 }
