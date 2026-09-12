@@ -1,10 +1,9 @@
-export type DesktopUpdate = { kind: 'idle' } | { kind: 'checking' } | { kind: 'downloading'; version: string; percent: number } | { kind: 'ready'; version: string } | { kind: 'error'; message: string }
+export type DesktopUpdate = { kind: 'idle' } | { kind: 'checking' } | { kind: 'available'; version: string } | { kind: 'error'; message: string }
 export type DesktopBridge = {
   appVersion: () => Promise<string>
   updateState: () => Promise<DesktopUpdate>
   checkUpdates: () => Promise<DesktopUpdate>
-  installUpdate: () => Promise<void>
-  updatePlayback: (active: boolean) => Promise<void>
+  downloadUpdate: () => Promise<void>
   onUpdate: (callback: (state: DesktopUpdate) => void) => () => void
   onOpenSettings: (callback: () => void) => () => void
   openPage: (path: '/terms' | '/privacy') => Promise<void>

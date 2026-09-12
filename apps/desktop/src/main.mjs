@@ -7,7 +7,6 @@ import { dirname, join, resolve, extname, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { z } from 'zod';
 import { createMediaService } from './media.mjs';
-import updater from 'electron-updater';
 import { createUpdates } from './updates.mjs';
 const here = dirname(fileURLToPath(import.meta.url));
 const config = JSON.parse(await readFile(join(here, '../desktop-config.json'), 'utf8'));
@@ -16,7 +15,7 @@ const legacyUserData = join(app.getPath('appData'), '@wadi/desktop');
 app.setName('Wadi');
 if (existsSync(legacyUserData)) app.setPath('userData', legacyUserData);
 protocol.registerSchemesAsPrivileged([{ scheme: 'wadi', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }]);
-let updates, playbackActive = false, installingUpdate = false;
+let updates;
 let window, media, token = null, authServer = null, cancelSignIn = null;
 const tokenFile = () => join(app.getPath('userData'), 'session.enc');
 async function saveToken(value) {
@@ -118,8 +117,7 @@ for (const [name, handler] of Object.entries({
   'app-version': () => app.getVersion(),
   'update-state': () => updates?.state() ?? { kind: 'idle' },
   'update-check': () => updates.check(true),
-  'update-install': () => updates.install(),
-  'update-playback': active => { playbackActive = z.boolean().parse(active); },
+  'update-download': () => updates.download(),
   session: () => Boolean(token),
   'sign-in': signIn,
   api: (path, options) => {
@@ -133,24 +131,17 @@ window = new BrowserWindow({ icon: join(here, '../resources/icon.png'), titleBar
 window.webContents.on('will-navigate', (event, url) => { if (!url.startsWith('wadi://app/')) event.preventDefault(); });
 window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 await window.loadURL('wadi://app/');
-const supported = app.isPackaged && (process.platform !== 'linux' || Boolean(process.env.APPIMAGE));
 updates = createUpdates({
-  updater: updater.autoUpdater,
-  enabled: supported,
-  unavailableReason: !app.isPackaged ? 'Updates are available in installed release builds, not the development app.' : 'Automatic updates require the AppImage version. Download the latest package from GitHub Releases.',
+  repository: config.releaseRepository || 'westbrookdaniel/wadi', currentVersion: app.getVersion(),
+  platform: process.platform, arch: process.arch, enabled: app.isPackaged,
+  openDownload: url => shell.openExternal(url),
   notify: state => { if (!window?.isDestroyed()) window.webContents.send('update-state', state); },
   feedback: message => dialog.showMessageBox(window, { type: 'info', title: 'Wadi updates', message, buttons: ['OK'] }),
-  confirmInstall: async () => {
-    if (!playbackActive) return true;
-    const result = await dialog.showMessageBox(window, { type: 'question', title: 'Restart and update', message: 'Stop playback and restart Wadi to update?', detail: 'You can keep watching and install the update later.', buttons: ['Keep watching', 'Restart and update'], defaultId: 0, cancelId: 0 });
-    return result.response === 1;
-  },
-  prepareInstall: async () => { installingUpdate = true; },
 });
 if (process.platform !== 'darwin') Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: 'Wadi', submenu: [{ label: 'Check for Updates…', click: () => void updates.check(true) }, { type: 'separator' }, { role: 'quit' }] }, { role: 'editMenu' }, { role: 'viewMenu' }]));
 app.on('window-all-closed', () => app.quit());
 let quitting = false;
-app.on('before-quit', event => { if (quitting) return; event.preventDefault(); updates?.dispose(); quitting = true; authServer?.close(); void media.close().finally(() => installingUpdate ? app.quit() : app.exit(0)); });
+app.on('before-quit', event => { if (quitting) return; event.preventDefault(); updates?.dispose(); quitting = true; authServer?.close(); void media.close().finally(() => app.exit(0)); });
 
 }
 void app.whenReady().then(startDesktop).catch(error => { console.error(error); app.exit(1); });

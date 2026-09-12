@@ -1,6 +1,6 @@
 {
   "name": "@wadi/desktop",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "main": "src/main.mjs",
@@ -11,7 +11,6 @@
     "package": "pnpm build && electron-builder --config electron-builder.config.cjs"
   },
   "dependencies": {
-    "electron-updater": "^6.6.2",
     "zod": "^4.3.6"
   },
   "devDependencies": {
@@ -73,12 +72,6 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
-    },
-    "publish": {
-      "provider": "github",
-      "owner": "westbrookdaniel",
-      "repo": "wadi",
-      "releaseType": "draft"
     },
     "artifactName": "Wadi-${version}-${os}-${arch}.${ext}",
     "deb": {

@@ -17,15 +17,9 @@ jobs:
         os: [macos-latest, windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     env:
-      WADI_UNSIGNED_RELEASE: ${{ matrix.os == 'macos-latest' && '0' || '1' }}
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       WADI_RELEASE_REPOSITORY: ${{ vars.WADI_RELEASE_REPOSITORY || github.repository }}
       WADI_WEB_ORIGIN: ${{ inputs.web_origin || vars.WADI_WEB_ORIGIN }}
-      CSC_LINK: ${{ matrix.os == 'macos-latest' && secrets.CSC_LINK || matrix.os == 'windows-latest' && secrets.WIN_CSC_LINK || '' }}
-      CSC_KEY_PASSWORD: ${{ matrix.os == 'macos-latest' && secrets.CSC_KEY_PASSWORD || matrix.os == 'windows-latest' && secrets.WIN_CSC_KEY_PASSWORD || '' }}
-      APPLE_ID: ${{ secrets.APPLE_ID }}
-      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -49,9 +43,6 @@ jobs:
       - name: Build installers
         shell: bash
         run: |
-          for name in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
-            if [ -z "${!name}" ]; then unset "$name"; fi
-          done
           pnpm --filter @wadi/desktop package --publish never
       - uses: actions/upload-artifact@v4
         with:
@@ -63,8 +54,6 @@ jobs:
             apps/desktop/release/*.exe
             apps/desktop/release/*.AppImage
             apps/desktop/release/*.deb
-            apps/desktop/release/latest*.yml
-            apps/desktop/release/*.blockmap
   release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: package
@@ -77,7 +66,7 @@ jobs:
           pattern: wadi-*
           merge-multiple: true
           path: release
-      - name: Create draft release with installers and update metadata
+      - name: Create draft release with installers
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN || github.token }}
@@ -85,7 +74,7 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release create "$RELEASE_TAG" --draft --title "Wadi $RELEASE_TAG" --notes "Desktop installers and automatic update files. macOS installers are signed and notarized. Windows installers are unsigned."
+            gh release create "$RELEASE_TAG" --draft --title "Wadi $RELEASE_TAG" --notes "Unsigned desktop installers. Wadi checks for updates and opens the installer download in your browser. Install new versions manually."
           fi
           test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true || { echo 'Refusing to replace files in a published release'; exit 1; }
           gh release upload "$RELEASE_TAG" release/* --clobber
