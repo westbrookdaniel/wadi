@@ -1,3 +1,4 @@
+import { isShortcutBlocked } from '@/lib/keyboard'
 import { useEffect, useRef } from 'react'
 
 import type { PlayerStatus } from './state'
@@ -7,12 +8,14 @@ type KeyboardState = {
   currentTime: number
   duration: number
   playbackSpeed: number
+  volume: number
 }
 
 type KeyboardHandlers = {
   onTogglePlay: () => void
   onSeek: (seconds: number) => void
   onToggleMute: () => void
+  onVolumeChange: (volume: number) => void
   onChangeSpeed: (speed: number) => void
   onToggleFullscreen: () => void
 }
@@ -31,7 +34,10 @@ export function usePlayerKeyboardShortcuts(state: KeyboardState, handlers: Keybo
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.target instanceof HTMLElement && event.target.closest('input, textarea, select, button, [contenteditable="true"], [role="slider"]')) return
+      if (isShortcutBlocked(event) || event.metaKey || event.ctrlKey || event.altKey) return
+      if (event.repeat && !event.code.startsWith('Arrow')) return
+      if (event.code === 'Space' && event.target instanceof Element && event.target.closest('button, a')) return
+
       const snapshot = stateRef.current
       if (snapshot.status !== 'ready') {
         return
@@ -43,6 +49,14 @@ export function usePlayerKeyboardShortcuts(state: KeyboardState, handlers: Keybo
         currentHandlers.onSeek(Math.max(snapshot.currentTime - 5, 0))
       } else if (event.code === 'ArrowRight') {
         currentHandlers.onSeek(Math.min(snapshot.currentTime + 5, snapshot.duration))
+      } else if (event.code === 'KeyJ') {
+        currentHandlers.onSeek(Math.max(snapshot.currentTime - 10, 0))
+      } else if (event.code === 'KeyL') {
+        currentHandlers.onSeek(Math.min(snapshot.currentTime + 10, snapshot.duration))
+      } else if (event.code === 'ArrowUp') {
+        currentHandlers.onVolumeChange(Math.min(snapshot.volume + 0.05, 1))
+      } else if (event.code === 'ArrowDown') {
+        currentHandlers.onVolumeChange(Math.max(snapshot.volume - 0.05, 0))
       } else if (event.code === 'KeyM') {
         currentHandlers.onToggleMute()
       } else if (event.code === 'KeyF') {

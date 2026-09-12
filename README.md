@@ -121,3 +121,11 @@ TEST_DATABASE_URL=postgresql://... pnpm --filter frontend test:api
 The old SQLite standalone launcher, completed-MP4 conversion and associated smoke test were retired. Existing API tests were adapted for Postgres and the absence of cloud video endpoints; they have not been run. Complete [manual testing](docs/manual-testing.md) before relying on playback or publishing installers.
 
 The local Postgres import and browser-to-desktop login were verified with the existing account. Both sign-in entry pages share the web login styling. Desktop sign-in can be restarted while waiting or retried after a timeout; each restart replaces the previous callback listener and challenge. API startup and non-JSON failure responses show a short retry message instead of HTML or stack traces. Playback testing remains manual.
+
+### Playback controls and shortcuts
+
+Desktop playback keeps the video element and local conversion session alive when paused. Conversion buffers about 32 seconds ahead of the playhead, then waits. Buffered seeks and speed changes reuse that session; seeking outside the buffer or switching audio tracks starts a new one. Local output uses FFmpeg's [HTTP upload support](https://www.ffmpeg.org/ffmpeg-formats.html#hls-2) with a private loopback endpoint to apply backpressure on all desktop platforms. The existing 512 MB cache limit remains in place.
+
+Press `?` for the shortcut list. `F` toggles fullscreen, `/` or `Cmd/Ctrl+K` opens search, `H` opens Home, and `Cmd/Ctrl+,` opens Settings. While watching, use `Space` or `K` to play/pause, left/right arrows to seek five seconds, `J`/`L` to seek ten seconds, up/down arrows for volume, `M` to mute, and comma/period to change speed. Shortcuts leave text fields and open dialogs alone.
+
+The synthetic local-conversion check runs with `node --test apps/desktop/src/media.test.mjs` after desktop assets are prepared. It checks audio conversion, remuxing and video conversion against actual bundled FFmpeg binaries. Provider playback and packaged installers still need manual testing.

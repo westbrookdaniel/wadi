@@ -32,6 +32,7 @@
     },
     "files": [
       "src/**/*",
+      "!src/**/*.test.mjs",
       "dist/**/*",
       "desktop-config.json",
       "package.json",

@@ -106,7 +106,10 @@ protocol.handle('wadi', async request => {
   headers.set('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: http: data: blob:; font-src 'self' data:; connect-src 'self' https: http:; media-src 'self' http://127.0.0.1:* blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-src 'none'");
   return new Response(response.body, { status: response.status, headers });
 });
-session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
+session.defaultSession.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) =>
+  permission === 'fullscreen' && webContents === window?.webContents && details.isMainFrame && requestingOrigin === 'wadi://app');
+session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) =>
+  callback(permission === 'fullscreen' && webContents === window?.webContents && details.isMainFrame && details.requestingUrl.startsWith('wadi://app/')));
 media = await createMediaService({ directory: join(app.getPath('userData'), 'media-cache'), binaries: app.isPackaged ? join(process.resourcesPath, 'media-bin') : join(here, '../assets') });
 for (const [name, handler] of Object.entries({
   'open-page': path => shell.openExternal(new URL(z.enum(['/terms','/privacy']).parse(path), origin).href),
@@ -119,7 +122,7 @@ for (const [name, handler] of Object.entries({
   media: (action, payload) => media.command(action, payload),
   external: openExternal,
 })) ipcMain.handle(name, (event, ...args) => { trusted(event); return handler(...args); });
-window = new BrowserWindow({ icon: join(here, '../resources/icon.png'), titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 16, y: 16 }, width: 1440, height: 900, minWidth: 760, minHeight: 520, backgroundColor:'#090909', autoHideMenuBar:true, webPreferences: { preload: join(here,'preload.cjs'), nodeIntegration:false, contextIsolation:true, sandbox:true } });
+window = new BrowserWindow({ icon: join(here, '../resources/icon.png'), titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 16, y: 16 }, width: 1440, height: 900, minWidth: 760, minHeight: 520, backgroundColor:'#090909', autoHideMenuBar:true, webPreferences: { backgroundThrottling:false, preload: join(here,'preload.cjs'), nodeIntegration:false, contextIsolation:true, sandbox:true } });
 window.webContents.on('will-navigate', (event, url) => { if (!url.startsWith('wadi://app/')) event.preventDefault(); });
 window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 await window.loadURL('wadi://app/');

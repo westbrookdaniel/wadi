@@ -1,3 +1,4 @@
+import { AppKeyboardShortcuts } from '@/components/app-keyboard-shortcuts'
 import '@fontsource-variable/geist/index.css'
 import { TvNavigation } from '@/components/tv-navigation'
 import { StrictMode } from 'react'
@@ -23,7 +24,7 @@ export default function WadiApp() { return (
       <TooltipProvider>
         <ToastProvider>
           <DialogManagerProvider>
-            <TvNavigation /><RouterProvider router={router} />
+            <AppKeyboardShortcuts /><TvNavigation /><RouterProvider router={router} />
           </DialogManagerProvider>
         </ToastProvider>
       </TooltipProvider>

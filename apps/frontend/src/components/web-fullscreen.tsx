@@ -1,3 +1,4 @@
+import { toggleAppFullscreen } from '@/lib/keyboard'
 import { useEffect, useState } from 'react'
 import { Maximize, Minimize } from 'lucide-react'
 import { desktopBridge } from '@/lib/desktop'
@@ -8,21 +9,15 @@ export function WebFullscreen() {
   const [error, setError] = useState('')
   const desktop = Boolean(desktopBridge())
   const toggle = async () => {
-    try { setError(''); if (document.fullscreenElement) await document.exitFullscreen(); else await document.documentElement.requestFullscreen() }
+    try { setError(''); await toggleAppFullscreen() }
     catch { setError('Fullscreen is unavailable in this browser.') }
   }
   useEffect(() => {
     if (desktop) return
     const changed = () => setFullscreen(Boolean(document.fullscreenElement))
-    const keydown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.repeat || event.altKey || event.ctrlKey || event.metaKey || event.key.toLowerCase() !== 'f') return
-      if (event.target instanceof Element && event.target.closest('input,textarea,select,[contenteditable="true"],[role="dialog"]')) return
-      event.preventDefault(); void toggle()
-    }
     changed()
     document.addEventListener('fullscreenchange', changed)
-    document.addEventListener('keydown', keydown)
-    return () => { document.removeEventListener('fullscreenchange', changed); document.removeEventListener('keydown', keydown) }
+    return () => { document.removeEventListener('fullscreenchange', changed) }
   }, [desktop])
   if (desktop) return null
   const Icon = fullscreen ? Minimize : Maximize

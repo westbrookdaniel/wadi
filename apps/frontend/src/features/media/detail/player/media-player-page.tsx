@@ -549,11 +549,13 @@ export function MediaPlayerPage({
       currentTime: effectiveState.currentTime,
       duration: effectiveState.duration,
       playbackSpeed: playbackState.playbackSpeed,
+      volume: effectiveState.muted ? 0 : effectiveState.volume,
     },
     {
       onTogglePlay,
       onSeek,
       onToggleMute,
+      onVolumeChange: onVolume,
       onChangeSpeed,
       onToggleFullscreen: () => toggleFullscreen(playerRef.current),
     },
