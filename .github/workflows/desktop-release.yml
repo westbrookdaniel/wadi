@@ -17,7 +17,7 @@ jobs:
         os: [macos-latest, windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     env:
-      WADI_UNSIGNED_RELEASE: '1'
+      WADI_UNSIGNED_RELEASE: ${{ matrix.os == 'macos-latest' && '0' || '1' }}
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       WADI_RELEASE_REPOSITORY: ${{ vars.WADI_RELEASE_REPOSITORY || github.repository }}
       WADI_WEB_ORIGIN: ${{ inputs.web_origin || vars.WADI_WEB_ORIGIN }}
@@ -85,7 +85,7 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release create "$RELEASE_TAG" --draft --title "Wadi $RELEASE_TAG" --notes "Desktop installers and automatic update files. Unsigned installers. macOS and Windows may require approval to open the app."
+            gh release create "$RELEASE_TAG" --draft --title "Wadi $RELEASE_TAG" --notes "Desktop installers and automatic update files. macOS installers are signed and notarized. Windows installers are unsigned."
           fi
           test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true || { echo 'Refusing to replace files in a published release'; exit 1; }
           gh release upload "$RELEASE_TAG" release/* --clobber
