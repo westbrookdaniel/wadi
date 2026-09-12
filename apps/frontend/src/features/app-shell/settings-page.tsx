@@ -688,7 +688,7 @@ function ProfileEditorForm({
       <form.Field name="avatarKey">
         {(field) => (
           <div className="grid gap-2">
-            <div className="flex items-center gap-4 rounded-xl bg-white/5 p-4">
+            <div className="flex items-center gap-4 rounded-xl bg-muted/40 p-4">
               <form.Subscribe selector={state => state.values.name}>{name => <ProfileAvatar name={name || 'You'} avatarKey={field.state.value} themeColor={null} className="size-16 text-2xl" />}</form.Subscribe>
               <div><Label>Profile picture</Label><p className="mt-1 text-xs text-muted-foreground">Choose a colour or use your own image.</p></div>
             </div>
@@ -832,7 +832,7 @@ export function AddAddonPage() {
       </section>
 
       {preview ? (
-        <Card size="sm" className="rounded-xl border-white/8 bg-card/60 shadow-none">
+        <Card size="sm" className="rounded-xl border-border bg-card/60 shadow-none">
           <CardHeader>
             <CardTitle className="flex items-center gap-3">
               <AddonAvatar
@@ -907,10 +907,10 @@ function AddonCard({
 
   return (
     <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition: transition, opacity: isDragging ? 0.6 : 1 }}>
-    <Card size="sm" className="rounded-xl border-white/8 bg-card/60 shadow-none">
+    <Card size="sm" className="rounded-xl border-border bg-card/60 shadow-none">
       <CardHeader className="gap-3">
         <CardTitle className="flex min-w-0 items-center gap-2 text-sm font-medium">
-          <button type="button" aria-label={`Reorder ${title}`} disabled={dragDisabled} {...attributes} {...listeners} className="touch-none cursor-grab rounded-md p-1 text-muted-foreground hover:bg-white/10 disabled:opacity-30"><GripVertical className="size-4" /></button>
+          <button type="button" aria-label={`Reorder ${title}`} disabled={dragDisabled} {...attributes} {...listeners} className="touch-none cursor-grab rounded-md p-1 text-muted-foreground hover:bg-muted disabled:opacity-30"><GripVertical className="size-4" /></button>
           <AddonAvatar
             manifest={addon.manifest}
             sourceUrl={addon.source_url}

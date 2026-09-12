@@ -74,7 +74,7 @@ export function DetailShell({
 
         <aside
           className={cn(
-            "flex h-svh min-w-0 flex-col gap-4 overflow-hidden border-l border-white/8 bg-card/30 p-6 max-[800px]:h-auto max-[800px]:min-h-[60svh] max-[800px]:border-l-0 max-[800px]:border-t"
+            "flex h-svh min-w-0 flex-col gap-4 overflow-hidden border-l border-border bg-card/30 p-6 max-[800px]:h-auto max-[800px]:min-h-[60svh] max-[800px]:border-l-0 max-[800px]:border-t"
           )}
           aria-label={sideLabel}
         >

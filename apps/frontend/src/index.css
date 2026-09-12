@@ -266,7 +266,7 @@ select {
   --ring: #ef9450;
 }
  .home-top { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 24px; }
-.continue-panel { display: flex; flex-direction: column; min-width: 0; height: 420px; padding: 20px; border: 1px solid rgb(255 255 255 / 6%); border-radius: 14px; background: linear-gradient(135deg, #171a20, #0e1115); }
+.continue-panel { display: flex; flex-direction: column; min-width: 0; height: 420px; padding: 20px; border: 1px solid var(--border); border-radius: 14px; background: var(--card); }
 .featured-film { position: relative; isolation: isolate; min-height: 420px; overflow: hidden; border-radius: 14px; background: #141a22; }
 .featured-film-slide { position: absolute; inset: 0; animation: route-arrival 500ms ease both; }
 .featured-film-art, .featured-film-shade { position: absolute; inset: 0; width: 100%; height: 100%; }
@@ -363,7 +363,7 @@ select {
 .settings-area [data-slot="select-trigger"], .settings-area input { border-radius: 8px; font-size: 13px; }
 .settings-area [data-slot="card-description"] { max-width: 65ch; }
 
-.featured-film::after, .media-card-item > button::after { content: ''; position: absolute; inset: 0; pointer-events: none; border: 1px solid rgb(255 255 255 / 9%); border-radius: inherit; z-index: 2; }
+.featured-film::after, .media-card-item > button::after { content: ''; position: absolute; inset: 0; pointer-events: none; border: 1px solid var(--border); border-radius: inherit; z-index: 2; }
 
 .image-reveal { opacity: 0; filter: blur(8px); transition: opacity 320ms ease, filter 420ms ease; }
 .image-reveal[data-ready="true"] { opacity: 1; filter: blur(0); }
@@ -400,3 +400,6 @@ select {
 /* Keep playback navigation below the native desktop window buttons. */
 .desktop-app .player-top-controls { padding-top: max(52px, env(safe-area-inset-top)); }
 .desktop-app:fullscreen .player-top-controls { padding-top: max(1rem, env(safe-area-inset-top)); }
+
+/* Neutral placeholders stay distinct from light cards, too. */
+:root:not(.dark) .artwork-fallback { background: radial-gradient(ellipse at 50% 40%, #e5e7eb, #d1d5db 75%); color: #69717e; }

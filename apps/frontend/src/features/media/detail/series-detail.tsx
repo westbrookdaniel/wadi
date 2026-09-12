@@ -294,7 +294,7 @@ function EpisodeButton({
 }) {
   const toggle = useWatchToggle(media.type, media.id, episode.id)
   return (
-    <div className="rounded-lg border border-white/8 bg-card/50">
+    <div className="rounded-lg border border-border bg-card/50">
       <div className="flex items-center gap-1 pr-2">
       <button
         className="grid flex-1 min-w-0 cursor-pointer grid-cols-[80px_1fr] gap-2 text-left"

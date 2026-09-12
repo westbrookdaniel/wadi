@@ -92,7 +92,7 @@ export function WatchlistAddButton({ media }: { media: MediaPreview }) {
   return (
     <div className="grid gap-2">
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="secondary" size="sm" className="h-9 rounded-lg border border-white/10 bg-white/5 px-3 text-xs" type="button"
+        <Button variant="secondary" size="sm" className="h-9 rounded-lg border border-border bg-muted/40 px-3 text-xs" type="button"
           aria-label={isSaved ? 'Remove from Saved' : 'Save to Saved'} aria-pressed={isSaved}
           onClick={toggleDefault} disabled={!defaultList || busy || listItems.some(result => result.isLoading || result.isError)}>
           {isSaved ? <Check aria-hidden="true" /> : <Bookmark aria-hidden="true" />}
@@ -103,7 +103,7 @@ export function WatchlistAddButton({ media }: { media: MediaPreview }) {
         onValueChange={handleAddToSelect}
         disabled={busy || lists.isLoading || listItems.some(result => result.isLoading || result.isError)}
       >
-        <SelectTrigger className="w-fit max-w-[min(520px,100%)] h-9 rounded-lg border-white/10 bg-white/5 text-xs hover:bg-white/10" size="sm" aria-label="Add to watchlist">
+        <SelectTrigger className="w-fit max-w-[min(520px,100%)] h-9 rounded-lg border-border bg-muted/40 text-xs hover:bg-muted" size="sm" aria-label="Add to watchlist">
           {customAddedCount > 0 ? <Check aria-hidden="true" /> : <Plus aria-hidden="true" />}
           <SelectValue
             placeholder={
