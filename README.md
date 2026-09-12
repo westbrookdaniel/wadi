@@ -2,7 +2,7 @@
 
 Wadi has a shared browsing interface, a lightweight Next.js web app, and an Electron desktop app with local streaming conversion.
 
-**Implementation is awaiting user testing.** No builds, automated tests, playback checks, or installer checks were run for this revision. See [the manual checklist](docs/manual-testing.md).
+**Implementation is awaiting user testing.** The desktop development build and sign-in window have been opened, and the web login page responds. Automated tests, authenticated flows, playback and installers remain unverified. See [the manual checklist](docs/manual-testing.md).
 
 ## Architecture
 

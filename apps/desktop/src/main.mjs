@@ -78,7 +78,7 @@ async function signIn() {
     });
   });
 }
-await app.whenReady();
+async function startDesktop() {
 try { if (safeStorage.isEncryptionAvailable()) token = safeStorage.decryptString(await readFile(tokenFile())); } catch { /* First launch or unavailable keyring. */ }
 const root = resolve(here, '../dist');
 protocol.handle('wadi', async request => {
@@ -115,3 +115,6 @@ if (app.isPackaged && config.updates) {
 app.on('window-all-closed', () => app.quit());
 let quitting = false;
 app.on('before-quit', event => { if (quitting) return; event.preventDefault(); quitting = true; authServer?.close(); void media.close().finally(() => app.exit(0)); });
+
+}
+void app.whenReady().then(startDesktop).catch(error => { console.error(error); app.exit(1); });

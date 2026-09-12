@@ -1,6 +1,6 @@
 # User testing checklist
 
-This revision has not been built or tested by the implementing agent, as requested. Use a disposable Postgres database and ordinary test media first.
+The desktop development build and sign-in window were opened, and the web login page responds. Authenticated flows, playback, automated tests and installers remain for user testing. Use a disposable Postgres database and ordinary test media first.
 
 ## Hosted API and data
 

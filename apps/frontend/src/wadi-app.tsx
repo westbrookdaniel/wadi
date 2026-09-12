@@ -1,3 +1,4 @@
+import '@fontsource-variable/geist'
 import { TvNavigation } from '@/components/tv-navigation'
 import { StrictMode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
