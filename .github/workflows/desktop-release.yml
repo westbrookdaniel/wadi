@@ -44,7 +44,13 @@ jobs:
         run: |
           test "$(gh repo view "$WADI_RELEASE_REPOSITORY" --json visibility --jq .visibility)" = PUBLIC || { echo 'Updates need a public releases repository. Configure WADI_RELEASE_REPOSITORY and GH_RELEASE_TOKEN for a separate repository.'; exit 1; }
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @wadi/desktop package --publish never
+      - name: Build installers
+        shell: bash
+        run: |
+          for name in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
+            if [ -z "${!name}" ]; then unset "$name"; fi
+          done
+          pnpm --filter @wadi/desktop package --publish never
       - uses: actions/upload-artifact@v4
         with:
           name: wadi-${{ matrix.os }}

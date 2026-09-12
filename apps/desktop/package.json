@@ -67,7 +67,8 @@
       ],
       "category": "AudioVideo",
       "maintainer": "Wadi contributors",
-      "icon": "resources/icon.png"
+      "icon": "resources/icon.png",
+      "executableName": "wadi"
     },
     "nsis": {
       "oneClick": false,
