@@ -8,7 +8,7 @@ const origin = new URL(process.env.WADI_WEB_ORIGIN ?? 'http://localhost:5173');
 if (origin.pathname !== '/' || origin.search || origin.hash || origin.username || origin.password) throw new Error('WADI_WEB_ORIGIN must be an origin, without a path or credentials');
 if (origin.protocol !== 'https:' && !['localhost','127.0.0.1'].includes(origin.hostname)) throw new Error('Use HTTPS for the hosted app');
 if (process.env.CI && origin.protocol !== 'https:') throw new Error('Release builds require an HTTPS WADI_WEB_ORIGIN');
-await writeFile('desktop-config.json', JSON.stringify({ origin: origin.origin, updates: process.env.WADI_UPDATE_URL ?? null }));
+await writeFile('desktop-config.json', JSON.stringify({ origin: origin.origin }));
 await mkdir('assets', { recursive: true });
 for (const [name, source] of [['ffmpeg', ffmpeg], ['ffprobe', ffprobe.path]]) {
   if (!source) throw new Error(`Missing ${name} for this platform`);

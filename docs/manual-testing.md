@@ -38,4 +38,4 @@ The desktop development build and sign-in window were opened, and the web login 
 - Build/install Windows, macOS and Linux packages on their target architectures.
 - Verify browser sign-in callbacks on each OS, native FFmpeg availability, OS keyring behavior and app shutdown.
 - Configure signing/notarization and verify installed trust before publishing.
-- If enabling updates, publish a newer signed package and its metadata to a staging feed first.
+- Test an upgrade between two signed GitHub release builds. Confirm background download progress, retry after a network failure, explicit restart, playback interruption confirmation, and retained sign-in and preferences. Publish installers and `latest*.yml` metadata together after reviewing the draft release.

@@ -67,7 +67,6 @@ The import preserves account IDs, password hashes, sessions, profiles, addons, l
 | `NEXT_PUBLIC_DESKTOP_RELEASES_URL` | Web build | Release listing linked by `/desktop/download` |
 | `NEXT_PUBLIC_CHROMECAST_RECEIVER_APP_ID` | Web build | Optional custom Cast receiver |
 | `WADI_WEB_ORIGIN` | Desktop build | Hosted Wadi origin, e.g. `https://your-wadi.vercel.app` |
-| `WADI_UPDATE_URL` | Desktop build | Optional HTTPS generic updater feed |
 | `WADI_VIDEO_ENCODER` | Desktop runtime | Optional `libx264`, `h264_videotoolbox`, `h264_nvenc`, `h264_qsv`, `h264_amf` |
 
 The web player remains available. A small corner link offers the desktop download, and failures expose external playback/copy-link options. Hosting costs exclude video transfer because it bypasses both Vercel and Railway. Railway still bills database traffic crossing to Vercel.
@@ -88,7 +87,7 @@ On Windows PowerShell set `$env:WADI_WEB_ORIGIN` before invoking pnpm. Build on 
 
 Use your normal electron-builder signing credentials for Windows signing and macOS signing/notarization. The build matrix in `.github/workflows/desktop-release.yml` is manually triggered and uploads draft artifacts only. It does not publish installers or deploy the website. Unsigned local packages are for development. Redistributing FFmpeg requires including its license/build notices; the preparation script copies notices downloaded with ffmpeg-static. Complete your distribution review before a public release.
 
-For updates, build with `WADI_UPDATE_URL` and publish the installer artifacts and electron-builder metadata files to that HTTPS directory. Without it, automatic update checks are disabled. Desktop cannot run the shared account API offline; temporary connection failures should be retried without discarding the stored desktop session.
+Updates use GitHub Releases; see Desktop updates below. Desktop cannot run the shared account API offline; temporary connection failures should be retried without discarding the stored desktop session.
 
 ## Local media behavior
 
@@ -133,3 +132,11 @@ Desktop playback keeps the video element and local conversion session alive when
 Press `?` for the shortcut list. `F` toggles fullscreen, `/` or `Cmd/Ctrl+K` opens search, `H` opens Home, and `Cmd/Ctrl+,` opens Settings. While watching, use `Space` or `K` to play/pause, left/right arrows to seek five seconds, `J`/`L` to seek ten seconds, up/down arrows for volume, `M` to mute, and comma/period to change speed. Shortcuts leave text fields and open dialogs alone.
 
 The synthetic local-conversion check runs with `node --test apps/desktop/src/media.test.mjs` after desktop assets are prepared. It checks audio conversion, remuxing and video conversion against actual bundled FFmpeg binaries. Provider playback and packaged installers still need manual testing.
+
+### Desktop updates
+
+Installed desktop releases check GitHub Releases ten seconds after launch and every six hours. Downloads run in the background. The bottom-left sidebar shows download progress, then **Restart and update** with the version number. Errors offer a retry. Wadi never installs automatically on quit; restarting for an update requires a click, with confirmation if playback is active. **Wadi → Check for Updates…** gives manual feedback. The development app and Linux `.deb` installs explain that automatic updates are unavailable; Linux automatic updates use AppImage. Updates keep the existing app ID, user-data directory, encrypted sign-in session and browser preferences.
+
+To release, bump `apps/desktop/package.json` and push its matching `vX.Y.Z` tag. Configure the repository variable `WADI_WEB_ORIGIN` with the production HTTPS origin. Add macOS secrets `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`, and Windows secrets `WIN_CSC_LINK`, `WIN_CSC_KEY_PASSWORD`. Tagged builds fail if required credentials are missing. The workflow uses its scoped GitHub token to create a draft release only after all platform builds succeed; no GitHub token is shipped in the app. Manual workflow runs produce downloadable test artifacts without publishing.
+
+Before publishing the draft, test a signed installer and an upgrade from an older installed release, including session retention, pause/resume, download failure, and restart confirmation. Publish the complete draft with its installers, ZIP payload, `latest*.yml` and blockmaps together. The public GitHub release is the update source. The source repository is currently private: set `WADI_RELEASE_REPOSITORY` to a public releases-only `owner/repository` and add `GH_RELEASE_TOKEN` with Contents write access to that repository. Build metadata embeds that repository, never its token. Tagged builds refuse a private update source. macOS requires Developer ID signing and notarization; credentials are not currently configured in this repository. The updater flow has local automated coverage, but a signed end-to-end upgrade has not been verified. See the [electron-builder v26 updater documentation](https://www.electron.build/v26/docs/features/auto-update/).

@@ -8,6 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { z } from 'zod';
 import { createMediaService } from './media.mjs';
 import updater from 'electron-updater';
+import { createUpdates } from './updates.mjs';
 const here = dirname(fileURLToPath(import.meta.url));
 const config = JSON.parse(await readFile(join(here, '../desktop-config.json'), 'utf8'));
 const origin = new URL(config.origin).origin;
@@ -15,6 +16,7 @@ const legacyUserData = join(app.getPath('appData'), '@wadi/desktop');
 app.setName('Wadi');
 if (existsSync(legacyUserData)) app.setPath('userData', legacyUserData);
 protocol.registerSchemesAsPrivileged([{ scheme: 'wadi', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }]);
+let updates, playbackActive = false, installingUpdate = false;
 let window, media, token = null, authServer = null, cancelSignIn = null;
 const tokenFile = () => join(app.getPath('userData'), 'session.enc');
 async function saveToken(value) {
@@ -90,7 +92,7 @@ async function signIn() {
 async function startDesktop() {
 if (process.platform === 'darwin') {
   app.dock?.setIcon(join(here, '../resources/icon.png'));
-  Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: 'Wadi', submenu: [{ role: 'about' }, { label: 'Settings…', accelerator: 'Command+,', click: () => { window?.show(); window?.focus(); window?.webContents.send('open-settings'); } }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] }, { role: 'editMenu' }, { role: 'viewMenu' }, { role: 'windowMenu' }]));
+  Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: 'Wadi', submenu: [{ role: 'about' }, { label: 'Check for Updates…', click: () => void updates?.check(true) }, { label: 'Settings…', accelerator: 'Command+,', click: () => { window?.show(); window?.focus(); window?.webContents.send('open-settings'); } }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] }, { role: 'editMenu' }, { role: 'viewMenu' }, { role: 'windowMenu' }]));
 }
 
 try { if (safeStorage.isEncryptionAvailable()) token = safeStorage.decryptString(await readFile(tokenFile())); } catch { /* First launch or unavailable keyring. */ }
@@ -113,6 +115,10 @@ session.defaultSession.setPermissionRequestHandler((webContents, permission, cal
 media = await createMediaService({ directory: join(app.getPath('userData'), 'media-cache'), binaries: app.isPackaged ? join(process.resourcesPath, 'media-bin') : join(here, '../assets') });
 for (const [name, handler] of Object.entries({
   'open-page': path => shell.openExternal(new URL(z.enum(['/terms','/privacy']).parse(path), origin).href),
+  'update-state': () => updates?.state() ?? { kind: 'idle' },
+  'update-check': () => updates.check(true),
+  'update-install': () => updates.install(),
+  'update-playback': active => { playbackActive = z.boolean().parse(active); },
   session: () => Boolean(token),
   'sign-in': signIn,
   api: (path, options) => {
@@ -126,13 +132,24 @@ window = new BrowserWindow({ icon: join(here, '../resources/icon.png'), titleBar
 window.webContents.on('will-navigate', (event, url) => { if (!url.startsWith('wadi://app/')) event.preventDefault(); });
 window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 await window.loadURL('wadi://app/');
-if (app.isPackaged && config.updates) {
-  const url = new URL(config.updates);
-  if (url.protocol === 'https:') { updater.autoUpdater.setFeedURL({ provider:'generic', url:url.href }); updater.autoUpdater.on('error', () => {}); void updater.autoUpdater.checkForUpdatesAndNotify().catch(() => {}); }
-}
+const supported = app.isPackaged && (process.platform !== 'linux' || Boolean(process.env.APPIMAGE));
+updates = createUpdates({
+  updater: updater.autoUpdater,
+  enabled: supported,
+  unavailableReason: !app.isPackaged ? 'Updates are available in installed release builds, not the development app.' : 'Automatic updates require the AppImage version. Download the latest package from GitHub Releases.',
+  notify: state => { if (!window?.isDestroyed()) window.webContents.send('update-state', state); },
+  feedback: message => dialog.showMessageBox(window, { type: 'info', title: 'Wadi updates', message, buttons: ['OK'] }),
+  confirmInstall: async () => {
+    if (!playbackActive) return true;
+    const result = await dialog.showMessageBox(window, { type: 'question', title: 'Restart and update', message: 'Stop playback and restart Wadi to update?', detail: 'You can keep watching and install the update later.', buttons: ['Keep watching', 'Restart and update'], defaultId: 0, cancelId: 0 });
+    return result.response === 1;
+  },
+  prepareInstall: async () => { installingUpdate = true; },
+});
+if (process.platform !== 'darwin') Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: 'Wadi', submenu: [{ label: 'Check for Updates…', click: () => void updates.check(true) }, { type: 'separator' }, { role: 'quit' }] }, { role: 'editMenu' }, { role: 'viewMenu' }]));
 app.on('window-all-closed', () => app.quit());
 let quitting = false;
-app.on('before-quit', event => { if (quitting) return; event.preventDefault(); quitting = true; authServer?.close(); void media.close().finally(() => app.exit(0)); });
+app.on('before-quit', event => { if (quitting) return; event.preventDefault(); updates?.dispose(); quitting = true; authServer?.close(); void media.close().finally(() => installingUpdate ? app.quit() : app.exit(0)); });
 
 }
 void app.whenReady().then(startDesktop).catch(error => { console.error(error); app.exit(1); });

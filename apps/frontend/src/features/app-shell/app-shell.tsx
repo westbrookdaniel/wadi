@@ -1,6 +1,7 @@
 import { WebFullscreen } from '@/components/web-fullscreen'
 import { DesktopDownload } from '@/components/desktop-download'
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
+import { desktopBridge } from "@/lib/desktop";
 import { useLocation } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 
@@ -35,6 +36,7 @@ export function AppShell({
   onNavigate: (path: NavPath) => void;
 }) {
   const location = useLocation();
+  useEffect(() => { const bridge = desktopBridge(); void bridge?.updatePlayback(hideNavigation).catch(() => {}); return () => { void bridge?.updatePlayback(false).catch(() => {}); }; }, [hideNavigation]);
   const backdrop = useDynamicBackdropColor(location.pathname);
   const token = useAppStore((state) => state.token);
   const activeProfileId = useAppStore((state) => state.activeProfileId);

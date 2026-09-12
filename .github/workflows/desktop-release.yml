@@ -1,13 +1,14 @@
-name: Package desktop artifacts
+name: Build desktop release
 on:
+  push:
+    tags: ['v*']
   workflow_dispatch:
     inputs:
       web_origin:
-        description: HTTPS origin of the hosted Wadi app
+        description: HTTPS origin of the hosted Wadi app (artifact builds only)
         required: true
-      update_url:
-        description: Optional HTTPS updater feed
-        required: false
+permissions:
+  contents: read
 jobs:
   package:
     strategy:
@@ -15,8 +16,14 @@ jobs:
       matrix:
         os: [macos-latest, windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
-    permissions:
-      contents: read
+    env:
+      WADI_RELEASE_REPOSITORY: ${{ vars.WADI_RELEASE_REPOSITORY || github.repository }}
+      WADI_WEB_ORIGIN: ${{ inputs.web_origin || vars.WADI_WEB_ORIGIN }}
+      CSC_LINK: ${{ matrix.os == 'macos-latest' && secrets.CSC_LINK || matrix.os == 'windows-latest' && secrets.WIN_CSC_LINK || '' }}
+      CSC_KEY_PASSWORD: ${{ matrix.os == 'macos-latest' && secrets.CSC_KEY_PASSWORD || matrix.os == 'windows-latest' && secrets.WIN_CSC_KEY_PASSWORD || '' }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -26,24 +33,51 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+      - name: Validate release configuration
+        shell: bash
+        run: node apps/desktop/scripts/validate-release.mjs
+      - name: Verify public update source
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN || github.token }}
+        run: |
+          test "$(gh repo view "$WADI_RELEASE_REPOSITORY" --json visibility --jq .visibility)" = PUBLIC || { echo 'Updates need a public releases repository. Configure WADI_RELEASE_REPOSITORY and GH_RELEASE_TOKEN for a separate repository.'; exit 1; }
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @wadi/desktop package --publish never
-        env:
-          WADI_WEB_ORIGIN: ${{ inputs.web_origin }}
-          WADI_UPDATE_URL: ${{ inputs.update_url }}
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       - uses: actions/upload-artifact@v4
         with:
           name: wadi-${{ matrix.os }}
+          if-no-files-found: error
           path: |
             apps/desktop/release/*.dmg
             apps/desktop/release/*.zip
             apps/desktop/release/*.exe
             apps/desktop/release/*.AppImage
             apps/desktop/release/*.deb
-            apps/desktop/release/*.yml
+            apps/desktop/release/latest*.yml
             apps/desktop/release/*.blockmap
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wadi-*
+          merge-multiple: true
+          path: release
+      - name: Create draft release with installers and update metadata
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN || github.token }}
+          GH_REPO: ${{ vars.WADI_RELEASE_REPOSITORY || github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --draft --title "Wadi $RELEASE_TAG" --notes "Desktop installers and automatic update files. Maintainer: test the signed installers and an upgrade before publishing this draft."
+          fi
+          test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true || { echo 'Refusing to replace files in a published release'; exit 1; }
+          gh release upload "$RELEASE_TAG" release/* --clobber

@@ -1,9 +1,10 @@
+import { DesktopUpdateControl } from './desktop-update'
 import { Monitor } from 'lucide-react'
 import { desktopBridge } from '@/lib/desktop'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 export function DesktopDownload({ sidebar = false }: { sidebar?: boolean }) {
   const url = process.env.NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL || '/desktop/download'
-  if (desktopBridge()) return null
+  if (desktopBridge()) return sidebar ? <DesktopUpdateControl /> : null
   if (!sidebar) return <a href={url} className="text-sm underline underline-offset-4">Get desktop app</a>
   return <Tooltip>
     <TooltipTrigger asChild><a href={url} aria-label="Get desktop app" className="absolute bottom-5 left-1/2 grid size-12 -translate-x-1/2 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring max-[800px]:hidden"><Monitor className="size-6" aria-hidden="true" /></a></TooltipTrigger>
