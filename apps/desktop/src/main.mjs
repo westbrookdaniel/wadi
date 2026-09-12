@@ -90,7 +90,7 @@ async function signIn() {
 async function startDesktop() {
 if (process.platform === 'darwin') {
   app.dock?.setIcon(join(here, '../resources/icon.png'));
-  Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: 'Wadi', submenu: [{ role: 'about' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] }, { role: 'editMenu' }, { role: 'viewMenu' }, { role: 'windowMenu' }]));
+  Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: 'Wadi', submenu: [{ role: 'about' }, { label: 'Settings…', accelerator: 'Command+,', click: () => { window?.show(); window?.focus(); window?.webContents.send('open-settings'); } }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] }, { role: 'editMenu' }, { role: 'viewMenu' }, { role: 'windowMenu' }]));
 }
 
 try { if (safeStorage.isEncryptionAvailable()) token = safeStorage.decryptString(await readFile(tokenFile())); } catch { /* First launch or unavailable keyring. */ }

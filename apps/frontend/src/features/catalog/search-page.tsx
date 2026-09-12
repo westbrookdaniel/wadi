@@ -1,6 +1,6 @@
 import { useQueries, useQuery } from '@tanstack/react-query'
-import { Search } from 'lucide-react'
-import { useState } from 'react'
+import { Search, X } from 'lucide-react'
+import { useRef, useState } from 'react'
 
 import { catalogQuery, catalogsQuery } from '@/api/queries'
 import type { MediaPreview } from '@/api/types'
@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils'
 import { rankMediaByQuery } from './fuzzy-search'
 
 export function SearchPage({ onOpenMedia }: { onOpenMedia: (media: MediaPreview) => void }) {
+  const searchInput = useRef<HTMLInputElement>(null)
   const [query, setQuery] = useState('')
   const debouncedQuery = useDebouncedValue(query.trim())
   const catalogs = useQuery(catalogsQuery)
@@ -35,10 +36,11 @@ export function SearchPage({ onOpenMedia }: { onOpenMedia: (media: MediaPreview)
 
   return (
     <div className={pageStack}>
-      <label className="flex min-h-[52px] w-[min(760px,100%)] items-center gap-2.5 rounded-xl border border-border bg-card/60 px-[18px] shadow-sm ring-1 ring-foreground/5">
+      <div className="flex min-h-[52px] w-[min(760px,100%)] items-center gap-2.5 rounded-xl border border-border bg-card/60 px-[18px] shadow-sm ring-1 ring-foreground/5">
         <Search className="size-[18px] text-muted-foreground" aria-hidden="true" />
         <Input
-          className="min-h-[50px] border-0 bg-transparent px-0 focus-visible:ring-0"
+          ref={searchInput}
+          className="min-h-[50px] border-0 bg-transparent px-0 focus-visible:ring-0 [&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-decoration]:appearance-none"
           type="search"
           aria-label="Search films and series"
           maxLength={120}
@@ -46,10 +48,11 @@ export function SearchPage({ onOpenMedia }: { onOpenMedia: (media: MediaPreview)
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
-      </label>
+        {query && <button type="button" aria-label="Clear search" onClick={() => { setQuery(''); searchInput.current?.focus() }} className="grid size-8 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"><X className="size-4" aria-hidden="true" /></button>}
+      </div>
 
       {debouncedQuery.length > 1 ? <div className="flex flex-wrap items-center gap-2">
-        {[['all', 'All'], ['movie', 'Films'], ['series', 'Series']].map(([value, label]) => <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value ?? 'all')} className={`rounded-lg px-4 py-2 text-xs transition ${filter === value ? 'bg-white text-black' : 'bg-white/5 text-muted-foreground hover:bg-white/10'}`}>{label}</button>)}
+        {[['all', 'All'], ['movie', 'Films'], ['series', 'Series']].map(([value, label]) => <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value ?? 'all')} className={`rounded-lg border px-4 py-2 text-xs transition focus-visible:outline-2 focus-visible:outline-ring ${filter === value ? 'border-primary bg-primary/15 text-foreground' : 'border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground'}`}>{label}</button>)}
         <p className="ml-2 text-xs text-muted-foreground" role="status">{isSearching ? 'Searching catalogs…' : `${visibleMedia.length} results`}</p>
       </div> : null}
       {results.find(result => result.error)?.error ? <ErrorState error={results.find(result => result.error)?.error} /> : null}

@@ -917,18 +917,16 @@ function PlayerChrome({
     >
       <div className="player-top-controls pointer-events-auto flex items-start justify-between gap-3 p-4 sm:p-6">
         <div className="flex min-w-0 items-center gap-3">
-          <TooltipButton label="Back">
             <Button
               variant="ghost"
               size="icon-lg"
-              className="size-11 rounded-full border-0 bg-black/55 text-white hover:bg-black/78 focus-visible:bg-black/78 focus-visible:ring-white/30 [&_svg]:size-[22px]"
+              className="size-11 rounded-full border-0 bg-black/55 text-white hover:bg-white/15 hover:text-white dark:hover:bg-white/15 focus-visible:bg-white/15 focus-visible:text-white focus-visible:ring-white/30 [&_svg]:size-[22px]"
               type="button"
               onClick={onBack}
               aria-label="Back"
             >
               <ArrowLeft aria-hidden="true" />
             </Button>
-          </TooltipButton>
           <button type="button" className="player-episode flex items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-white/10" onClick={hasEpisodeSwapper ? onOpenEpisodeSwapper : undefined} disabled={!hasEpisodeSwapper} aria-label={hasEpisodeSwapper ? 'Choose episode' : undefined}>
             <div className="grid gap-0.5"><span className="max-w-[55vw] truncate text-sm font-medium">{mediaName}</span>{episodeContext ? <span className="max-w-[55vw] truncate text-xs text-white/65">{formatEpisodeBadge(episodeContext.season, episodeContext.episode)} · {episodeContext.title}</span> : null}</div>
           </button>

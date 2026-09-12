@@ -1,4 +1,5 @@
 export type DesktopBridge = {
+  onOpenSettings: (callback: () => void) => () => void
   openPage: (path: '/terms' | '/privacy') => Promise<void>
   session: () => Promise<boolean>
   signIn: () => Promise<boolean>
