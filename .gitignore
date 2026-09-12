@@ -28,3 +28,5 @@ work/
 apps/desktop/assets/
 apps/desktop/release/
 apps/desktop/desktop-config.json
+.vercel
+.env*

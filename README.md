@@ -83,4 +83,4 @@ See the [development guide](docs/development.md) for check commands and the [man
 
 ## License
 
-A project license has not been selected yet. Third-party dependencies, including bundled FFmpeg builds, retain their own licenses and notices.
+Wadi is licensed under the [MIT License](LICENSE). Third-party dependencies, including bundled FFmpeg builds, retain their own licenses and notices.

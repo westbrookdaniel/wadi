@@ -81,5 +81,6 @@
     }
   },
   "description": "Wadi media browser and desktop player",
-  "author": "Wadi contributors"
+  "author": "Wadi contributors",
+  "license": "MIT"
 }

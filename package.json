@@ -13,5 +13,6 @@
     "db:import": "node scripts/import-sqlite.mjs",
     "desktop:dev": "pnpm --filter @wadi/desktop dev",
     "desktop:package": "pnpm --filter @wadi/desktop package"
-  }
+  },
+  "license": "MIT"
 }
