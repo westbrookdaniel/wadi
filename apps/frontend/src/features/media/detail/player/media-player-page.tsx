@@ -585,7 +585,7 @@ export function MediaPlayerPage({
       <div className="min-h-dvh bg-black">
         <div
           ref={playerRef}
-          className="player-viewport group/player relative grid h-dvh overflow-hidden bg-black text-white"
+          className="dark player-viewport group/player relative grid h-dvh overflow-hidden bg-black text-white"
           onPointerMove={revealControls}
           onPointerDown={revealControls}
           onClick={(event) => {
@@ -606,7 +606,6 @@ export function MediaPlayerPage({
           {(player.state.status === 'loading' || player.state.status === 'idle') && !player.state.error ? (
             <div className="player-loading pointer-events-none absolute inset-0 z-[4] grid place-content-center justify-items-center gap-6 bg-black text-center" role="status" aria-label="Loading stream">
               {typeof media.raw.logo === 'string' && media.raw.logo ? <RevealedImage className="player-loading-mark max-h-36 w-[min(55vw,360px)] object-contain" src={media.raw.logo} alt={media.name} /> : <strong className="player-loading-mark max-w-[70vw] text-2xl font-medium tracking-tight">{media.name}</strong>}
-              <span className="text-xs tracking-wide text-white/45">{desktop ? 'Opening local stream…' : 'Opening stream'}</span>
 
             </div>
           ) : !player.state.hasVideo && !player.state.error ? (
@@ -743,7 +742,7 @@ export function MediaPlayerPage({
           <Dialog open={episodeSheetOpen} onOpenChange={setEpisodeSheetOpen}>
             <DialogContent
               showCloseButton
-              className="player-sheet top-0 right-0 left-auto h-dvh max-h-none w-[min(430px,100vw)] translate-x-0 translate-y-0 content-start overflow-y-auto rounded-none p-0 data-open:slide-in-from-right-full data-closed:slide-out-to-right-full data-open:zoom-in-100 data-closed:zoom-out-100"
+              className="dark player-sheet top-0 right-0 left-auto h-dvh max-h-none w-[min(430px,100vw)] translate-x-0 translate-y-0 content-start overflow-y-auto rounded-none p-0 data-open:slide-in-from-right-full data-closed:slide-out-to-right-full data-open:zoom-in-100 data-closed:zoom-out-100"
             >
               <DialogTitle className="pr-12">Episodes</DialogTitle>
               <EpisodeSwapper
@@ -1162,7 +1161,7 @@ function PlayerChrome({
       <Dialog open={subtitleSettingsOpen} onOpenChange={setSubtitleSettingsOpen}>
         <DialogContent
           showCloseButton
-          className="player-sheet top-0 right-0 left-auto h-dvh max-h-none w-[min(430px,100vw)] translate-x-0 translate-y-0 content-start overflow-y-auto rounded-none p-5 data-open:slide-in-from-right-full data-closed:slide-out-to-right-full data-open:zoom-in-100 data-closed:zoom-out-100"
+          className="dark player-sheet top-0 right-0 left-auto h-dvh max-h-none w-[min(430px,100vw)] translate-x-0 translate-y-0 content-start overflow-y-auto rounded-none p-5 data-open:slide-in-from-right-full data-closed:slide-out-to-right-full data-open:zoom-in-100 data-closed:zoom-out-100"
         >
           <DialogTitle className="flex items-center gap-2">
             <Captions className="size-4" />
@@ -1185,7 +1184,7 @@ function PlayerChrome({
                 <SelectTrigger className="h-8">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="dark">
                   <SelectItem value="outline">Outline</SelectItem>
                   <SelectItem value="shadow">Shadow</SelectItem>
                 </SelectContent>
@@ -1194,7 +1193,7 @@ function PlayerChrome({
                 <SelectTrigger className="h-8">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="dark">
                   <SelectItem value="sans-serif">Sans</SelectItem>
                   <SelectItem value="serif">Serif</SelectItem>
                   <SelectItem value="monospace">Monospace</SelectItem>
@@ -1213,7 +1212,7 @@ function TooltipButton({ label, children }: { label: string; children: React.Rea
   return (
     <Tooltip>
       <TooltipTrigger asChild>{children}</TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
+      <TooltipContent className="dark">{label}</TooltipContent>
     </Tooltip>
   )
 }
@@ -1382,7 +1381,7 @@ function EpisodeSwapper({
           <SelectTrigger className="w-full" aria-label="Season">
             <SelectValue placeholder="Season" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="dark">
             {seasons.map((season) => (
               <SelectItem key={String(season)} value={season === null ? "__none" : String(season)}>
                 {season === null ? "Extras" : season === 0 ? "Special" : `Season ${season}`}

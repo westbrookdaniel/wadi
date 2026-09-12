@@ -51,7 +51,7 @@ export function useDesktopPlayer({ videoRef, source, hints, savedPosition, watch
       if(cancelled){await desktop.media('stop',id);return}
       job.current=id;offset=result.offset;duration=result.duration
       audio.current=result.selectedAudioTrackId
-      update({duration,hasVideo:result.hasVideo,hasAudio:result.hasAudio,audioTracks:result.audioTracks,selectedAudioTrackId:result.selectedAudioTrackId,warning:result.mode==='audio'?'Converting audio locally':result.mode==='video'?'Converting video locally':null})
+      update({duration,hasVideo:result.hasVideo,hasAudio:result.hasAudio,audioTracks:result.audioTracks,selectedAudioTrackId:result.selectedAudioTrackId,warning:null})
       video.volume=stateRef.current.volume;video.muted=stateRef.current.muted;video.playbackRate=speed.current
       if (result.mode === 'direct') {
         video.src=result.url

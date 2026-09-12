@@ -1,3 +1,4 @@
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { WatchedButton } from './watch-state'
 import { useWatchToggle } from './use-watch-toggle'
 import { Artwork } from '@/components/artwork'
@@ -289,7 +290,7 @@ function EpisodeButton({
   episode: Episode;
   media: MediaPreview;
   watchUnavailable: boolean;
-  watchState?: { position_seconds: number; watched: boolean };
+  watchState?: { position_seconds: number; duration_seconds?: number | null; watched: boolean };
   onClick: () => void;
 }) {
   const toggle = useWatchToggle(media.type, media.id, episode.id)
@@ -307,13 +308,22 @@ function EpisodeButton({
             {episode.title}
           </strong>
           {formatEpisodeReleaseDate(episode.released) ? <time dateTime={episode.released} className="mt-0.5 block text-xs text-muted-foreground">{formatEpisodeReleaseDate(episode.released)}</time> : null}
-          {watchState?.position_seconds ? (
-            <span className={cn("block text-[0.8rem]", mutedText)}>
-              {formatWatchDuration(watchState.position_seconds)}
-            </span>
-          ) : null}
+
         </div>
       </button>
+      {watchState && watchState.position_seconds > 0 && !watchState.watched ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span tabIndex={0} aria-label={`${formatWatchDuration(watchState.position_seconds)} watched`} className="mr-2 inline-flex shrink-0 rounded-full text-primary outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <svg viewBox="0 0 24 24" className="size-5 -rotate-90" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-border" />
+                <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" pathLength="100" strokeDasharray={`${watchState.duration_seconds ? Math.min(100, Math.max(0, watchState.position_seconds / watchState.duration_seconds * 100)) : 0} 100`} />
+              </svg>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>{formatWatchDuration(watchState.position_seconds)} watched{watchState.duration_seconds ? ` of ${formatWatchDuration(watchState.duration_seconds)}` : ''}</TooltipContent>
+        </Tooltip>
+      ) : null}
       <WatchedButton compact title={episode.title} watched={watchState?.watched ?? false} isPending={toggle.isPending || watchUnavailable} onClick={() => toggle.mutate(!watchState?.watched)} />
       </div>
       {toggle.error ? <p role="alert" className="px-3 py-2 text-xs text-destructive">{toggle.error.message}</p> : null}
@@ -375,6 +385,7 @@ function formatWatchDuration(duration: number) {
   if (!Number.isFinite(duration)) {
     return "Unknown duration";
   }
-  const minutes = Math.round(duration / 60);
-  return `${minutes} min`;
+  const seconds = Math.max(0, Math.floor(duration));
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes}:${String(seconds % 60).padStart(2, "0")}`;
 }
