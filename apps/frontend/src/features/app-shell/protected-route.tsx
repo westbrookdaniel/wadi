@@ -12,7 +12,7 @@ import {
 import { LoadingState } from "@/components/status";
 import { appBackground } from "@/lib/styles";
 import { cn } from "@/lib/utils";
-import { clearStoredToken, useAppStore } from "@/store/app-store";
+import { useAppStore } from "@/store/app-store";
 import { ProfileAvatar } from "./profile-avatar";
 
 export function ProtectedRoute({
@@ -74,7 +74,7 @@ export function ProtectedRoute({
   }
 
   if (me.isError) {
-    return <InvalidSessionRedirect />;
+    return <main className="grid min-h-screen place-content-center gap-4 p-8"><p>Could not reach your account. Check your connection and try again.</p><button className="underline" onClick={() => void me.refetch()}>Retry</button></main>;
   }
 
   if (!me.data) {
@@ -104,7 +104,7 @@ export function ProtectedRoute({
   }
 
   if (profiles.error || !profiles.data) {
-    return <InvalidSessionRedirect />;
+    return <main className="grid min-h-screen place-content-center gap-4 p-8"><p>Could not load profiles.</p><button className="underline" onClick={() => void profiles.refetch()}>Retry</button></main>;
   }
 
   if (profiles.data.length === 1) {
@@ -174,12 +174,4 @@ export function ProtectedRoute({
   }
 
   return children(me.data);
-}
-
-function InvalidSessionRedirect() {
-  useEffect(() => {
-    clearStoredToken();
-  }, []);
-
-  return <Navigate to="/login" replace />;
 }

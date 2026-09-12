@@ -1,7 +1,5 @@
-# Deployment strategy
+# Deployment split
 
-Wadi is now intended to run as one self-hosted Next.js production server with Node APIs and a local SQLite database. Tailscale Serve provides private HTTPS access. A desktop browser on the same host can provide the TV interface over HDMI.
+The current plan is Next.js on Vercel, Postgres on Railway, and Electron for local media processing. The previous SQLite home-server deployment is retired. See [README](../README.md) for environment variables, migration and packaging instructions.
 
-The earlier Vercel/Railway/Postgres plan is superseded. See the root [README](../README.md) for setup on Windows/macOS/Linux, startup configuration, hardware estimates, backups, TV navigation and optional Mediabunny conversion.
-
-Native installers, live adaptive transcoding and a Chromecast receiver with access to private converted media are future work. The supported distribution today is a checkout built on the target OS with a production launcher.
+Cloud provisioning, schema migration against a live database, installer signing/publication and user testing have not been performed. Desktop is configured at build time with the hosted origin. It uses hosted authentication and account APIs, with no database connection or local authentication server.

@@ -1,3 +1,4 @@
+import { testDatabase } from './test-database.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
@@ -5,10 +6,10 @@ import { once } from 'node:events';
 import { createApp } from './main.js';
 
 async function start(server) { server.listen(0, '127.0.0.1'); await once(server, 'listening'); return `http://127.0.0.1:${server.address().port}`; }
-test('Node API preserves auth, profile isolation, lists, progress, addons and byte-range streaming', async t => {
- const { app, db } = createApp();
+test('Node API preserves auth, profile isolation, lists, progress, addons without cloud video proxying', async t => {
+ const { app, db } = createApp({ database: await testDatabase(t), allowPrivateAddons: true });
  const server = createServer(app), base = await start(server);
- t.after(() => { server.closeAllConnections(); server.close(); db.close(); });
+ t.after(async () => { server.closeAllConnections(); server.close(); await db.close(); });
  const media = Buffer.from('0123456789abcdefghijklmnopqrstuvwxyz');
  const upstream = createServer((req,res) => {
   if (req.url === '/manifest.json' || req.url === '/other/manifest.json') return res.end(JSON.stringify({id:'fixture',name:'Fixture',version:'1',resources:['catalog','meta','stream'],types:['movie'],catalogs:[{id:'test',type:'movie'}]}));
@@ -63,24 +64,21 @@ test('Node API preserves auth, profile isolation, lists, progress, addons and by
  assert.equal((await request('/api/catalog/movie/test')).responses[0].response.metas[0].name,'Test film');
  const streams=await request('/api/streams/movie/test%3Afilm');assert.equal(streams.responses[0].response.streams[0].url,fixture+'/media.mp4');
  const proxy=base+'/api/stream-proxy?url='+encodeURIComponent(fixture+'/media.mp4');
- const range=await fetch(proxy,{headers:{Authorization:`Bearer ${token}`,Range:'bytes=4-9'}});
- assert.equal(range.status,206);assert.equal(range.headers.get('content-range'),'bytes 4-9/36');assert.equal(await range.text(),'456789');
- const invalid=await fetch(proxy,{headers:{Authorization:`Bearer ${token}`,Range:'bytes=99-'}});assert.equal(invalid.status,416);
+ assert.equal((await fetch(proxy,{headers:{Authorization:`Bearer ${token}`}})).status,404);
+ assert.equal((await request('/api/server-capabilities')).conversion,false);
  await request('/api/settings/player-defaults','PUT',{playback_speed:1.5});assert.equal((await request('/api/settings/player-defaults')).playback_speed,1.5);
  await request('/api/settings/player-defaults','PUT',{playback_speed:-2},400);
  await request('/api/auth/logout','POST',undefined,204);await request('/api/auth/me','GET',undefined,401);
  const login=await request('/api/auth/login','POST',{email:'test@example.com',password:'test-password'});assert.ok(login.token);
 });
 
-test('existing SQLite accounts and sessions survive a Node server restart', async t => {
- const { mkdtempSync, rmSync }=await import('node:fs'); const { tmpdir }=await import('node:os'); const { join }=await import('node:path');
- const directory=mkdtempSync(join(tmpdir(),'wadi-test-'));t.after(()=>rmSync(directory,{recursive:true,force:true}));
- const database=join(directory,'wadi.sqlite');
+test('Postgres accounts and sessions survive a Node server restart', async t => {
+ const database=await testDatabase(t);
  let runtime=createApp({database}); let server=createServer(runtime.app);let base=await start(server);
  const auth=await fetch(base+'/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:'persist@example.com',password:'persist-password'})}).then(r=>r.json());
- server.closeAllConnections(); await new Promise(resolve=>server.close(resolve));runtime.db.close();
+ server.closeAllConnections(); await new Promise(resolve=>server.close(resolve));await runtime.db.close();
  runtime=createApp({database});server=createServer(runtime.app);base=await start(server);
- t.after(()=>{server.closeAllConnections();server.close();runtime.db.close();});
+ t.after(async()=>{server.closeAllConnections();server.close();await runtime.db.close();});
  const response=await fetch(base+'/api/auth/me',{headers:{Authorization:`Bearer ${auth.token}`}});assert.equal(response.status,200);assert.equal((await response.json()).id,auth.user.id);
  const login=await fetch(base+'/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:'persist@example.com',password:'persist-password'})});assert.equal(login.status,200);
 });

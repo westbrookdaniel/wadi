@@ -1,4 +1,5 @@
-import { API_BASE_URL } from '@/api/client'
+import { desktopBridge } from '@/lib/desktop'
+import { z } from 'zod'
 import type { PlaybackAction, PlaybackPreferences, StreamInfo } from '@/api/types'
 
 export const DEFAULT_EXTERNAL_PLAYER_TEMPLATE = 'vlc://{url}'
@@ -42,7 +43,7 @@ export function normalizePlaybackPreferences(
   preferences?: Partial<PlaybackPreferences> | null,
 ): PlaybackPreferences {
   const streamAction: PlaybackAction =
-    preferences?.stream_action === 'external' ? 'external' : 'copy'
+    preferences?.stream_action === 'external' ? 'external' : preferences?.stream_action === 'copy' ? 'copy' : 'internal'
   const externalPlayerTemplate =
     typeof preferences?.external_player_template === 'string'
       ? preferences.external_player_template
@@ -51,6 +52,7 @@ export function normalizePlaybackPreferences(
   return {
     stream_action: streamAction,
     external_player_template: externalPlayerTemplate,
+    external_player_preset: preferences?.external_player_preset ?? (preferences?.external_player_template ? 'custom' : 'vlc'),
   }
 }
 
@@ -59,5 +61,8 @@ function normalizeUrl(value: string | undefined) {
   return normalized ? normalized : null
 }
 
-export function buildStreamProxyUrl(url: string) { return `${API_BASE_URL}/api/stream-proxy?url=${encodeURIComponent(url)}` }
-export function buildSubtitleProxyUrl(url: string) { return `${API_BASE_URL}/api/subtitle-proxy?url=${encodeURIComponent(url)}` }
+export function buildStreamProxyUrl(url: string) { return url }
+export async function buildSubtitleProxyUrl(url: string) {
+  const desktop = desktopBridge()
+  return desktop ? z.string().parse(await desktop.media('resource', { url })) : url
+}

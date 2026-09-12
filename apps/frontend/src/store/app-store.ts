@@ -1,3 +1,4 @@
+import { desktopBridge } from '@/lib/desktop'
 import { create } from 'zustand'
 
 const TOKEN_KEY = 'wadi.auth.token'
@@ -17,7 +18,7 @@ const readStoredToken = () => {
     return null
   }
 
-  return window.localStorage.getItem(TOKEN_KEY)
+  return desktopBridge() ? null : window.localStorage.getItem(TOKEN_KEY)
 }
 
 export const useAppStore = create<AppStore>((set) => ({
@@ -25,7 +26,9 @@ export const useAppStore = create<AppStore>((set) => ({
   activeProfileId: typeof window === 'undefined' ? null : window.localStorage.getItem(PROFILE_KEY),
   selectedListId: null,
   setToken: (token) => {
-    if (token) {
+    if (desktopBridge()) {
+      window.localStorage.removeItem(TOKEN_KEY)
+    } else if (token) {
       window.localStorage.setItem(TOKEN_KEY, token)
     } else {
       window.localStorage.removeItem(TOKEN_KEY)

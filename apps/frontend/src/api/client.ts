@@ -1,3 +1,4 @@
+import { desktopBridge } from '@/lib/desktop'
 import { clearStoredToken, useAppStore } from '@/store/app-store'
 
 export class ApiError extends Error {
@@ -22,6 +23,15 @@ type ApiOptions = {
 }
 
 export async function apiRequest<T>(path: string, options: ApiOptions = {}) {
+  const desktop = desktopBridge()
+  if (desktop) {
+    const response = await desktop.request(path, { method: options.method, body: options.body })
+    if (response.status >= 400) {
+      if (response.status === 401) clearStoredToken()
+      throw new ApiError(response.status, response.body)
+    }
+    return response.body as T
+  }
   const token = options.token ?? useAppStore.getState().token
   const headers = new Headers()
 

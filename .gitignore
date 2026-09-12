@@ -20,3 +20,11 @@ apps/frontend/data/
 apps/frontend/next-env.d.ts
 
 wadi-server.json
+
+work/
+.env
+.env.*
+!.env.example
+apps/desktop/assets/
+apps/desktop/release/
+apps/desktop/desktop-config.json

@@ -3,4 +3,5 @@ packages:
   - "packages/*"
 
 onlyBuiltDependencies:
-  - node-av
+  - electron
+  - ffmpeg-static

@@ -11,15 +11,13 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "start": "next start -H 127.0.0.1 -p 5173",
-    "test:api": "node --test server/*.test.js",
-    "test:next": "node server/next-smoke.js"
+    "test:api": "node --test server/*.test.js"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@fontsource-variable/geist": "^5.2.8",
-    "@mediabunny/server": "^1.56.0",
     "@node-rs/argon2": "^2.0.2",
     "@tanstack/react-form": "^1.29.1",
     "@tanstack/react-query": "^5.100.1",
@@ -39,7 +37,9 @@
     "tailwind-merge": "^3.5.0",
     "tw-animate-css": "^1.4.0",
     "zod": "^4.3.6",
-    "zustand": "^5.0.12"
+    "zustand": "^5.0.12",
+    "pg": "^8.16.3",
+    "hls.js": "^1.6.13"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -1,4 +1,9 @@
-import { useConvertedStream } from './use-converted-stream'
+import { useDesktopPlayer } from './use-desktop-player'
+import { desktopBridge } from '@/lib/desktop'
+import { DesktopDownload } from '@/components/desktop-download'
+import { openExternalPlayback } from '../external-players'
+import { playbackPreferencesQuery } from '@/api/queries'
+import { normalizePlaybackPreferences } from '../stream-playback'
 import { useDeviceStore } from '@/store/device-store'
 import { RevealedImage } from '@/components/revealed-image'
 import { Artwork } from '@/components/artwork'
@@ -92,8 +97,9 @@ export function MediaPlayerPage({
   const [activeTarget, setActiveTarget] = useState(target)
   const streamUrl = activeStream.url
   const token = useAppStore((state) => state.token)
-  const conversion = useConvertedStream(streamUrl)
-  const proxiedStreamUrl = conversion.enabled ? conversion.url : streamUrl ? buildStreamProxyUrl(streamUrl) : undefined
+  const externalPreferences = useQuery(playbackPreferencesQuery)
+  const desktop = desktopBridge()
+  const proxiedStreamUrl = desktop ? undefined : streamUrl ? buildStreamProxyUrl(streamUrl) : undefined
   const watchData = useQuery(
     watchDataQuery(
       activeTarget.mediaType,
@@ -126,6 +132,7 @@ export function MediaPlayerPage({
   )
   const overrideMediaId = activeTarget.overrideMediaId ?? activeTarget.mediaId
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const videoRef = useRef<HTMLVideoElement | null>(null)
   const playerRef = useRef<HTMLDivElement | null>(null)
   const lastSavedRef = useRef(0)
   const progressMutateRef = useRef<((payload: { position: number; duration?: number | null }) => void) | null>(null)
@@ -211,10 +218,10 @@ export function MediaPlayerPage({
     progressMutateRef.current?.({ position, duration: finiteDuration(duration) })
   }, [activeTarget])
 
-  const player = useMediabunnyPlayer({
+  const webPlayer = useMediabunnyPlayer({
     canvasRef,
     url: proxiedStreamUrl,
-    authToken: token,
+    authToken: null,
     savedPosition: readPlaybackPosition(activeTarget) ?? watchState.position_seconds,
     watched: watchState.watched,
     preferredAudioLanguage: playbackState.preferredAudioLanguage,
@@ -222,6 +229,9 @@ export function MediaPlayerPage({
     initialPlaybackSpeed: playbackState.playbackSpeed,
     onProgressCommit: saveProgress,
   })
+
+  const desktopPlayer = useDesktopPlayer({ videoRef, source: desktop && !watchData.isLoading ? streamUrl : undefined, hints: activeStream.behaviorHints, savedPosition: readPlaybackPosition(activeTarget) ?? watchState.position_seconds, watched: watchState.watched, onProgressCommit: saveProgress })
+  const player = desktop ? desktopPlayer : webPlayer
 
   const [controlsVisible, setControlsVisible] = useState(true)
   const hideControlsTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -396,7 +406,7 @@ export function MediaPlayerPage({
       setSubtitleDebugError(null)
       return
     }
-    void fetch(buildSubtitleProxyUrl(activeSubtitleTrack.url), { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
+    void buildSubtitleProxyUrl(activeSubtitleTrack.url).then(url => fetch(url))
       .then((response) => {
         if (!response.ok) {
           throw new Error(`subtitle proxy request failed with ${response.status}`)
@@ -409,7 +419,7 @@ export function MediaPlayerPage({
         }
         const cues = parseSubtitleText(text)
         if (!cues.length && text.trim()) {
-          console.warn('[subtitles] parsed zero cues', { subtitleUrl: activeSubtitleTrack.url })
+          console.warn('[subtitles] parsed zero cues')
           setSubtitleDebugError('Subtitle track loaded but no cues were parsed')
         } else {
           setSubtitleDebugError(null)
@@ -579,35 +589,36 @@ export function MediaPlayerPage({
           onPointerMove={revealControls}
           onPointerDown={revealControls}
           onClick={(event) => {
-            if (event.target === event.currentTarget || event.target === canvasRef.current) {
+            if (event.target === event.currentTarget || event.target === canvasRef.current || event.target === videoRef.current) {
               player.toggle()
             }
           }}
         >
-          <canvas
+          {desktop ? <video ref={videoRef} playsInline className="m-auto block h-dvh w-screen bg-black object-contain" aria-label={`Playing ${media.name}`} /> : <canvas
             ref={canvasRef}
             className={cn(
               'm-auto block h-dvh w-screen bg-black object-contain',
               !player.state.hasVideo && 'hidden',
             )}
             aria-label={`Playing ${media.name}`}
-          />
+          />}
 
-          {(player.state.status === 'loading' || player.state.status === 'idle') && !player.state.error && !conversion.error ? (
+          {(player.state.status === 'loading' || player.state.status === 'idle') && !player.state.error ? (
             <div className="player-loading pointer-events-none absolute inset-0 z-[4] grid place-content-center justify-items-center gap-6 bg-black text-center" role="status" aria-label="Loading stream">
               {typeof media.raw.logo === 'string' && media.raw.logo ? <RevealedImage className="player-loading-mark max-h-36 w-[min(55vw,360px)] object-contain" src={media.raw.logo} alt={media.name} /> : <strong className="player-loading-mark max-w-[70vw] text-2xl font-medium tracking-tight">{media.name}</strong>}
-              <span className="text-xs tracking-wide text-white/45">{conversion.enabled && !conversion.url ? `Preparing compatible video · ${Math.round(conversion.progress * 100)}%` : 'Opening stream'}</span>
-              {conversion.enabled && !conversion.url && <Button className="pointer-events-auto" variant="secondary" onClick={() => useDeviceStore.getState().setConversion(false)}>Play original stream instead</Button>}
+              <span className="text-xs tracking-wide text-white/45">{desktop ? 'Opening local stream…' : 'Opening stream'}</span>
+
             </div>
-          ) : !player.state.hasVideo && !player.state.error && !conversion.error ? (
+          ) : !player.state.hasVideo && !player.state.error ? (
             <div className="absolute inset-0 grid place-content-center text-center"><strong>{media.name}</strong><p className="text-white/50">Audio playback</p></div>
           ) : null}
 
-          {player.state.error || conversion.error ? (
+          {player.state.error ? (
             <div className={cn(stateBlock, 'absolute inset-0 min-h-0 bg-black/92 px-6')}>
               <strong>Unable to play this stream</strong>
-              <p>{conversion.error ?? player.state.error}</p>
-              {conversion.enabled && <Button onClick={() => useDeviceStore.getState().setConversion(false)}>Play original stream</Button>}
+              <p>{player.state.error}</p>
+              {desktop ? <Button onClick={desktopPlayer.retry}>Retry with full conversion</Button> : <><p>Web playback depends on the source and browser. Try the desktop app or an external player.</p><DesktopDownload /></>}
+              {streamUrl && <><Button onClick={() => { void navigator.clipboard.writeText(streamUrl).catch(() => {}) }}>Copy stream link</Button><Button onClick={() => { void openExternalPlayback(streamUrl, normalizePlaybackPreferences(externalPreferences.data)).catch(() => {}) }}>Open external player</Button></>}
               {stream.externalUrl ? (
                 <Button size="sm" asChild>
                   <a href={stream.externalUrl} target="_blank" rel="noreferrer">
@@ -665,9 +676,9 @@ export function MediaPlayerPage({
             onSubtitleOffsetYChange={(value) => updatePlaybackState({ subtitleOffsetY: value })}
             playbackSpeed={playbackState.playbackSpeed}
             onPlaybackSpeedChange={onChangeSpeed}
-            castReady={!conversion.enabled && castReady}
+            castReady={!desktop && castReady}
             castConnected={castConnected}
-            castUnavailableReason={conversion.enabled ? 'Turn off Prepare compatible video to cast the original stream.' : castUnavailableReason}
+            castUnavailableReason={desktop ? 'Use the web app to cast a directly supported stream. Local conversion is available on this computer only.' : castUnavailableReason}
             onCastToggle={() => {
               if (castConnected) {
                 castTransport.endCurrentSession(true)

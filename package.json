@@ -6,10 +6,12 @@
   "scripts": {
     "dev": "pnpm --filter frontend dev",
     "build": "pnpm --filter frontend build",
-    "start": "node scripts/start.mjs",
+    "start": "pnpm --filter frontend start",
     "lint": "pnpm --filter frontend lint",
     "test": "pnpm --filter frontend test && pnpm --filter frontend test:api",
-    "test:next": "pnpm --filter frontend test:next",
-    "package:server": "node scripts/package-server.mjs"
+    "db:migrate": "node scripts/migrate-postgres.mjs",
+    "db:import": "node scripts/import-sqlite.mjs",
+    "desktop:dev": "pnpm --filter @wadi/desktop dev",
+    "desktop:package": "pnpm --filter @wadi/desktop package"
   }
 }

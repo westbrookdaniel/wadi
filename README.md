@@ -1,136 +1,111 @@
 # Wadi
 
-A self-hosted streaming web app for your household. One Next.js server runs the UI, Node APIs and SQLite database. Open it in a browser on your TV computer, phone or laptop. Use Tailscale to reach the same server away from home.
+Wadi has a shared browsing interface, a lightweight Next.js web app, and an Electron desktop app with local streaming conversion.
 
-Wadi includes Stremio addon support, profiles, saved lists, watch progress, subtitles and a Mediabunny player. You supply your own sources. The server must stay on while you use it.
+**Implementation is awaiting user testing.** No builds, automated tests, playback checks, or installer checks were run for this revision. See [the manual checklist](docs/manual-testing.md).
 
-## Set up a server
+## Architecture
 
-These instructions work from a checkout on Windows, macOS and Linux. They are also the setup instructions to give a coding agent. There are no signed installers or universal binaries in this repository yet. Native dependencies must be installed and built on the target OS and CPU architecture.
+- **Vercel:** Next.js pages and the hosted API. Owns authentication, authorization, profiles, addon configuration, watchlists, player settings and watch progress.
+- **Railway:** PostgreSQL, accessed only by the hosted API. Desktop never receives a database URL or database credentials.
+- **Desktop:** a bundled React interface, encrypted session storage and an isolated media module with FFmpeg/FFprobe subprocesses. No local auth endpoints or database server.
+- **Web playback:** connects directly to providers. No hosted video proxy, subtitle proxy or conversion endpoint. Browser CORS and codec support determine compatibility. Cloud addons must use public addresses and return bounded JSON responses.
 
-Install **Node.js 24 LTS**, **pnpm 10.33.2**, Git and Tailscale. Use a regular user account. Then:
+Both clients use the same hosted account and data. Desktop opens the system browser to sign in, receives a one-minute single-use authorization code over a temporary loopback callback, and exchanges it using PKCE. Its session token stays in Electron's main process, encrypted on disk through the OS keyring. The renderer receives only a signed-in marker. Linux requires a working keyring; plaintext fallback is refused.
+
+## Web development
+
+Use Node 24 and pnpm 10.33.2. Create a Postgres database and set `DATABASE_URL` in the shell for the schema command. Copy `apps/frontend/.env.example` to `apps/frontend/.env.local` for Next.js development.
 
 ```sh
-git clone https://github.com/westbrookdaniel/wadi.git
-cd wadi
-pnpm install --frozen-lockfile
+pnpm install
+pnpm db:migrate
+pnpm dev
+```
+
+The schema command reads the shell environment, not Next.js `.env.local`. The web app runs on port 5173. Database migrations are explicit and do not run on each request. Existing routes are served by the Next.js API catch-all using an Express handler and a small Postgres connection pool.
+
+### Import existing Wadi data
+
+Run the schema migration first. Stop writes to the old SQLite app and back up its database. Point `DATABASE_URL` at an empty destination database, then run:
+
+```sh
+pnpm db:import /absolute/path/to/wadi.sqlite
+```
+
+The import preserves account IDs, password hashes, sessions, profiles, addons, lists, progress and settings. It uses a transaction, refuses nonempty target tables and opens SQLite read-only. Keep the SQLite backup until you have checked the imported data. Existing external-player templates are retained as Custom.
+
+## Deploy Next.js to Vercel
+
+1. Import this repository and set Root Directory to `apps/frontend`. Enable access to source files outside the root directory for the pnpm workspace.
+2. Use the Next.js framework preset and Node 24. Build with `pnpm build`; let Vercel manage the output directory. Install dependencies with the committed lockfile.
+3. Set server-only `DATABASE_URL` to Railway's public Postgres connection URL. Vercel cannot reach Railway private networking. Use TLS as configured by Railway and never disable certificate verification.
+4. Run `pnpm db:migrate` once against that database before sending users to the app.
+5. Set optional public installer links described below. Keep the Next.js app and database in nearby regions.
+
+`SESSION_TTL_DAYS` defaults to 30. Each warm API instance uses a pool of at most three connections; a pooled database endpoint is advisable as concurrency grows. The app does not create cloud resources or migrate a remote database automatically.
+
+| Setting | Where | Purpose |
+| --- | --- | --- |
+| `DATABASE_URL` | Vercel server / migration shell | Postgres connection, never public |
+| `SESSION_TTL_DAYS` | Vercel server | Session lifetime |
+| `NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL` | Web build | Optional direct installer/release-page link |
+| `NEXT_PUBLIC_DESKTOP_RELEASES_URL` | Web build | Release listing linked by `/desktop/download` |
+| `NEXT_PUBLIC_CHROMECAST_RECEIVER_APP_ID` | Web build | Optional custom Cast receiver |
+| `WADI_WEB_ORIGIN` | Desktop build | Hosted Wadi origin, e.g. `https://your-wadi.vercel.app` |
+| `WADI_UPDATE_URL` | Desktop build | Optional HTTPS generic updater feed |
+| `WADI_VIDEO_ENCODER` | Desktop runtime | Optional `libx264`, `h264_videotoolbox`, `h264_nvenc`, `h264_qsv`, `h264_amf` |
+
+The web player remains available. A small corner link offers the desktop download, and failures expose external playback/copy-link options. Hosting costs exclude video transfer because it bypasses both Vercel and Railway. Railway still bills database traffic crossing to Vercel.
+
+## Desktop development and packaging
+
+The desktop package compiles the shared interface with Vite; it does not package Next.js API routes. The installed app does not need Node or FFmpeg installed separately.
+
+```sh
+# Start the web API separately for local development.
+WADI_WEB_ORIGIN=http://localhost:5173 pnpm desktop:dev
+
+# Build installers against your deployed API.
+WADI_WEB_ORIGIN=https://your-wadi.vercel.app pnpm desktop:package
+```
+
+On Windows PowerShell set `$env:WADI_WEB_ORIGIN` before invoking pnpm. Build on each target OS/architecture so Electron and FFmpeg binaries match. Outputs are under `apps/desktop/release`: macOS DMG/ZIP, Windows NSIS installer, Linux AppImage/DEB. React assets and binaries are generated during packaging; they are not committed.
+
+Use your normal electron-builder signing credentials for Windows signing and macOS signing/notarization. The build matrix in `.github/workflows/desktop-release.yml` is manually triggered and uploads draft artifacts only. It does not publish installers or deploy the website. Unsigned local packages are for development. Redistributing FFmpeg requires including its license/build notices; the preparation script copies notices downloaded with ffmpeg-static. Complete your distribution review before a public release.
+
+For updates, build with `WADI_UPDATE_URL` and publish the installer artifacts and electron-builder metadata files to that HTTPS directory. Without it, automatic update checks are disabled. Desktop cannot run the shared account API offline; temporary connection failures should be retried without discarding the stored desktop session.
+
+## Local media behavior
+
+The desktop media module lives entirely in `apps/desktop/src/media.mjs`. It probes the source and produces a short HLS buffer while continuing to fetch/convert the movie:
+
+- Compatible single-audio-track MP4 plays through a local byte proxy without conversion.
+- H.264 video and AAC audio in other containers are copied into HLS.
+- Compatible video is copied while unsupported audio is converted to AAC.
+- Unsupported video is converted to H.264. macOS first tries VideoToolbox; other platforms default to software unless an encoder is selected. Failed hardware startup retries software.
+- “Retry with full conversion” handles sources that probe as compatible but fail in the player.
+- Seeking and audio-track/rate changes restart a local session at the requested position. Seeking depends on the provider's range/seek support.
+- Pause stops conversion. Resume opens a fresh session at the saved position. The full movie is never required before playback starts.
+
+Only one conversion runs at a time. The rolling playlist retains roughly 96 seconds plus a deletion margin, with a 512 MiB cache ceiling checked periodically. Very high-bitrate sources can reach this ceiling. Closing playback terminates its subprocess, and stale sessions are removed. Source credentials are not logged or sent to the hosted media API.
+
+This revision does not promise real-time 4K conversion on every computer, HDR tone mapping, embedded subtitle rendering, torrent downloading or local conversion served to other devices. The shared external subtitle overlay remains available. Local media URLs are authenticated, loopback-only and scoped to this app; Chromecast cannot fetch them. Use web casting for directly supported provider URLs.
+
+## External players
+
+Settings offers Play in Wadi, external playback options, or copy link. Presets include Android's chooser, VLC, MPV, IINA, MX Player, Just Player, Outplayer, Moonplayer, CineUltra, Infuse, VidHub and M3U playlists, plus a custom template containing `{url}`. Presets show their platform support. Selecting a preset preserves the custom template for later.
+
+The list and link shapes follow [Stremio Web's presets](https://github.com/Stremio/stremio-web/blob/development/src/common/CONSTANTS.js) and [Stremio Core's deep links](https://github.com/Stremio/stremio-core/blob/development/src/deep_links/mod.rs). Wadi does not send external-player callbacks to Stremio. External players must be installed, custom protocol handlers may require setup, and external playback does not sync progress back automatically. M3U is the fallback when no app protocol handler exists.
+
+## Checks for the user
+
+```sh
 pnpm build
-pnpm package:server
-pnpm start
-```
-
-Open `http://localhost:5173`. Create your account, add profiles and configure addons. Keep the server terminal open for the first test. The production launcher uses the bundled Next standalone build. Node itself must be installed.
-
-Copy `wadi-server.example.json` to `wadi-server.json` if you want to configure the port, bind address or conversion. This file is private and ignored by Git:
-
-```json
-{
-  "host": "0.0.0.0",
-  "port": 5173,
-  "conversion": false
-}
-```
-
-An optional `dataDirectory` sets an absolute path for the database and temporary conversion files. Otherwise the launcher stores them here:
-
-| OS | Default data directory |
-| --- | --- |
-| Windows | `%LOCALAPPDATA%\Wadi` |
-| macOS | `~/Library/Application Support/Wadi` |
-| Linux | `$XDG_DATA_HOME/wadi`, or `~/.local/share/wadi` |
-
-Environment variables override the file: `WADI_HOST`, `PORT`, `WADI_DATA_DIR`, `DATABASE_URL`, `WADI_ENABLE_CONVERSION`. Set `WADI_ENABLE_CONVERSION=1` to allow conversion, or `0` to disable it. `SESSION_TTL_DAYS` controls session lifetime, default 30 days.
-
-## Access from other devices with Tailscale
-
-1. Install Tailscale on the server and each phone/computer, and sign into your tailnet.
-2. On the server, run `tailscale serve --bg http://127.0.0.1:5173`.
-3. Follow the HTTPS enablement prompt if Tailscale displays one. Run `tailscale serve status` and use the HTTPS address it prints.
-4. Bookmark that address or add it to each device's home screen. Use the same address consistently so device preferences and login stay together.
-
-This uses **private Tailscale Serve**, not public Funnel. No Cloudflare Tunnel, Vercel, Railway or Postgres is required. The browser uses the API on the same host; there is no separate API host to configure. HTTPS matters for browser media and controller APIs. Localhost is also a secure browser context, but a plain LAN HTTP address may lack those capabilities.
-
-For Tailscale-only access you can set `host` to `127.0.0.1`. Keep `0.0.0.0` if you also need LAN access and allow the port through the host firewall on your private network. Tailscale may use a relay when it cannot establish a direct connection, which can reduce streaming throughput. See [Tailscale Serve](https://tailscale.com/docs/features/tailscale-serve).
-
-## A box under the TV
-
-The same machine can run the server and display Wadi over HDMI. It needs a desktop environment and a browser with working hardware video decoding. A headless server alone will not produce a TV interface.
-
-In Wadi's **Settings → This device**, enable **TV navigation** on the TV browser. This preference stays on that browser; your phone keeps its normal controls.
-
-- Arrow keys, a controller D-pad or left stick move focus between controls.
-- Enter or controller A selects. Escape or B closes an open menu/dialog or goes back.
-- Left/right arrows edit text or adjust sliders. Up/down leave those controls; native menus keep their own navigation. Escape leaves an editing field.
-- Player controls remain visible in TV mode. Focus the seek bar to seek with arrows.
-- Pair a standard browser-compatible USB/Bluetooth controller and press a button to let the browser detect it. A keyboard remote also works. Text entry still needs a keyboard or your OS on-screen keyboard. HDMI-CEC remote support is not implemented.
-
-Use **Toggle fullscreen** in device settings for an ordinary session. For a TV that opens directly into Wadi, configure browser startup with a kiosk command after the server starts. For example, on Windows:
-
-```powershell
-& "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --kiosk http://localhost:5173/home --edge-kiosk-type=fullscreen --no-first-run
-```
-
-Check your actual browser installation path. Edge kiosk sessions can clear browser data; for persistent login and TV preferences, a dedicated normal browser profile launched fullscreen is often more suitable. Chrome/Chromium supports `--kiosk http://localhost:5173/home` with a dedicated `--user-data-dir` directory. Keep that profile separate from your everyday browser and do not use an incognito profile. On macOS you can use the fullscreen button in a normal persistent browser window.
-
-### Start automatically
-
-Configure this on the target machine after a manual startup passes:
-
-- **Windows:** Task Scheduler, at user logon, run the absolute path to `node.exe` with `"C:\path\to\wadi\scripts\start.mjs"`. Set the working directory to the checkout and restart on failure. Start the kiosk browser after the server is reachable.
-- **macOS:** use a LaunchAgent with `ProgramArguments` containing the absolute Node path and `scripts/start.mjs` path, `RunAtLoad`, `KeepAlive` and log paths. Use the same user that owns the data directory. Start the browser at login.
-- **Linux:** use a systemd service with `User`, `WorkingDirectory`, `ExecStart=/absolute/path/to/node /absolute/path/to/wadi/scripts/start.mjs` and `Restart=on-failure`. Enable it at boot. Start Chromium from the desktop session's autostart after `/health` responds.
-
-Give the server a stable Tailscale machine name, disable automatic sleep, enable restart after power loss if the machine supports it, and keep the OS patched. Do not put a personal admin account into automatic login on a shared TV; use a dedicated OS account.
-
-## Hardware estimates
-
-These are planning estimates, not measured concurrent-stream guarantees. Source bitrate, codecs, subtitles, drivers and the browser matter more than the number of saved titles.
-
-| Use | Suggested starting point |
-| --- | --- |
-| Server only, original streams, a few household clients | Recent 64-bit dual/quad-core CPU, 4 GB RAM minimum, 8 GB comfortable, 32 GB free SSD space |
-| Server plus HDMI TV browser | Modern quad-core CPU with hardware video decoding, 8 GB RAM for Linux or 16 GB comfortable for Windows, 128 GB SSD, HDMI supporting your TV's resolution/refresh rate |
-| Optional conversion plus TV playback | Modern CPU/iGPU with hardware H.264 encoding and decoding for your source codecs, 16 GB RAM, 256 GB SSD, active cooling |
-| Multiple conversions or demanding 4K/HDR processing | Not a supported sizing target for this version. Conversion is limited to one job at a time; HDR tone mapping is not implemented |
-
-Start with an existing PC before buying hardware. For a small box, integrated graphics with supported video acceleration is more useful than buying a CPU with many cores but no working encoder. Check the exact GPU's source codec support and its drivers. Mediabunny's server extension can use hardware acceleration, but availability is platform- and codec-dependent. An ARM board can serve the app, but do not assume it will also decode your TV streams or convert them efficiently.
-
-Use wired gigabit Ethernet for the host where possible. Remote playback is constrained by **home upload speed**: two 10 Mb/s streams need about 20 Mb/s plus headroom. At 50 Mb/s, one stream transfers roughly 22.5 GB/hour. Original streams currently pass through Wadi's server proxy; they are not automatically bypassing the server.
-
-Electricity estimate: a machine averaging 10 W uses about 7.2 kWh/month; 50 W uses about 36 kWh/month. Multiply by your electricity rate. There is no mandatory cloud hosting bill for this setup.
-
-## Optional codec conversion
-
-Conversion is **off by default**, both on the server and on each device. Enable `conversion: true` in `wadi-server.json` and restart the server. Then turn on **Settings → This device → Prepare compatible video** only on devices that need it. Turning the server flag off prevents new conversion jobs. Leave it off to avoid conversion CPU/GPU work.
-
-Wadi uses [Mediabunny's server extension](https://mediabunny.dev/guide/extensions/server), which uses NodeAV and native FFmpeg libraries. This is not a separate FFmpeg CLI service. The dependency installation includes platform-specific native components; availability still needs validation on your target machine.
-
-This first implementation prepares an H.264/AAC MP4 **before playback**, copying compatible tracks where possible and converting others. A progress message appears while it works. It is not live adaptive transcoding. It preserves resolution, does not tone-map HDR, and may take minutes or fail on unsupported material. Use **Play original stream** on a conversion error to turn the device preference off.
-
-Limits: one conversion at a time, at most two cached jobs, 4 GiB output per job, a 30-minute preparation timeout, and cleanup after 30 minutes without access. Leaving the player deletes its job. Refresh starts preparation again, then resumes saved progress. Large 4K files can exceed these limits. Addon subtitles remain separately selectable; this does not burn subtitles into the picture or guarantee every embedded subtitle format survives conversion.
-
-Chromecast still needs a reachable media URL and supported codecs. A Chromecast does not inherit your phone's Tailscale connection. This conversion mode is for browser playback; turn conversion off on the device before casting the original stream. Test your actual Chromecast on the home LAN before relying on it remotely.
-
-## Existing data, backups and updates
-
-The development database lives in `apps/frontend/data/wadi.sqlite`; the production launcher defaults to the OS data directory above. To keep an existing library, stop the old server and copy its SQLite database to the new directory before first startup, or point `dataDirectory` at the existing directory. Do not start two Wadi instances against the same database.
-
-Stop Wadi before a file-copy backup. Copy `wadi.sqlite` and any matching `-wal` / `-shm` files together. Keep backups outside the installation folder. Never commit your database, addon credentials or server configuration. Conversion cache files are disposable.
-
-To update: back up the database, stop the server, pull the new commit, run `pnpm install --frozen-lockfile`, `pnpm build`, `pnpm package:server`, then restart. Keep the old checkout/build and backup for rollback. Data stays outside the build folder. If an update changes the schema, restore the matching backup when rolling back.
-
-## Verification and development
-
-```sh
-pnpm dev                   # Development only, port 5173
 pnpm lint
-pnpm --filter frontend exec tsc --noEmit
-pnpm test                  # UI and API tests, including local codec conversion
-pnpm build
-pnpm package:server
-pnpm test:next             # Isolated production auth/progress/range/deep-link checks
+pnpm --filter frontend test
+# A disposable database; tests create and remove isolated schemas.
+TEST_DATABASE_URL=postgresql://... pnpm --filter frontend test:api
 ```
 
-Before calling a new host ready, test login, library contents, a real stream, subtitles, seeking and refresh/resume locally and over Tailscale. On the TV test focus movement, dialogs, season selection, seeking and fullscreen. Test with an actual controller; emulated key input is not proof that every controller maps correctly. Run the conversion test on that host if enabling codecs.
-
-The macOS build can be checked here. Windows/Linux installation, GPU drivers, HDMI output and physical controller/Chromecast behavior require checks on those devices. No installer is claimed to be signed or tested on an unavailable OS.
+The old SQLite standalone launcher, completed-MP4 conversion and associated smoke test were retired. Existing API tests were adapted for Postgres and the absence of cloud video endpoints; they have not been run. Complete [manual testing](docs/manual-testing.md) before relying on playback or publishing installers.

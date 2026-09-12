@@ -189,10 +189,11 @@ export type BrowseLayout = {
   pages: Record<BrowsePageKey, BrowseLayoutPage>
 }
 
-export type PlaybackAction = 'external' | 'copy'
+export type PlaybackAction = 'internal' | 'external' | 'copy'
 
 export type PlaybackPreferences = {
   stream_action: PlaybackAction
+  external_player_preset?: string
   external_player_template: string
 }
 

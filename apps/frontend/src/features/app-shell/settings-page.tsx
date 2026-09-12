@@ -1,3 +1,4 @@
+import { externalPlayers, validCustomTemplate } from '@/features/media/detail/external-players'
 import { DeviceSettings } from './device-settings'
 import { RevealedImage } from '@/components/revealed-image'
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
@@ -159,7 +160,7 @@ function ExternalPlaybackSettingsSection() {
         External playback
       </h3>
       <p className="m-0 text-sm text-muted-foreground">
-        Direct streams play in Wadi. These settings control links that need an external player.
+        Choose where streams open. External apps must be installed and may not report watch progress back to Wadi.
       </p>
 
       <div className="grid gap-3 sm:grid-cols-2">
@@ -167,34 +168,37 @@ function ExternalPlaybackSettingsSection() {
           Default stream action
           <Select
             value={data.stream_action}
-            onValueChange={(value) => updateDraft("stream_action", value as PlaybackPreferences["stream_action"])}
+            onValueChange={(value) => { if (value === "internal" || value === "external" || value === "copy") updateDraft("stream_action", value) }}
           >
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="internal">Play in Wadi</SelectItem>
               <SelectItem value="external">Open in external player</SelectItem>
               <SelectItem value="copy">Copy stream link</SelectItem>
             </SelectContent>
           </Select>
         </Label>
 
-        <Label className="grid gap-1.5 sm:col-span-2">
-          External player URL template
-          <Input
-            value={data.external_player_template}
-            onChange={(event) => updateDraft("external_player_template", event.target.value)}
-            placeholder="vlc://{url}"
-          />
-          <span className="text-xs text-muted-foreground">
-            Include <code>{"{url}"}</code> where the encoded stream URL should go. For example: <code>vlc://{"{url}"}</code>.
-          </span>
+        <Label className="grid gap-1.5">External player
+          <Select value={data.external_player_preset ?? 'custom'} onValueChange={value => updateDraft('external_player_preset', value)}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>{externalPlayers.map(player => <SelectItem key={player.id} value={player.id}>{player.label} · {player.platforms}</SelectItem>)}</SelectContent>
+          </Select>
         </Label>
+        {(data.external_player_preset ?? 'custom') === 'custom' && <Label className="grid gap-1.5 sm:col-span-2">
+          Custom player URL template
+          <Input value={data.external_player_template} onChange={event => updateDraft('external_player_template', event.target.value)} placeholder="vlc://{url}" />
+          <span className="text-xs text-muted-foreground">Include <code>{'{url}'}</code> where the encoded stream URL should go. Your custom template is retained when switching presets.</span>
+          {!validCustomTemplate(data.external_player_template) && <span className="text-xs text-destructive">Enter an app URL containing {'{url}'}.</span>}
+        </Label>}
+        <p className="text-xs text-muted-foreground sm:col-span-2">Choose a preset for the device you are using. M3U downloads a playlist you can open in another player. “Play in Wadi” disables automatic external playback.</p>
       </div>
 
       {saveMutation.error ? <p role="alert" className="text-sm text-destructive">{saveMutation.error.message}</p> : null}
       <div className="flex justify-end">
-        <Button type="button" onClick={onSave} disabled={saveMutation.isPending || !draft || (draft.stream_action === prefs.data?.stream_action && draft.external_player_template === prefs.data?.external_player_template)}>
+        <Button type="button" onClick={onSave} disabled={saveMutation.isPending || !draft || (data.external_player_preset === 'custom' && !validCustomTemplate(data.external_player_template))}>
           Save external playback settings
         </Button>
       </div>

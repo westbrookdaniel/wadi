@@ -35,16 +35,17 @@ describe('stream playback helpers', () => {
     expect(buildExternalPlayerUrl('https://example.com/video', 'vlc://')).toBeNull()
   })
 
-  it('normalizes missing or unsupported preferences to the copy-link default', () => {
+  it('normalizes missing or unsupported preferences to the built-in player default', () => {
     expect(normalizePlaybackPreferences()).toEqual({
-      stream_action: 'copy',
+      stream_action: 'internal',
       external_player_template: DEFAULT_EXTERNAL_PLAYER_TEMPLATE,
+      external_player_preset: 'vlc',
     })
     expect(
       normalizePlaybackPreferences({
         stream_action: 'unsupported' as never,
         external_player_template: '',
       }),
-    ).toEqual({ stream_action: 'copy', external_player_template: '' })
+    ).toEqual({ stream_action: 'internal', external_player_template: '', external_player_preset: 'vlc' })
   })
 })

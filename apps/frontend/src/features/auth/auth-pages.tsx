@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import { desktopBridge } from '@/lib/desktop'
 import { RevealedImage } from '@/components/revealed-image'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from '@tanstack/react-form'
@@ -27,7 +29,7 @@ const authSchema = z
     path: ['confirmPassword'],
   })
 
-export function AuthPage({ mode, onModeChange }: { mode: AuthMode; onModeChange: (mode: AuthMode) => void }) {
+function WebAuthPage({ mode, onModeChange }: { mode: AuthMode; onModeChange: (mode: AuthMode) => void }) {
   const queryClient = useQueryClient()
   const setToken = useAppStore((state) => state.setToken)
   const setActiveProfileId = useAppStore((state) => state.setActiveProfileId)
@@ -175,4 +177,19 @@ function authError(error: unknown) {
   }
 
   return 'Unable to continue.'
+}
+
+export function AuthPage(props: Parameters<typeof WebAuthPage>[0]) {
+  return desktopBridge() ? <DesktopLogin /> : <WebAuthPage {...props} />
+}
+function DesktopLogin() {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const connect = async () => {
+    setBusy(true); setError('')
+    try { if (await desktopBridge()?.signIn()) useAppStore.getState().setToken('desktop-session') }
+    catch (error) { setError(error instanceof Error ? error.message : 'Sign-in failed') }
+    finally { setBusy(false) }
+  }
+  return <main className="grid min-h-screen place-content-center gap-5 p-8"><h1 className="text-3xl">Welcome to Wadi</h1><p>Sign in securely in your browser to access your library.</p><Button disabled={busy} onClick={() => void connect()}>{busy ? 'Waiting for browser…' : 'Sign in with Wadi'}</Button><p role="alert">{error}</p></main>
 }

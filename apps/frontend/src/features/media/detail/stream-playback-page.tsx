@@ -1,3 +1,5 @@
+import { openExternalPlayback, externalPlayerLink } from './external-players'
+import { DesktopDownload } from '@/components/desktop-download'
 import { lazy, Suspense } from 'react'
 const MediaPlayerPage = lazy(() => import('./player').then(module => ({ default: module.MediaPlayerPage })))
 import { useQuery } from '@tanstack/react-query'
@@ -13,7 +15,6 @@ import { cn } from '@/lib/utils'
 import { useToast } from '@/components/ui/toast-context'
 
 import {
-  buildExternalPlayerUrl,
   getStreamUrl,
   normalizePlaybackPreferences,
 } from './stream-playback'
@@ -38,13 +39,13 @@ function ExternalPlaybackPage({
   const externalPlayerUrl = useMemo(
     () =>
       streamUrl
-        ? buildExternalPlayerUrl(streamUrl, preferences.external_player_template)
+        ? externalPlayerLink(streamUrl, preferences)
         : null,
-    [preferences.external_player_template, streamUrl],
+    [preferences.external_player_template, preferences.external_player_preset, streamUrl],
   )
   const [copied, setCopied] = useState(false)
   const [copyError, setCopyError] = useState<string | null>(null)
-  const hasExternalPlayerAction = Boolean(externalPlayerUrl)
+  const hasExternalPlayerAction = Boolean(externalPlayerUrl) || preferences.external_player_preset === 'm3u'
   const primaryAction =
     preferences.stream_action === 'external' && hasExternalPlayerAction
       ? 'external'
@@ -69,6 +70,7 @@ function ExternalPlaybackPage({
     }
   }
 
+  const launch = () => { if (streamUrl) void openExternalPlayback(streamUrl, preferences).catch(error => setCopyError(error instanceof Error ? error.message : 'Could not open player')) }
   return (
     <div
       className="fixed inset-0 z-50 overflow-y-auto bg-background/80 p-4 backdrop-blur-sm sm:p-8"
@@ -132,13 +134,12 @@ function ExternalPlaybackPage({
             </div>
           )}
 
+          <DesktopDownload />
           <div className="flex flex-wrap gap-2">
             {primaryAction === 'external' ? (
-              <Button size="lg" asChild>
-                <a href={externalPlayerUrl ?? '#'}>
+              <Button size="lg" onClick={launch}>
                   <ExternalLink aria-hidden="true" />
                   Open in external player
-                </a>
               </Button>
             ) : (
               <Button size="lg" type="button" disabled={!streamUrl} onClick={() => void copyStreamLink()}>
@@ -153,11 +154,9 @@ function ExternalPlaybackPage({
                 {copied ? 'Copied' : 'Copy link instead'}
               </Button>
             ) : hasExternalPlayerAction ? (
-              <Button size="lg" variant="secondary" asChild>
-                <a href={externalPlayerUrl ?? '#'}>
+              <Button size="lg" variant="secondary" onClick={launch}>
                   <ExternalLink aria-hidden="true" />
                   Open in external player
-                </a>
               </Button>
             ) : null}
           </div>
@@ -177,5 +176,9 @@ function ExternalPlaybackPage({
 }
 
 export function StreamPlaybackPage(props: Parameters<typeof ExternalPlaybackPage>[0]) {
+  const prefs = useQuery(playbackPreferencesQuery)
+  const [internal, setInternal] = useState(false)
+  if (prefs.isLoading) return <div className="p-8">Loading playback preferences…</div>
+  if (!internal && prefs.data && prefs.data.stream_action !== 'internal') return <><ExternalPlaybackPage {...props} /><Button className="fixed bottom-8 left-8 z-[60]" onClick={() => setInternal(true)}>Play in Wadi instead</Button></>
   return props.stream.url && /^https?:\/\//i.test(props.stream.url) ? <Suspense fallback={<div className="fixed inset-0 z-50 grid place-items-center bg-black text-white" role="status">Opening player…</div>}><MediaPlayerPage key={`${props.target.videoId ?? props.target.mediaId}:${props.stream.url}`} {...props} /></Suspense> : <ExternalPlaybackPage {...props} />
 }
