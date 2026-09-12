@@ -18,9 +18,14 @@ export function DeviceSettings() {
       </SettingsSelect>
     </div>
 
-    {desktop ? <label className="flex items-center justify-between gap-6"><span className="text-sm font-medium">Audio and video conversion</span><input type="checkbox" role="switch" aria-label="Audio and video conversion" className="size-5 shrink-0 accent-primary" checked={device.conversionEnabled} onChange={event => device.setConversionEnabled(event.target.checked)} /></label> : null}
+    {desktop ? <div className="grid gap-2">
+      <label htmlFor="conversion" className="text-sm font-medium">Audio and video conversion</label>
+      <SettingsSelect id="conversion" aria-describedby="conversion-description" className="max-w-sm" value={device.conversionEnabled ? 'on' : 'off'} onValueChange={value => { if (value === 'on' || value === 'off') device.setConversionEnabled(value === 'on') }}>
+        <option value="on">On</option><option value="off">Off</option>
+      </SettingsSelect>
+      <p id="conversion-description" className="text-sm text-muted-foreground">Converts unsupported audio and video on your device while you watch. Turning this off reduces processing, but some streams may not play.</p>
+    </div> : null}
     {desktop ? <div className="grid gap-2"><span className="text-sm font-medium">App updates</span><div className="flex flex-wrap items-center gap-3"><Button variant="outline" size="sm" disabled={checking} onClick={async () => { setChecking(true); setUpdateError(''); try { await desktop.checkUpdates() } catch { setUpdateError('Could not check for updates. Please try again.') } finally { setChecking(false) } }}>{checking ? 'Checking…' : 'Check for updates'}</Button>{version ? <span className="text-sm text-muted-foreground">Version {version}</span> : null}</div>{updateError ? <p role="alert" className="w-full text-sm text-destructive">{updateError}</p> : null}</div> : null}
-    {!desktop ? <p className="text-sm text-muted-foreground">Web playback connects directly to the provider. Use the desktop app for local codec conversion and sources that block browser access.</p> : null}
   </section>
 }
 
