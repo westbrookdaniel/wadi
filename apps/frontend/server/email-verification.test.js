@@ -19,6 +19,12 @@ test('verification gates registration and existing accounts; expires, throttles,
   const verified=await request('verify-email',{challenge:pending.body.challenge,code:mail[0].code});assert.equal(verified.status,200);assert.ok(verified.body.token);
   assert.equal((await request('verify-email',{challenge:pending.body.challenge,code:mail[0].code})).status,400);
   assert.equal((await request('login',credentials)).status,200);
+  await db.run('UPDATE users SET email_verified_at=NULL WHERE email=?', credentials.email);
+  const denied=await fetch(`http://127.0.0.1:${server.address().port}/api/auth/me`,{headers:{Authorization:`Bearer ${verified.body.token}`}});
+  assert.equal(denied.status,401);
+  const desktopDenied=await fetch(`http://127.0.0.1:${server.address().port}/api/auth/desktop/authorize`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${verified.body.token}`},body:JSON.stringify({challenge:'a'.repeat(43)})});
+  assert.equal(desktopDenied.status,401);
+
   const limited=await request('register',{...credentials,email:'attempts@example.com'});
   const real=mail.at(-1).code, bad=real==='00000000'?'11111111':'00000000';
   for(let i=0;i<5;i++)assert.equal((await request('verify-email',{challenge:limited.body.challenge,code:bad})).status,400);
