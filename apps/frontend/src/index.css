@@ -391,8 +391,8 @@ select {
 .dark { color-scheme: dark; }
 
 /* The desktop window uses inset native controls over the app surface. */
-.desktop-app body { padding-top: 48px; }
-.desktop-app .auth-screen { min-height: calc(100dvh - 48px); }
-.desktop-drag-region { position: fixed; inset: 0 0 auto; height: 48px; z-index: 60; background: var(--background); -webkit-app-region: drag; }
+.desktop-app body { padding-top: 0; }
+
+.desktop-drag-region { position: fixed; inset: 0 0 auto; height: 28px; z-index: 40; background: transparent; -webkit-app-region: drag; }
 .desktop-app:fullscreen body { padding-top: 0; }
 .desktop-app:fullscreen .desktop-drag-region { display: none; }

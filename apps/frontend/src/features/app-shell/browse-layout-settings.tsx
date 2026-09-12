@@ -22,7 +22,7 @@ import { useMemo, useState } from 'react'
 import { browseLayoutQuery, catalogsQuery, listsQuery, queryKeys, updateBrowseLayout } from '@/api/queries'
 import type { BrowseLayout, BrowsePageKey } from '@/api/types'
 import { EmptyState, ErrorState, LoadingState } from '@/components/status'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { SettingsSelect } from '@/components/ui/settings-select'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -250,10 +250,9 @@ function SortableLayoutRow({
         <p className="m-0 truncate text-xs text-muted-foreground">{row.subtitle ?? (row.kind === 'continue' ? 'Resume playback' : 'Your list')}</p>
       </div>
       {(row.catalogEntries?.length ?? 0) > 1 ? (
-        <Select value={mode} onValueChange={value => { if (value === 'combined' || value === 'movie' || value === 'series') onModeChange(value) }}>
-          <SelectTrigger size="sm" className="w-[112px] shrink-0" aria-label={`${row.title} content`}><SelectValue /></SelectTrigger>
-          <SelectContent><SelectItem value="combined">Combined</SelectItem><SelectItem value="movie">Movies</SelectItem><SelectItem value="series">TV shows</SelectItem></SelectContent>
-        </Select>
+        <SettingsSelect className="w-[112px] shrink-0" aria-label={`${row.title} content`} value={mode} onValueChange={value => { if (value === 'combined' || value === 'movie' || value === 'series') onModeChange(value) }}>
+          <option value="combined">Combined</option><option value="movie">Movies</option><option value="series">TV shows</option>
+        </SettingsSelect>
       ) : null}
       <Button type="button" size="icon-sm" variant={hidden ? 'secondary' : 'ghost'} onClick={onToggleHidden} aria-label={hidden ? `Show ${row.title}` : `Hide ${row.title}`}>
         {hidden ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}

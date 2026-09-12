@@ -49,7 +49,6 @@ export function AppShell({
       )}
       style={backdrop.style}
     >
-      {!hideNavigation && <DesktopDownload corner />}
       {hideNavigation ? null : (
         <aside
           className="fixed inset-y-0 left-0 z-20 grid w-[88px] place-items-center border-r border-sidebar-border bg-sidebar/58 shadow-[16px_0_42px_hsl(0_0%_0%/14%)] backdrop-blur-xl max-[800px]:inset-x-0 max-[800px]:top-auto max-[800px]:bottom-0 max-[800px]:h-[72px] max-[800px]:w-auto max-[800px]:border-t max-[800px]:border-r-0 max-[800px]:shadow-[0_-16px_42px_hsl(0_0%_0%/18%)]"
@@ -96,6 +95,7 @@ export function AppShell({
               );
             })}
           </nav>
+          <DesktopDownload sidebar />
         </aside>
       )}
 

@@ -63,13 +63,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SettingsSelect } from '@/components/ui/settings-select'
 import { dangerText, mutedText, pageStack } from "@/lib/styles";
 import { canSubmitForm, fieldError, fieldErrorClass } from "@/lib/form";
 import { cn } from "@/lib/utils";
@@ -166,26 +160,20 @@ function ExternalPlaybackSettingsSection() {
       <div className="grid min-w-0 grid-cols-1 gap-3">
         <Label className="grid min-w-0 gap-1.5">
           Default stream action
-          <Select
+          <SettingsSelect
             value={data.stream_action}
             onValueChange={(value) => { if (value === "internal" || value === "external" || value === "copy") updateDraft("stream_action", value) }}
           >
-            <SelectTrigger className="w-full min-w-0">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="internal">Play in Wadi</SelectItem>
-              <SelectItem value="external">Open in external player</SelectItem>
-              <SelectItem value="copy">Copy stream link</SelectItem>
-            </SelectContent>
-          </Select>
+              <option value="internal">Play in Wadi</option>
+              <option value="external">Open in external player</option>
+              <option value="copy">Copy stream link</option>
+          </SettingsSelect>
         </Label>
 
         <Label className="grid min-w-0 gap-1.5">External player
-          <Select value={data.external_player_preset ?? 'custom'} onValueChange={value => updateDraft('external_player_preset', value)}>
-            <SelectTrigger className="w-full min-w-0"><SelectValue /></SelectTrigger>
-            <SelectContent>{externalPlayers.map(player => <SelectItem key={player.id} value={player.id}>{player.label} · {player.platforms}</SelectItem>)}</SelectContent>
-          </Select>
+          <SettingsSelect value={data.external_player_preset ?? 'custom'} onValueChange={value => updateDraft('external_player_preset', value)}>
+            {externalPlayers.map(player => <option key={player.id} value={player.id}>{player.label} · {player.platforms}</option>)}
+          </SettingsSelect>
         </Label>
         {(data.external_player_preset ?? 'custom') === 'custom' && <Label className="grid min-w-0 gap-1.5">
           Custom player URL template
