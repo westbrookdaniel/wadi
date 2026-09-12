@@ -287,7 +287,7 @@ export function createApp({ database = process.env.DATABASE_URL, sessionDays = 3
         if (res.headersSent)
             return res.destroy(err);
         const status = err instanceof z.ZodError ? 400 : err.status ?? ((err.code === '23505' || err.code?.includes('CONSTRAINT') || [19, 1555, 2067].includes(err.errcode)) ? 409 : 500);
-        res.status(status).json({ error: status === 500 ? 'Server error' : err.message });
+        res.status(status).json({ error: status === 500 ? 'Server error' : err.message, ...(err.code === 'ADDON_PROVIDER_ERROR' ? { code: err.code } : {}) });
     });
     return { app, db };
 }

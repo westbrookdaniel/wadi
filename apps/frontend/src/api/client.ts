@@ -6,7 +6,7 @@ export class ApiError extends Error {
   body: unknown
 
   constructor(status: number, body: unknown) {
-    super(status >= 500 ? 'Wadi is temporarily unavailable. Please try again in a moment.' : body && typeof body === 'object' && 'error' in body && typeof body.error === 'string' && body.error.length < 200 && !/[<>]/.test(body.error) ? body.error : 'Could not complete the request. Please try again.')
+    super(status >= 500 && !(status === 502 && body && typeof body === 'object' && 'code' in body && body.code === 'ADDON_PROVIDER_ERROR') ? 'Wadi is temporarily unavailable. Please try again in a moment.' : body && typeof body === 'object' && 'error' in body && typeof body.error === 'string' && body.error.length < 200 && !/[<>]/.test(body.error) ? body.error : 'Could not complete the request. Please try again.')
     this.name = 'ApiError'
     this.status = status
     this.body = body

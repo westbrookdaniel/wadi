@@ -63,6 +63,6 @@ export async function fetchAddonJson(source, options) {
         : ['Addon must use a public address', 'Invalid addon URL', 'Addon did not return JSON', 'Invalid addon JSON', 'Addon response exceeds 3 MB', 'Too many addon redirects'].includes(error.message)
           ? error.message
           : `Could not connect to the addon provider (${host}). Please try again later.`;
-    throw Object.assign(new Error(message), { status: 502 });
+    throw Object.assign(new Error(message), { status: 502, code: 'ADDON_PROVIDER_ERROR' });
   }
 }
