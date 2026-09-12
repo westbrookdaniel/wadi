@@ -44,7 +44,7 @@ export function PosterSkeletonRow({ count = 8 }: { count?: number }) {
   return (
     <MediaRow>
       {Array.from({ length: count }).map((_, index) => (
-        <Skeleton className="aspect-[2/3] rounded-lg" key={index} />
+        <div key={index} className="grid gap-2.5 max-[800px]:gap-1.5"><Skeleton className="aspect-[2/3] rounded-lg" /><div><Skeleton className="h-[23px] w-3/4 max-[800px]:h-[18px]" /><Skeleton className="mt-1 h-5 w-1/2 max-[800px]:h-[15px]" /></div></div>
       ))}
     </MediaRow>
   );

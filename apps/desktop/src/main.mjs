@@ -91,7 +91,7 @@ async function signIn() {
 }
 async function startDesktop() {
 if (process.platform === 'darwin') {
-  app.dock?.setIcon(join(here, '../resources/icon.png'));
+  app.dock?.setIcon(join(here, '../resources/icon-mac.png'));
   Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: 'Wadi', submenu: [{ role: 'about' }, { label: 'Check for Updates…', click: () => void updates?.check(true) }, { label: 'Settings…', accelerator: 'Command+,', click: () => { window?.show(); window?.focus(); window?.webContents.send('open-settings'); } }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] }, { role: 'editMenu' }, { role: 'viewMenu' }, { role: 'windowMenu' }]));
 }
 

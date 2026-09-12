@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import { Button } from '@/components/ui/button'
 import { desktopBridge } from '@/lib/desktop'
 import { useDeviceStore } from '@/store/device-store'
 import { SettingsSelect } from '@/components/ui/settings-select'
@@ -5,6 +7,8 @@ import { ChevronDown, FlaskConical } from 'lucide-react'
 export function DeviceSettings() {
   const device = useDeviceStore()
   const desktop = desktopBridge()
+  const [checking, setChecking] = useState(false)
+  const [updateError, setUpdateError] = useState('')
   return <section className="settings-panel grid gap-5" aria-label="This device">
     <div><h2 className="text-base font-medium">This device</h2><p className="mt-1 text-sm text-muted-foreground">Saved on this device. Other devices keep their own preferences.</p></div>
     <div className="grid max-w-sm gap-2"><label htmlFor="appearance" className="text-sm font-medium">Appearance</label>
@@ -13,6 +17,7 @@ export function DeviceSettings() {
       </SettingsSelect>
     </div>
 
+    {desktop ? <div className="flex flex-wrap items-center justify-between gap-3"><span className="text-sm font-medium">App updates</span><Button variant="outline" size="sm" disabled={checking} onClick={async () => { setChecking(true); setUpdateError(''); try { await desktop.checkUpdates() } catch { setUpdateError('Could not check for updates. Please try again.') } finally { setChecking(false) } }}>{checking ? 'Checking…' : 'Check for updates'}</Button>{updateError ? <p role="alert" className="w-full text-sm text-destructive">{updateError}</p> : null}</div> : null}
     <p className="text-sm text-muted-foreground">{desktop ? 'Desktop playback automatically remuxes compatible tracks and converts unsupported audio or video while you watch.' : 'Web playback connects directly to the provider. Use the desktop app for local codec conversion and sources that block browser access.'}</p>
   </section>
 }

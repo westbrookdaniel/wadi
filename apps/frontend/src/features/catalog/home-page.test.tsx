@@ -89,7 +89,7 @@ describe('HomePage loading and state transitions', () => {
     })
   })
 
-  it('does not show loading skeleton when some data is already available', async () => {
+  it('keeps the loading layout while only part of the home configuration is available', async () => {
     apiRequestMock.mockImplementation((path: string) => {
       if (path === '/api/catalogs') return Promise.resolve(emptyCatalogs)
       if (path === '/api/continue-watching?limit=12') return Promise.resolve(emptyContinueWatching)
@@ -101,7 +101,7 @@ describe('HomePage loading and state transitions', () => {
     renderHomePage()
 
     await waitFor(() => {
-      expect(screen.queryByLabelText('Loading home page')).not.toBeInTheDocument()
+      expect(screen.getByLabelText('Loading home page')).toBeInTheDocument()
     })
   })
 })

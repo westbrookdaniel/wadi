@@ -3,10 +3,11 @@ import { Pause, Play } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { catalogQuery } from '@/api/queries'
 import type { CatalogEntry, MediaPreview } from '@/api/types'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Artwork } from '@/components/artwork'
 
 export function FeaturedFilm({ entry, onOpen }: { entry: CatalogEntry; onOpen: (media: MediaPreview) => void }) {
-  const query = useQuery(catalogQuery(entry.catalog.type, entry.catalog.id, {}))
+  const query = useQuery(catalogQuery(entry.catalog.type, entry.catalog.id, { addon_id: entry.addon_id }))
   const films = (query.data ?? []).filter(item => item.background || item.poster).slice(0, 6)
   const [index, setIndex] = useState(0)
   const [paused, setPaused] = useState(false)
@@ -19,7 +20,7 @@ export function FeaturedFilm({ entry, onOpen }: { entry: CatalogEntry; onOpen: (
     return () => window.clearInterval(timer)
   }, [films.length, paused, interacting])
   const film = films[index % Math.max(1, films.length)]
-  if (!film) return null
+  if (!film) return <section className="featured-film !bg-muted" aria-label={query.isLoading ? 'Loading suggestions' : 'No suggestions available'}>{query.isLoading ? <Skeleton className="absolute inset-0 rounded-[14px]" /> : <p className="absolute inset-0 grid place-items-center text-sm text-muted-foreground">{query.error ? 'Suggestions are temporarily unavailable.' : 'No suggestions available.'}</p>}</section>
   return (
     <section className="featured-film" aria-label="Suggestions" onMouseEnter={() => setInteracting(true)} onMouseLeave={() => setInteracting(false)} onFocus={() => setInteracting(true)} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setInteracting(false) }}>
       <div key={`${film.type}:${film.id}`} className="featured-film-slide">

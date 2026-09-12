@@ -2,7 +2,7 @@ import { useQueries, useQuery } from '@tanstack/react-query'
 
 import { browseLayoutQuery, catalogsQuery, continueWatchingQuery, listItemsQuery, listsQuery } from '@/api/queries'
 import type { MediaPreview } from '@/api/types'
-import { EmptyState, ErrorState } from '@/components/status'
+import { EmptyState, ErrorState, PosterSkeletonRow } from '@/components/status'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { pageStack } from '@/lib/styles'
@@ -58,12 +58,10 @@ export function HomePage({
       {browseLayout.error ? <ErrorState error={browseLayout.error} /> : null}
       {listItemsError ? <ErrorState error={listItemsError} /> : null}
 
-      {isLoading && catalogs.data === undefined && continueWatching.data === undefined && lists.data === undefined && browseLayout.data === undefined ? (
+      {isLoading ? (
         <div aria-label="Loading home page" className="grid gap-6">
-          <Skeleton className="h-64 w-full rounded-2xl" />
-          <div className="grid grid-cols-3 gap-4 sm:grid-cols-6">
-            {Array.from({ length: 6 }, (_, index) => <Skeleton key={index} className="aspect-[2/3] rounded-xl" />)}
-          </div>
+          <div className="home-top"><Skeleton className="min-h-[420px] max-[600px]:min-h-[400px] rounded-[14px]" /><Skeleton className="min-h-[420px] rounded-[14px] max-[1000px]:hidden" /></div>
+          <div className="grid gap-6"><Skeleton className="h-12 w-36" /><PosterSkeletonRow /></div>
         </div>
       ) : null}
       {showSetup ? (
@@ -82,7 +80,7 @@ export function HomePage({
         {catalogs.data?.[0] ? <FeaturedFilm entry={catalogs.data[0]} onOpen={onOpenMedia} /> : null}
         {showContinueWatching ? <ContinuePanel items={continueItems} onOpen={onOpenMedia} /> : null}
       </div> : null}
-      {!showSetup ? (
+      {!isLoading && !showSetup ? (
         <BrowseSections
           rows={rows.filter(row => row.kind !== 'continue')}
           continueItems={continueItems}

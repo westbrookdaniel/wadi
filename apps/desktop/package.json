@@ -36,7 +36,8 @@
       "dist/**/*",
       "desktop-config.json",
       "package.json",
-      "resources/icon.png"
+      "resources/icon.png",
+      "resources/icon-mac.png"
     ],
     "extraResources": [
       {
@@ -51,7 +52,7 @@
       ],
       "category": "public.app-category.entertainment",
       "hardenedRuntime": true,
-      "icon": "resources/icon.png"
+      "icon": "resources/icon-mac.png"
     },
     "win": {
       "target": [

@@ -62,7 +62,7 @@ export function CatalogSection({
         {seeAll ? <Link to="/discover" search={seeAll} aria-label={`See all ${title} from ${entry.addon_name}`} className="shrink-0 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">See all</Link> : null}
       </div>
 
-      {!nearViewport || catalog.isLoading ? <PosterSkeletonRow /> : null}
+      {!catalog.data.length && (!nearViewport || catalog.isLoading) ? <PosterSkeletonRow /> : null}
       {catalog.error ? <ErrorState error={catalog.error} /> : null}
       {catalog.data?.length ? (
         <MediaRow>
