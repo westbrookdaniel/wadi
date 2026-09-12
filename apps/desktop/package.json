@@ -79,9 +79,14 @@
       "owner": "westbrookdaniel",
       "repo": "wadi",
       "releaseType": "draft"
+    },
+    "artifactName": "Wadi-${version}-${os}-${arch}.${ext}",
+    "deb": {
+      "packageName": "wadi"
     }
   },
   "description": "Wadi media browser and desktop player",
   "author": "Wadi contributors",
-  "license": "MIT"
+  "license": "MIT",
+  "homepage": "https://watchwadi.com"
 }

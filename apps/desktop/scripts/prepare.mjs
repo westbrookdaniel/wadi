@@ -18,8 +18,8 @@ for (const [name, source] of [['ffmpeg', ffmpeg], ['ffprobe', ffprobe.path]]) {
 
 const require = createRequire(import.meta.url);
 for (const [source, name] of [
-  [join(dirname(ffmpeg), 'ffmpeg.LICENSE'), 'FFmpeg-LICENSE.txt'],
-  [join(dirname(ffmpeg), 'ffmpeg.README'), 'FFmpeg-build-notes.txt'],
+  [`${ffmpeg}.LICENSE`, 'FFmpeg-LICENSE.txt'],
+  [`${ffmpeg}.README`, 'FFmpeg-build-notes.txt'],
   [join(dirname(require.resolve('ffprobe-static')), 'LICENSE'), 'ffprobe-static-LICENSE.txt'],
   [join(dirname(require.resolve('ffprobe-static')), 'README.md'), 'ffprobe-static-README.txt'],
 ]) await copyFile(source, join('assets',name));
