@@ -1,7 +1,7 @@
 import { desktopBridge } from '@/lib/desktop'
 import { useDeviceStore } from '@/store/device-store'
 import { SettingsSelect } from '@/components/ui/settings-select'
-import { Button } from '@/components/ui/button'
+import { ChevronDown, FlaskConical } from 'lucide-react'
 export function DeviceSettings() {
   const device = useDeviceStore()
   const desktop = desktopBridge()
@@ -13,16 +13,15 @@ export function DeviceSettings() {
       </SettingsSelect>
     </div>
 
-    {!desktop && <Button variant="secondary" className="justify-self-start" onClick={() => { if (!document.fullscreenElement) void document.documentElement.requestFullscreen?.().catch(() => {}); else void document.exitFullscreen() }}>Toggle fullscreen</Button>}
     <p className="text-sm text-muted-foreground">{desktop ? 'Desktop playback automatically remuxes compatible tracks and converts unsupported audio or video while you watch.' : 'Web playback connects directly to the provider. Use the desktop app for local codec conversion and sources that block browser access.'}</p>
   </section>
 }
 
 export function ExperimentalSettings() {
   const device = useDeviceStore()
-  return <details className="settings-panel group">
-    <summary className="cursor-pointer text-sm font-medium">Experimental settings</summary>
-    <div className="mt-5 grid gap-3">
+  return <details className="settings-panel group !p-0 overflow-hidden">
+    <summary className="flex cursor-pointer list-none items-center gap-3 p-5 text-sm font-medium transition-colors hover:bg-muted/50 [&::-webkit-details-marker]:hidden"><FlaskConical className="size-4 text-muted-foreground" />Experimental settings<ChevronDown className="ml-auto size-4 text-muted-foreground transition-transform group-open:rotate-180" /></summary>
+    <div className="grid gap-4 px-5 pb-5">
       <p className="text-sm text-muted-foreground">These features are still being refined.</p>
     <label className="flex items-start justify-between gap-6"><span><span className="block text-sm font-medium">TV navigation</span><span className="mt-1 block text-sm text-muted-foreground">Arrow keys or controller to move, Enter / A to select, Escape / B to go back.</span></span><input className="mt-1 size-5 shrink-0 accent-primary" type="checkbox" aria-label="TV navigation" checked={device.tvMode} onChange={event => device.setTvMode(event.target.checked)} /></label>
     </div>

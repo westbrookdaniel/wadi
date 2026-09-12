@@ -1,4 +1,5 @@
-import { app, BrowserWindow, ipcMain, protocol, net, shell, safeStorage, session, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, protocol, net, shell, safeStorage, session, dialog, Menu } from 'electron';
+import { existsSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { randomBytes, createHash } from 'node:crypto';
 import { readFile, writeFile, mkdir, rm } from 'node:fs/promises';
@@ -10,6 +11,9 @@ import updater from 'electron-updater';
 const here = dirname(fileURLToPath(import.meta.url));
 const config = JSON.parse(await readFile(join(here, '../desktop-config.json'), 'utf8'));
 const origin = new URL(config.origin).origin;
+const legacyUserData = join(app.getPath('appData'), '@wadi/desktop');
+app.setName('Wadi');
+if (existsSync(legacyUserData)) app.setPath('userData', legacyUserData);
 protocol.registerSchemesAsPrivileged([{ scheme: 'wadi', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }]);
 let window, media, token = null, authServer = null, cancelSignIn = null;
 const tokenFile = () => join(app.getPath('userData'), 'session.enc');
@@ -30,7 +34,7 @@ async function api(path, options = {}) {
   if (body && body.length > 1024*1024) throw new Error('Request too large');
   const response = await fetch(url, { method, headers, body, redirect: 'error', signal: AbortSignal.timeout(30000) });
   const text = await response.text();
-  if (response.status === 401 || path === '/api/auth/logout' && response.ok) await saveToken(null);
+  if (response.status === 401 || (path === '/api/auth/logout' || path === '/api/account' && method === 'DELETE') && response.ok) await saveToken(null);
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { return { status: 503, body: { error: 'Wadi is temporarily unavailable. Please try again.' } }; }
   return { status: response.status, body: data };
@@ -68,8 +72,8 @@ async function signIn() {
         if (result.status !== 200) throw new Error('Sign-in failed');
         if (settled) { res.end('This sign-in was restarted. Use the newest browser tab.'); return; }
         await saveToken(credentials.token);
-        res.writeHead(200, { 'Content-Type': 'text/html', 'Cache-Control':'no-store', 'Referrer-Policy':'no-referrer', 'Content-Security-Policy': "default-src 'none'" });
-        res.end('<h1>Connected to Wadi</h1><p>You can close this tab and return to the desktop app.</p>');
+        res.writeHead(303, { Location: new URL('/desktop/connected', origin).href, 'Cache-Control':'no-store', 'Referrer-Policy':'no-referrer', 'Content-Security-Policy': "default-src 'none'" });
+        res.end();
         window?.show(); window?.focus(); finish();
       } catch (error) { res.writeHead(400); res.end('Sign-in failed. Return to Wadi and try again.'); finish(error); }
     });
@@ -84,6 +88,11 @@ async function signIn() {
   });
 }
 async function startDesktop() {
+if (process.platform === 'darwin') {
+  app.dock?.setIcon(join(here, '../resources/icon.png'));
+  Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: 'Wadi', submenu: [{ role: 'about' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] }, { role: 'editMenu' }, { role: 'viewMenu' }, { role: 'windowMenu' }]));
+}
+
 try { if (safeStorage.isEncryptionAvailable()) token = safeStorage.decryptString(await readFile(tokenFile())); } catch { /* First launch or unavailable keyring. */ }
 const root = resolve(here, '../dist');
 protocol.handle('wadi', async request => {
@@ -100,6 +109,7 @@ protocol.handle('wadi', async request => {
 session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
 media = await createMediaService({ directory: join(app.getPath('userData'), 'media-cache'), binaries: app.isPackaged ? join(process.resourcesPath, 'media-bin') : join(here, '../assets') });
 for (const [name, handler] of Object.entries({
+  'open-page': path => shell.openExternal(new URL(z.enum(['/terms','/privacy']).parse(path), origin).href),
   session: () => Boolean(token),
   'sign-in': signIn,
   api: (path, options) => {
@@ -109,7 +119,7 @@ for (const [name, handler] of Object.entries({
   media: (action, payload) => media.command(action, payload),
   external: openExternal,
 })) ipcMain.handle(name, (event, ...args) => { trusted(event); return handler(...args); });
-window = new BrowserWindow({ titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 16, y: 16 }, width: 1440, height: 900, minWidth: 760, minHeight: 520, backgroundColor:'#090909', autoHideMenuBar:true, webPreferences: { preload: join(here,'preload.cjs'), nodeIntegration:false, contextIsolation:true, sandbox:true } });
+window = new BrowserWindow({ icon: join(here, '../resources/icon.png'), titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 16, y: 16 }, width: 1440, height: 900, minWidth: 760, minHeight: 520, backgroundColor:'#090909', autoHideMenuBar:true, webPreferences: { preload: join(here,'preload.cjs'), nodeIntegration:false, contextIsolation:true, sandbox:true } });
 window.webContents.on('will-navigate', (event, url) => { if (!url.startsWith('wadi://app/')) event.preventDefault(); });
 window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 await window.loadURL('wadi://app/');

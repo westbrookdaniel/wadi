@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { createRequire } from 'node:module';
 import ffmpeg from 'ffmpeg-static';
@@ -22,3 +23,12 @@ for (const [source, name] of [
   [join(dirname(require.resolve('ffprobe-static')), 'LICENSE'), 'ffprobe-static-LICENSE.txt'],
   [join(dirname(require.resolve('ffprobe-static')), 'README.md'), 'ffprobe-static-README.txt'],
 ]) await copyFile(source, join('assets',name));
+
+// Give the macOS development bundle the same visible name as packaged Wadi.
+if (process.platform === 'darwin' && !process.env.CI) {
+  const plist = join(dirname(require.resolve('electron/package.json')), 'dist/Electron.app/Contents/Info.plist');
+  for (const key of ['CFBundleName', 'CFBundleDisplayName']) {
+    try { execFileSync('/usr/libexec/PlistBuddy', ['-c', `Set :${key} Wadi`, plist], { stdio: 'ignore' }); }
+    catch { execFileSync('/usr/libexec/PlistBuddy', ['-c', `Add :${key} string Wadi`, plist], { stdio: 'ignore' }); }
+  }
+}

@@ -34,7 +34,8 @@
       "src/**/*",
       "dist/**/*",
       "desktop-config.json",
-      "package.json"
+      "package.json",
+      "resources/icon.png"
     ],
     "extraResources": [
       {
@@ -48,12 +49,14 @@
         "zip"
       ],
       "category": "public.app-category.entertainment",
-      "hardenedRuntime": true
+      "hardenedRuntime": true,
+      "icon": "resources/icon.png"
     },
     "win": {
       "target": [
         "nsis"
-      ]
+      ],
+      "icon": "resources/icon.png"
     },
     "linux": {
       "target": [
@@ -61,7 +64,8 @@
         "deb"
       ],
       "category": "AudioVideo",
-      "maintainer": "Wadi contributors"
+      "maintainer": "Wadi contributors",
+      "icon": "resources/icon.png"
     },
     "nsis": {
       "oneClick": false,

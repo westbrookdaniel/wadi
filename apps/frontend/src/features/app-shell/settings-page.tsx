@@ -1,3 +1,4 @@
+import { AccountControls } from './account-controls'
 import { externalPlayers, validCustomTemplate } from '@/features/media/detail/external-players'
 import { DeviceSettings, ExperimentalSettings } from './device-settings'
 import { RevealedImage } from '@/components/revealed-image'
@@ -268,7 +269,8 @@ export function AccountSettingsPage({ user }: { user: User }) {
         </div>
       </header>
 
-      <section className="grid gap-4 border-b border-border pt-2 pb-6">
+      <AccountControls email={user.email} />
+      <section className="grid gap-4 pt-2 pb-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="m-0 text-[1.05rem] font-[520] tracking-normal">
             Installed addons
@@ -778,7 +780,7 @@ export function AddAddonPage() {
 
   return (
     <div className={cn(pageStack, "settings-area max-w-[1040px]")}>
-      <section className="grid gap-4 border-b border-border pt-2 pb-6">
+      <section className="grid gap-4 pt-2 pb-6">
         <h1 className="m-0 text-[1.2rem] font-[520] tracking-normal">
           Add addon
         </h1>

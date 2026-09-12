@@ -1,4 +1,5 @@
 export type DesktopBridge = {
+  openPage: (path: '/terms' | '/privacy') => Promise<void>
   session: () => Promise<boolean>
   signIn: () => Promise<boolean>
   request: (path: string, options: { method?: string; body?: unknown }) => Promise<{ status: number; body: unknown }>

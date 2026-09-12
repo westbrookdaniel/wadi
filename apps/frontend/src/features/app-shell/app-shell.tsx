@@ -1,3 +1,4 @@
+import { WebFullscreen } from '@/components/web-fullscreen'
 import { DesktopDownload } from '@/components/desktop-download'
 import type { ReactNode } from "react";
 import { useLocation } from "@tanstack/react-router";
@@ -95,7 +96,7 @@ export function AppShell({
               );
             })}
           </nav>
-          <DesktopDownload sidebar />
+          <WebFullscreen /><DesktopDownload sidebar />
         </aside>
       )}
 

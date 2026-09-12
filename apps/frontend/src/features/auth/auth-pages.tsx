@@ -1,6 +1,5 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { desktopBridge } from '@/lib/desktop'
-import { RevealedImage } from '@/components/revealed-image'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from '@tanstack/react-form'
 import { ArrowRight } from 'lucide-react'
@@ -78,7 +77,7 @@ function WebAuthPage({ mode, onModeChange }: { mode: AuthMode; onModeChange: (mo
         }}
       >
         <div className="mb-2 grid gap-3 text-left">
-          <RevealedImage src="/favicon.svg" alt="Wadi" className="mb-3 size-14" />
+          <img src="/favicon.svg" alt="Wadi" className="mb-3 size-14" />
           <h1 className="m-0 text-[28px] font-medium leading-tight tracking-tight">{title}</h1>
           <p className="text-sm leading-relaxed text-muted-foreground">{body}</p>
         </div>
@@ -161,6 +160,7 @@ function WebAuthPage({ mode, onModeChange }: { mode: AuthMode; onModeChange: (mo
         >
           {mode === 'login' ? 'Need an account? Register' : 'Already have an account? Login'}
         </Button>
+        <p className="text-xs leading-relaxed text-muted-foreground">{mode === 'register' ? 'By creating an account, you agree to the ' : ''}<a href="/terms" className="underline underline-offset-4">Terms of service</a>{mode === 'register' ? '. Read our ' : ' · '}<a href="/privacy" className="underline underline-offset-4">Privacy policy</a>.</p>
       </form>
     </main>
   )
@@ -181,11 +181,11 @@ function authError(error: unknown) {
 export function AuthPage(props: Parameters<typeof WebAuthPage>[0]) {
   return desktopBridge() ? <DesktopLogin /> : <WebAuthPage {...props} />
 }
-export function AuthShell({ title, body, children }: { title: string; body: string; children: ReactNode }) {
+export function AuthShell({ title, body, children, showLogo = true }: { title: string; body: string; children: ReactNode; showLogo?: boolean }) {
   return <main className={cn('auth-screen grid min-h-dvh content-center justify-items-center px-5 py-12', authBackground)}>
     <section className="grid min-w-0 w-full max-w-[420px] gap-5 rounded-2xl border border-border bg-card/60 p-7 shadow-2xl sm:p-9">
       <div className="mb-2 grid gap-3 text-left">
-        <RevealedImage src="/favicon.svg" alt="Wadi" className="mb-3 size-14" />
+        {showLogo && <img src="/favicon.svg" alt="Wadi" className="mb-3 size-14" />}
         <h1 className="m-0 text-[28px] font-medium leading-tight tracking-tight">{title}</h1>
         <p className="text-sm leading-relaxed text-muted-foreground">{body}</p>
       </div>

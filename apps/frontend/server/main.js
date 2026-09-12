@@ -1,6 +1,7 @@
 import { fetchAddonJson } from './addon-fetch.js';
 import { createDatabase } from './database.js';
 import { addDesktopAuth } from './desktop-auth.js';
+import { addAccountRoutes } from './account.js';
 import express from 'express';
 import { randomUUID, randomBytes, createHash } from 'node:crypto';
 import { hash, verify } from '@node-rs/argon2';
@@ -81,6 +82,7 @@ export function createApp({ database = process.env.DATABASE_URL, sessionDays = 3
         req.tokenHash = digest(token);
         next();
     });
+    addAccountRoutes(app, db);
     app.get('/api/server-capabilities', (_req, res) => res.json({ conversion: false }));
     app.get('/api/auth/me', (req, res) => res.json({ id: req.user.id, email: req.user.email, active_profile_id: req.user.profile_id }));
     app.post('/api/auth/logout', async (req, res) => { (await run('DELETE FROM sessions WHERE token_hash=?', req.tokenHash)); res.sendStatus(204); });
