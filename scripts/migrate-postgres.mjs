@@ -1,6 +1,7 @@
 import pg from '../apps/frontend/node_modules/pg/lib/index.js';
+import { databaseConfig } from '../apps/frontend/server/database-config.js';
 import { readFile } from 'node:fs/promises';
-const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+const client = new pg.Client(databaseConfig(process.env.DATABASE_URL));
 if (!/^postgres(ql)?:/.test(process.env.DATABASE_URL ?? '')) throw new Error('Set DATABASE_URL to Railway Postgres');
 await client.connect();
 try {

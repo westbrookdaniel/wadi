@@ -34,7 +34,7 @@ The import preserves account IDs, password hashes, sessions, profiles, addons, l
 
 1. Import this repository and set Root Directory to `apps/frontend`. Enable access to source files outside the root directory for the pnpm workspace.
 2. Use the Next.js framework preset and Node 24. Build with `pnpm build`; let Vercel manage the output directory. Install dependencies with the committed lockfile.
-3. Set server-only `DATABASE_URL` to Railway's public Postgres connection URL. Vercel cannot reach Railway private networking. Use TLS as configured by Railway and never disable certificate verification.
+3. Set server-only `DATABASE_URL` to Railway's public Postgres connection URL. Vercel cannot reach Railway private networking. Set DATABASE_SSL_CA to the public root certificate from the database, and DATABASE_SSL_SERVERNAME to postgres.railway.internal. The server verifies that identity through the public TCP proxy. Keep these server-only, and update the CA when rotating database certificates. Never disable certificate verification.
 4. Run `pnpm db:migrate` once against that database before sending users to the app.
 5. Set optional public installer links described below. Keep the Next.js app and database in nearby regions.
 

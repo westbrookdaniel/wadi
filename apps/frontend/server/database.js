@@ -1,9 +1,10 @@
 import pg from 'pg';
+import { databaseConfig } from './database-config.js';
 
 // Small pool per warm Vercel instance. Use a pooled Railway URL for larger deployments.
 export function createDatabase(connectionString) {
   if (!connectionString || !/^postgres(ql)?:/.test(connectionString)) throw new Error('DATABASE_URL must be a PostgreSQL connection URL');
-  const pool = new pg.Pool({ connectionString, max: 3, idleTimeoutMillis: 10000, connectionTimeoutMillis: 10000, allowExitOnIdle: true });
+  const pool = new pg.Pool({ ...databaseConfig(connectionString), max: 3, idleTimeoutMillis: 10000, connectionTimeoutMillis: 10000, allowExitOnIdle: true });
   const adapter = client => {
     const query = (sql, args) => {
       let index = 0;
