@@ -1,0 +1,122 @@
+# Development and deployment
+
+Use Node 24 and pnpm 10.33.2. Create a Postgres database and set `DATABASE_URL` in the shell for the schema command. Copy `apps/frontend/.env.example` to `apps/frontend/.env.local` for Next.js development.
+
+```sh
+pnpm install
+pnpm db:migrate
+pnpm dev
+```
+
+The schema command reads the shell environment, not Next.js `.env.local`. The web app runs on port 5173. Database migrations are explicit and do not run on each request. Existing routes are served by the Next.js API catch-all using an Express handler and a small Postgres connection pool.
+
+For a local database, create a root `.env` using `.env.example`, choose a local password, and put the same connection URL in `apps/frontend/.env.local`. Then run:
+
+```sh
+docker compose up -d --wait
+node --env-file=.env scripts/migrate-postgres.mjs
+pnpm dev
+```
+
+Compose stores Postgres data in a persistent named volume and binds port 55432 to loopback only. `docker compose stop` keeps the data. Neither local environment file is committed.
+
+### Import existing Wadi data
+
+Run the schema migration first. Stop writes to the old SQLite app and back up its database. Point `DATABASE_URL` at an empty destination database, then run:
+
+```sh
+pnpm db:import /absolute/path/to/wadi.sqlite
+```
+
+The import preserves account IDs, password hashes, sessions, profiles, addons, lists, progress and settings. It uses a transaction, refuses nonempty target tables and opens SQLite read-only. Keep the SQLite backup until you have checked the imported data. Existing external-player templates are retained as Custom.
+
+## Deploy Next.js to Vercel
+
+1. Import this repository and set Root Directory to `apps/frontend`. Enable access to source files outside the root directory for the pnpm workspace.
+2. Use the Next.js framework preset and Node 24. Build with `pnpm build`; let Vercel manage the output directory. Install dependencies with the committed lockfile.
+3. Set server-only `DATABASE_URL` to Railway's public Postgres connection URL. Vercel cannot reach Railway private networking. Use TLS as configured by Railway and never disable certificate verification.
+4. Run `pnpm db:migrate` once against that database before sending users to the app.
+5. Set optional public installer links described below. Keep the Next.js app and database in nearby regions.
+
+`SESSION_TTL_DAYS` defaults to 30. Each warm API instance uses a pool of at most three connections; a pooled database endpoint is advisable as concurrency grows. The app does not create cloud resources or migrate a remote database automatically.
+
+| Setting | Where | Purpose |
+| --- | --- | --- |
+| `DATABASE_URL` | Vercel server / migration shell | Postgres connection, never public |
+| `SESSION_TTL_DAYS` | Vercel server | Session lifetime |
+| `NEXT_PUBLIC_DESKTOP_DOWNLOAD_URL` | Web build | Optional direct installer/release-page link |
+| `NEXT_PUBLIC_DESKTOP_RELEASES_URL` | Web build | Release listing linked by `/desktop/download` |
+| `NEXT_PUBLIC_CHROMECAST_RECEIVER_APP_ID` | Web build | Optional custom Cast receiver |
+| `WADI_WEB_ORIGIN` | Desktop build | Hosted Wadi origin, e.g. `https://watchwadi.com` |
+| `WADI_VIDEO_ENCODER` | Desktop runtime | Optional `libx264`, `h264_videotoolbox`, `h264_nvenc`, `h264_qsv`, `h264_amf` |
+
+The web player remains available. A sidebar link offers the desktop download, and failures expose external playback/copy-link options. Hosting costs exclude video transfer because it bypasses both Vercel and Railway. Railway still bills database traffic crossing to Vercel.
+
+## Desktop development and packaging
+
+The desktop package compiles the shared interface with Vite; it does not package Next.js API routes. The installed app does not need Node or FFmpeg installed separately.
+
+```sh
+# Start the web API separately for local development.
+WADI_WEB_ORIGIN=http://localhost:5173 pnpm desktop:dev
+
+# Build installers against your deployed API.
+WADI_WEB_ORIGIN=https://watchwadi.com pnpm desktop:package
+```
+
+On Windows PowerShell set `$env:WADI_WEB_ORIGIN` before invoking pnpm. Build on each target OS/architecture so Electron and FFmpeg binaries match. Outputs are under `apps/desktop/release`: macOS DMG/ZIP, Windows NSIS installer, Linux AppImage/DEB. React assets and binaries are generated during packaging; they are not committed.
+
+Use your normal electron-builder signing credentials for Windows signing and macOS signing/notarization. Manual runs of `.github/workflows/desktop-release.yml` upload test artifacts. Matching version tags build all platforms and upload installers and update metadata to a draft GitHub release. The workflow does not deploy the website or publish the draft automatically. Unsigned local packages are for development. Redistributing FFmpeg requires including its license/build notices; the preparation script copies notices downloaded with ffmpeg-static. Complete your distribution review before a public release.
+
+Updates use GitHub Releases; see Desktop updates below. Desktop cannot run the shared account API offline; temporary connection failures should be retried without discarding the stored desktop session.
+
+## Local media behavior
+
+The desktop media module lives entirely in `apps/desktop/src/media.mjs`. It probes the source and produces a short HLS buffer while continuing to fetch/convert the movie:
+
+- Compatible single-audio-track MP4 plays through a local byte proxy without conversion.
+- H.264 video and AAC audio in other containers are copied into HLS.
+- Compatible video is copied while unsupported audio is converted to AAC.
+- Unsupported video is converted to H.264. macOS first tries VideoToolbox; other platforms default to software unless an encoder is selected. Failed hardware startup retries software.
+- “Retry with full conversion” handles sources that probe as compatible but fail in the player.
+- Pausing retains the current frame and conversion session. Conversion waits once the short look-ahead buffer is full.
+- Buffered seeks and playback-speed changes reuse the session. Seeking outside the buffer or switching audio tracks starts a new one; seeking depends on provider support.
+- Audio and video conversion defaults to On in device settings. Turning it Off prevents encoding; compatible playback and remuxing remain available. The full movie is never required before playback starts.
+
+Only one conversion runs at a time. The rolling playlist retains roughly 96 seconds plus a deletion margin, with a 512 MiB cache ceiling checked periodically. Very high-bitrate sources can reach this ceiling. Closing playback terminates its subprocess, and stale sessions are removed. Source credentials are not logged or sent to the hosted media API.
+
+This revision does not promise real-time 4K conversion on every computer, HDR tone mapping, embedded subtitle rendering, torrent downloading or local conversion served to other devices. The shared external subtitle overlay remains available. Local media URLs are authenticated, loopback-only and scoped to this app; Chromecast cannot fetch them. Use web casting for directly supported provider URLs.
+
+## External players
+
+Settings offers Play in Wadi, external playback options, or copy link. Presets include Android's chooser, VLC, MPV, IINA, MX Player, Just Player, Outplayer, Moonplayer, CineUltra, Infuse, VidHub and M3U playlists, plus a custom template containing `{url}`. Presets show their platform support. Selecting a preset preserves the custom template for later.
+
+The list and link shapes follow [Stremio Web's presets](https://github.com/Stremio/stremio-web/blob/development/src/common/CONSTANTS.js) and [Stremio Core's deep links](https://github.com/Stremio/stremio-core/blob/development/src/deep_links/mod.rs). Wadi does not send external-player callbacks to Stremio. External players must be installed, custom protocol handlers may require setup, and external playback does not sync progress back automatically. M3U is the fallback when no app protocol handler exists.
+
+## Checks for the user
+
+```sh
+pnpm build
+pnpm lint
+pnpm --filter frontend test
+# A disposable database; tests create and remove isolated schemas.
+TEST_DATABASE_URL=postgresql://... pnpm --filter frontend test:api
+```
+
+Targeted frontend, API and synthetic FFmpeg checks have been run during development. Provider compatibility and signed installer upgrades still need manual verification; see [the checklist](manual-testing.md).
+
+### Playback controls and shortcuts
+
+Desktop playback keeps the video element and local conversion session alive when paused. Conversion buffers about 32 seconds ahead of the playhead, then waits. Buffered seeks and speed changes reuse that session; seeking outside the buffer or switching audio tracks starts a new one. Local output uses FFmpeg's [HTTP upload support](https://www.ffmpeg.org/ffmpeg-formats.html#hls-2) with a private loopback endpoint to apply backpressure on all desktop platforms. The existing 512 MB cache limit remains in place.
+
+Press `?` for the shortcut list. `F` toggles fullscreen, `/` or `Cmd/Ctrl+K` opens search, `H` opens Home, and `Cmd/Ctrl+,` opens Settings. While watching, use `Space` or `K` to play/pause, left/right arrows to seek five seconds, `J`/`L` to seek ten seconds, up/down arrows for volume, `M` to mute, and comma/period to change speed. Shortcuts leave text fields and open dialogs alone.
+
+The synthetic local-conversion check runs with `node --test apps/desktop/src/media.test.mjs` after desktop assets are prepared. It checks audio conversion, remuxing and video conversion against actual bundled FFmpeg binaries. Provider playback and packaged installers still need manual testing.
+
+### Desktop updates
+
+Installed desktop releases check GitHub Releases ten seconds after launch and every six hours. Downloads run in the background. The bottom-left sidebar shows download progress, then **Restart and update** with the version number. Errors offer a retry. Wadi never installs automatically on quit; restarting for an update requires a click, with confirmation if playback is active. **Wadi → Check for Updates…** and the button in Settings give manual feedback. Settings also displays the current app version. The development app and Linux `.deb` installs explain that automatic updates are unavailable; Linux automatic updates use AppImage. Updates keep the existing app ID, user-data directory, encrypted sign-in session and browser preferences.
+
+To release, bump `apps/desktop/package.json` and push its matching `vX.Y.Z` tag. Configure the repository variable `WADI_WEB_ORIGIN` with the production HTTPS origin. Add macOS secrets `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`, and Windows secrets `WIN_CSC_LINK`, `WIN_CSC_KEY_PASSWORD`. Tagged builds fail if required credentials are missing. The workflow uses its scoped GitHub token to create a draft release only after all platform builds succeed; no GitHub token is shipped in the app. Manual workflow runs produce downloadable test artifacts without publishing.
+
+Before publishing the draft, test a signed installer and an upgrade from an older installed release, including session retention, pause/resume, download failure, and restart confirmation. Publish the complete draft with its installers, ZIP payload, `latest*.yml` and blockmaps together. The public GitHub release is the update source. The source repository is currently private: set `WADI_RELEASE_REPOSITORY` to a public releases-only `owner/repository` and add `GH_RELEASE_TOKEN` with Contents write access to that repository. Build metadata embeds that repository, never its token. Tagged builds refuse a private update source. macOS requires Developer ID signing and notarization; credentials are not currently configured in this repository. The updater flow has local automated coverage, but a signed end-to-end upgrade has not been verified. See the [electron-builder v26 updater documentation](https://www.electron.build/v26/docs/features/auto-update/).
