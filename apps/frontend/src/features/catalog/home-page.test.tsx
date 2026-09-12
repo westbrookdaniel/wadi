@@ -25,8 +25,6 @@ const emptyLists: ApiListResponse<UserList> = { items: [] }
 const emptyBrowseLayout: BrowseLayout = {
   pages: {
     home: { order: [], hidden: [] },
-    movies: { order: [], hidden: [] },
-    series: { order: [], hidden: [] },
   },
 }
 

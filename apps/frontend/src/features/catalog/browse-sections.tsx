@@ -1,24 +1,23 @@
+import { Link } from '@tanstack/react-router'
+import { discoverSearchForRow } from './discover'
 import { useQuery } from '@tanstack/react-query'
 
 import { metaQuery } from '@/api/queries'
-import type { BrowsePageKey, ContinueWatchingItem, ListItem, MediaPreview } from '@/api/types'
+import type { ContinueWatchingItem, ListItem, MediaPreview } from '@/api/types'
 import { MediaRow } from '@/components/media-row'
 import { MediaCard } from '@/features/media/media-card'
 import { contentSection, sectionHeading } from '@/lib/styles'
 
 import type { BrowseRowCandidate } from './browse-layout'
-import { filterWatchlistItemsForPage } from './browse-layout'
 import { CatalogSection } from './catalog-section'
 import { mediaPreviewFromMeta } from './media-preview'
 
 export function BrowseSections({
-  page,
   rows,
   continueItems,
   listItemsByListId,
   onOpenMedia,
 }: {
-  page: BrowsePageKey
   rows: BrowseRowCandidate[]
   continueItems: ContinueWatchingItem[]
   listItemsByListId: Record<string, ListItem[]>
@@ -33,6 +32,7 @@ export function BrowseSections({
               key={row.key}
               entry={row.catalogEntry}
               entries={row.catalogEntries}
+              seeAll={discoverSearchForRow(row)}
               onOpen={(media) => onOpenMedia(media, null)}
             />
           )
@@ -65,7 +65,7 @@ export function BrowseSections({
 
         if (row.kind === 'watchlist' && row.list) {
           const rawItems = listItemsByListId[row.list.id] ?? []
-          const items = filterWatchlistItemsForPage(page, rawItems)
+          const items = rawItems
           if (!items.length) {
             return null
           }
@@ -76,6 +76,7 @@ export function BrowseSections({
                 <div>
                   <h2 className="m-0 tracking-normal">{row.list.name}</h2>
                 </div>
+                <Link to="/discover" search={discoverSearchForRow(row)} aria-label={`See all ${row.list.name}`} className="rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">See all</Link>
               </div>
               <MediaRow>
                 {items.map((item) => {

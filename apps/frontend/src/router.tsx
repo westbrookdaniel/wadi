@@ -4,6 +4,7 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
+  defaultParseSearch,
   useLocation,
   useNavigate,
 } from '@tanstack/react-router'
@@ -18,7 +19,8 @@ import type { NavPath } from '@/features/app-shell/nav-items'
 import { ProtectedRoute } from '@/features/app-shell/protected-route'
 import { AccountSettingsPage, AddAddonPage, ProfileSettingsPage } from '@/features/app-shell/settings-page'
 import { AuthPage } from '@/features/auth/auth-pages'
-import { CatalogPage } from '@/features/catalog/catalog-page'
+import { DiscoverPage } from '@/features/catalog/discover-page'
+import { discoverSearchSchema } from '@/features/catalog/discover'
 import { HomePage } from '@/features/catalog/home-page'
 import { SearchPage } from '@/features/catalog/search-page'
 import {
@@ -92,25 +94,19 @@ const watchlistsRoute = createRoute({
   ),
 })
 
-const moviesRoute = createRoute({
+const discoverRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/movies',
-  component: () => (
-    <BrowseRoute label="movies page">
-      {(openMedia) => <CatalogPage type="movie" title="Movies" onOpenMedia={openMedia} />}
-    </BrowseRoute>
-  ),
+  path: '/discover',
+  validateSearch: search => discoverSearchSchema.parse(search),
+  component: DiscoverRoute,
 })
-
-const seriesRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/series',
-  component: () => (
-    <BrowseRoute label="series page">
-      {(openMedia) => <CatalogPage type="series" title="Series" onOpenMedia={openMedia} />}
-    </BrowseRoute>
-  ),
-})
+const moviesRoute = createRoute({ getParentRoute: () => rootRoute, path: '/movies', component: () => <Navigate to="/discover" search={{ type: 'movie' }} replace /> })
+const seriesRoute = createRoute({ getParentRoute: () => rootRoute, path: '/series', component: () => <Navigate to="/discover" search={{ type: 'series' }} replace /> })
+function DiscoverRoute() {
+  const search = discoverRoute.useSearch()
+  const navigate = useNavigate()
+  return <BrowseRoute label="Discover page">{openMedia => <DiscoverPage search={search} onChange={search => void navigate({ to: '/discover', search })} onOpenMedia={openMedia} />}</BrowseRoute>
+}
 
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -150,6 +146,7 @@ const routeTree = rootRoute.addChildren([
   homeRoute,
   searchRoute,
   watchlistsRoute,
+  discoverRoute,
   moviesRoute,
   seriesRoute,
   settingsRoute,
@@ -253,7 +250,7 @@ function BrowseRoute({
         id: media.id,
       },
       search: {
-        from: location.pathname,
+        from: location.href,
         videoId: undefined,
         episode: preferredVideoId || undefined,
         season: undefined,
@@ -287,7 +284,8 @@ function MediaRoute() {
   const selectedMedia = mediaPreviewFromParams(type, id)
   const displayMedia = mediaPreviewFromMeta(selectedMedia, routeMedia.data) ?? selectedMedia
   const isLoadingMediaDetails = routeMedia.isLoading && !routeMedia.data
-  const backPath = browsePath(from)
+  const backPath = browsePath(from?.split('?')[0])
+  const backSearch = backPath === '/discover' ? discoverSearchSchema.parse(defaultParseSearch(from?.includes('?') ? from.slice(from.indexOf('?')) : '')) : undefined
 
   const playStream = (stream: PlayableStream, target: PlaybackTarget) => {
     const key = savePlaybackSession(stream, target)
@@ -333,14 +331,14 @@ function MediaRoute() {
               }}
             />
           ) : isLoadingMediaDetails ? (
-            <DetailShellSkeleton onBack={() => navigate({ to: backPath })} />
+            <DetailShellSkeleton onBack={() => navigate({ to: backPath, search: backSearch })} />
           ) : (
             <MediaDetailPage
               media={displayMedia}
               preferredVideoId={preferredEpisodeIdFromSearch({ episode, videoId })}
               preferredSeason={season}
               onSeriesSelectionChange={updateSeriesSelection}
-              onBack={() => navigate({ to: backPath })}
+              onBack={() => navigate({ to: backPath, search: backSearch })}
               onPlay={playStream}
               listAction={<WatchlistAddButton media={displayMedia} />}
             />
@@ -412,8 +410,7 @@ function mediaPreviewFromMeta(media: MediaPreview, data: unknown): MediaPreview 
 function browsePath(path: string | undefined): NavPath {
   return path === '/search' ||
     path === '/watchlists' ||
-    path === '/movies' ||
-    path === '/series' ||
+    path === '/discover' ||
     path === '/settings'
     ? path
     : '/home'

@@ -13,6 +13,8 @@ test('Node API preserves auth, profile isolation, lists, progress, addons withou
  const media = Buffer.from('0123456789abcdefghijklmnopqrstuvwxyz');
  const upstream = createServer((req,res) => {
   if (req.url === '/manifest.json' || req.url === '/other/manifest.json') return res.end(JSON.stringify({id:'fixture',name:'Fixture',version:'1',resources:['catalog','meta','stream'],types:['movie'],catalogs:[{id:'test',type:'movie'}]}));
+  if (req.url === '/other/catalog/movie/test.json') return res.end(JSON.stringify({metas:[{id:'other:film',type:'movie',name:'Other film'}]}));
+  if (req.url === '/catalog/movie/test/genre=Action&skip=100.json') return res.end(JSON.stringify({metas:[{id:'page:film',type:'movie',name:'Next page film'}]}));
   if (req.url === '/catalog/movie/test.json') return res.end(JSON.stringify({metas:[{id:'test:film',type:'movie',name:'Test film'}]}));
   if (req.url === '/stream/movie/test%3Afilm.json') return res.end(JSON.stringify({streams:[{url:`${fixture}/media.mp4`}]}));
   if (req.url === '/media.mp4') {
@@ -61,7 +63,14 @@ test('Node API preserves auth, profile isolation, lists, progress, addons withou
  await request('/api/settings/browse-layout','PUT',layout);
  assert.equal((await request('/api/settings/browse-layout')).pages.home.catalogModes.popular,'series');
  assert.equal((await request('/api/catalogs')).items[0].catalog.id,'test');
- assert.equal((await request('/api/catalog/movie/test')).responses[0].response.metas[0].name,'Test film');
+ assert.equal((await request('/api/catalog/movie/test')).responses.length,2);
+ const scoped=await request(`/api/catalog/movie/test?addon_id=${firstAddon.id}`);
+ assert.deepEqual(scoped.responses.map(item=>item.addon_id),[firstAddon.id]);
+ assert.equal(scoped.responses[0].response.metas[0].name,'Test film');
+ assert.equal((await request(`/api/catalog/movie/test?addon_id=${secondAddon.id}`)).responses[0].response.metas[0].name,'Other film');
+ assert.equal((await request(`/api/catalog/movie/test?addon_id=${firstAddon.id}&genre=Action&skip=100`)).responses[0].response.metas[0].name,'Next page film');
+ assert.equal((await request('/api/catalog/movie/test?addon_id=foreign')).responses.length,0);
+ assert.deepEqual(Object.keys((await request('/api/settings/browse-layout')).pages),['home']);
  const streams=await request('/api/streams/movie/test%3Afilm');assert.equal(streams.responses[0].response.streams[0].url,fixture+'/media.mp4');
  const proxy=base+'/api/stream-proxy?url='+encodeURIComponent(fixture+'/media.mp4');
  assert.equal((await fetch(proxy,{headers:{Authorization:`Bearer ${token}`}})).status,404);

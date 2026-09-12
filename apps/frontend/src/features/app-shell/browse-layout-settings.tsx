@@ -20,7 +20,7 @@ import { Eye, EyeOff, GripVertical } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import { browseLayoutQuery, catalogsQuery, listsQuery, queryKeys, updateBrowseLayout } from '@/api/queries'
-import type { BrowseLayout, BrowsePageKey } from '@/api/types'
+import type { BrowseLayout } from '@/api/types'
 import { EmptyState, ErrorState, LoadingState } from '@/components/status'
 import { SettingsSelect } from '@/components/ui/settings-select'
 import { Button } from '@/components/ui/button'
@@ -34,18 +34,12 @@ import {
   type BrowseRowCandidate,
 } from '../catalog/browse-layout'
 
-const PAGE_OPTIONS: Array<{ key: BrowsePageKey; label: string }> = [
-  { key: 'home', label: 'Home' },
-  { key: 'movies', label: 'Movies' },
-  { key: 'series', label: 'Series' },
-]
-
 export function BrowseLayoutSettings() {
   const queryClient = useQueryClient()
   const catalogs = useQuery(catalogsQuery)
   const lists = useQuery(listsQuery)
   const browseLayout = useQuery(browseLayoutQuery)
-  const [activePage, setActivePage] = useState<BrowsePageKey>('home')
+  const activePage = 'home'
   const [draftLayout, setDraftLayout] = useState<BrowseLayout | null>(null)
 
   const sensors = useSensors(
@@ -58,7 +52,7 @@ export function BrowseLayoutSettings() {
   const savedLayout = normalizeBrowseLayout(browseLayout.data ?? createDefaultBrowseLayout())
   const activeLayout = draftLayout ?? savedLayout
   const candidates = useMemo(
-    () => buildBrowseRowCandidates(activePage, catalogs.data ?? [], lists.data ?? []),
+    () => buildBrowseRowCandidates(catalogs.data ?? [], lists.data ?? []),
     [activePage, catalogs.data, lists.data],
   )
   const resolvedRows = resolveOrderedBrowseRows(candidates, activeLayout.pages[activePage])
@@ -141,8 +135,8 @@ export function BrowseLayoutSettings() {
     <section className="grid gap-3 rounded-xl border border-border bg-card/60 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="m-0 text-[1.05rem] font-[520] tracking-normal">Customise layout</h3>
-          <p className="m-0 text-sm text-muted-foreground">Reorder rows and hide sections for Home, Movies, and Series.</p>
+          <h3 className="m-0 text-[1.05rem] font-[520] tracking-normal">Home layout</h3>
+          <p className="m-0 text-sm text-muted-foreground">Reorder rows and hide sections on Home.</p>
         </div>
         <Button
           type="button"
@@ -151,20 +145,6 @@ export function BrowseLayoutSettings() {
         >
           Save layout
         </Button>
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        {PAGE_OPTIONS.map((option) => (
-          <Button
-            key={option.key}
-            type="button"
-            size="sm"
-            variant={activePage === option.key ? 'secondary' : 'ghost'}
-            onClick={() => setActivePage(option.key)}
-          >
-            {option.label}
-          </Button>
-        ))}
       </div>
 
       {isLoading ? <LoadingState label="Loading browse layout" /> : null}

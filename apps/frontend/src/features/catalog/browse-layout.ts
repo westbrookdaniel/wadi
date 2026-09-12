@@ -1,9 +1,7 @@
 import type {
   BrowseLayout,
   BrowseLayoutPage,
-  BrowsePageKey,
   CatalogEntry,
-  ListItem,
   UserList,
 } from '@/api/types'
 
@@ -27,8 +25,6 @@ export function createDefaultBrowseLayout(): BrowseLayout {
   return {
     pages: {
       home: emptyPage(),
-      movies: emptyPage(),
-      series: emptyPage(),
     },
   }
 }
@@ -37,8 +33,6 @@ export function normalizeBrowseLayout(layout: Partial<BrowseLayout> | null | und
   return {
     pages: {
       home: normalizeBrowseLayoutPage(layout?.pages?.home),
-      movies: normalizeBrowseLayoutPage(layout?.pages?.movies),
-      series: normalizeBrowseLayoutPage(layout?.pages?.series),
     },
   }
 }
@@ -74,28 +68,16 @@ export function watchlistRowKey(listId: string): string {
 }
 
 export function buildBrowseRowCandidates(
-  page: BrowsePageKey,
   catalogs: CatalogEntry[],
   lists: UserList[],
 ): BrowseRowCandidate[] {
   const rows: BrowseRowCandidate[] = []
 
-  if (page === 'home') {
-    rows.push({
-      key: CONTINUE_WATCHING_ROW_KEY,
-      kind: 'continue',
-      title: 'Continue Watching',
-    })
-  }
+  rows.push({ key: CONTINUE_WATCHING_ROW_KEY, kind: 'continue', title: 'Continue Watching' })
 
   for (const entry of catalogs) {
-    if (page === 'movies' && entry.catalog.type !== 'movie') {
-      continue
-    }
-    if (page === 'series' && entry.catalog.type !== 'series') {
-      continue
-    }
-    const matching = page === 'home' && ['movie', 'series'].includes(entry.catalog.type)
+    if (entry.catalog.extra?.some(extra => extra.name === 'search' && extra.isRequired)) continue
+    const matching = ['movie', 'series'].includes(entry.catalog.type)
       ? rows.find(row => row.kind === 'catalog' && row.catalogEntry?.addon_id === entry.addon_id && row.title.toLowerCase() === (entry.catalog.name ?? entry.catalog.id).toLowerCase() && !row.catalogEntries?.some(item => item.catalog.type === entry.catalog.type))
       : undefined
     if (matching) {
@@ -163,13 +145,4 @@ export function resolveOrderedBrowseRows(
       const row = byKey.get(key)
       return row ? [row] : []
     })
-}
-
-export function filterWatchlistItemsForPage(page: BrowsePageKey, items: ListItem[]): ListItem[] {
-  if (page === 'home') {
-    return items
-  }
-
-  const type = page === 'movies' ? 'movie' : 'series'
-  return items.filter((item) => item.media_type === type)
 }

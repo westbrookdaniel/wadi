@@ -13,6 +13,10 @@ Wadi has a shared browsing interface, a lightweight Next.js web app, and an Elec
 
 Both clients use the same hosted account and data. Desktop opens the system browser to sign in, receives a one-minute single-use authorization code over a temporary loopback callback, and exchanges it using PKCE. Its session token stays in Electron's main process, encrypted on disk through the OS keyring. The renderer receives only a signed-in marker. Linux requires a working keyring; plaintext fallback is refused.
 
+## Discover and Home
+
+Discover replaces the separate Movies and Series pages. Choose a content type, an installed addon catalog or saved list, and any filters supported by that catalog. Use **Load more** to browse additional results. Home rows have **See all** links that open their corresponding Discover selection; Continue Watching stays on Home. Settings customizes only the Home layout. Existing Home preferences are retained.
+
 ## Web development
 
 Use Node 24 and pnpm 10.33.2. Create a Postgres database and set `DATABASE_URL` in the shell for the schema command. Copy `apps/frontend/.env.example` to `apps/frontend/.env.local` for Next.js development.

@@ -28,6 +28,7 @@ export type ApiListResponse<T> = {
 }
 
 export type ApiResponses<T = unknown> = {
+  errors?: Array<{ addon_id: string; error: string }>
   responses: Array<{
     addon_id: string
     response: T
@@ -177,8 +178,6 @@ export type SubtitleInfo = {
   [key: string]: unknown
 }
 
-export type BrowsePageKey = 'home' | 'movies' | 'series'
-
 export type BrowseLayoutPage = {
   catalogModes?: Record<string, "combined" | "movie" | "series">
   order: string[]
@@ -186,7 +185,7 @@ export type BrowseLayoutPage = {
 }
 
 export type BrowseLayout = {
-  pages: Record<BrowsePageKey, BrowseLayoutPage>
+  pages: { home: BrowseLayoutPage }
 }
 
 export type PlaybackAction = 'internal' | 'external' | 'copy'

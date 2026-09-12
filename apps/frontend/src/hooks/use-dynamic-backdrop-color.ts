@@ -9,8 +9,7 @@ import {
 
 const MEDIA_BROWSE_PATHS = new Set([
   '/home',
-  '/movies',
-  '/series',
+  '/discover',
   '/search',
   '/watchlists',
 ])

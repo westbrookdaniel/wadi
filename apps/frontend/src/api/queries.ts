@@ -93,17 +93,17 @@ export const catalogQuery = (
 ) =>
   queryOptions({
     queryKey: queryKeys.catalog(contentType, catalogId, extras),
-    queryFn: async ({ signal }) => {
-      const search = new URLSearchParams(extras)
-      const suffix = search.size ? `?${search.toString()}` : ''
-      const data = await apiRequest<ApiResponses<{ metas?: unknown[] }>>(
-        `/api/catalog/${contentType}/${catalogId}${suffix}`,
-        { signal },
-      )
-      return flattenMediaResponses(data, contentType)
-    },
+    queryFn: ({ signal }) => fetchCatalogItems(contentType, catalogId, extras, signal),
     enabled,
   })
+
+export async function fetchCatalogItems(contentType: string, catalogId: string, extras: Record<string, string> = {}, signal?: AbortSignal) {
+  const search = new URLSearchParams(extras)
+  const suffix = search.size ? `?${search.toString()}` : ''
+  const data = await apiRequest<ApiResponses<{ metas?: unknown[] }>>(`/api/catalog/${encodeURIComponent(contentType)}/${encodeURIComponent(catalogId)}${suffix}`, { signal })
+  if (!data.responses.length && data.errors?.length) throw new Error('This catalog could not be loaded. Please try again.')
+  return flattenMediaResponses(data, contentType)
+}
 
 export const metaQuery = (contentType: string, mediaId: string, enabled = true) =>
   queryOptions({

@@ -11,7 +11,7 @@ describe('route matching', () => {
   it('matches media and browse routes', () => {
     expect(isMediaDrivenPath('/media/movie/tt123')).toBe(true)
     expect(isMediaDrivenPath('/home')).toBe(true)
-    expect(isMediaDrivenPath('/movies')).toBe(true)
+    expect(isMediaDrivenPath('/discover')).toBe(true)
     expect(isMediaDrivenPath('/settings')).toBe(false)
   })
 })
@@ -36,7 +36,7 @@ describe('resolveBackdropPosterSource', () => {
       <img data-bg-source="catalog" src="https://cdn.example/b.jpg" />
     `
 
-    expect(resolveBackdropPosterSource('/movies', root)).toBe(
+    expect(resolveBackdropPosterSource('/discover', root)).toBe(
       'https://cdn.example/a.jpg',
     )
   })

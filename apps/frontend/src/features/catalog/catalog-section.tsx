@@ -1,3 +1,5 @@
+import { Link } from '@tanstack/react-router'
+import type { DiscoverSearch } from './discover'
 import { useEffect, useRef, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
 
@@ -14,8 +16,10 @@ export function CatalogSection({
   search,
   entries,
   onOpen,
+  seeAll,
 }: {
   entry: CatalogEntry;
+  seeAll?: DiscoverSearch;
   search?: string;
   entries?: CatalogEntry[];
   onOpen: (media: MediaPreview) => void;
@@ -33,7 +37,7 @@ export function CatalogSection({
   }, []);
   const extras: Record<string, string> = search ? { search } : {};
   const catalogs = useQueries({ queries: (entries ?? [entry]).map(item =>
-    catalogQuery(item.catalog.type, item.catalog.id, extras, nearViewport)) });
+    catalogQuery(item.catalog.type, item.catalog.id, { ...extras, addon_id: item.addon_id }, nearViewport)) });
   const seen = new Set<string>();
   const results = catalogs.map(result => result.data ?? []);
   const data = Array.from({ length: Math.max(0, ...results.map(items => items.length)) }).flatMap((_, index) =>
@@ -55,6 +59,7 @@ export function CatalogSection({
           </h2>
           <p className={mutedText}>{entry.addon_name}</p>
         </div>
+        {seeAll ? <Link to="/discover" search={seeAll} aria-label={`See all ${title} from ${entry.addon_name}`} className="shrink-0 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">See all</Link> : null}
       </div>
 
       {!nearViewport || catalog.isLoading ? <PosterSkeletonRow /> : null}

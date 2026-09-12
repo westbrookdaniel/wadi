@@ -32,7 +32,7 @@ export function HomePage({
     (lists.data ?? []).map((list, index) => [list.id, listItems[index]?.data ?? []]),
   )
 
-  const candidates = buildBrowseRowCandidates('home', catalogs.data ?? [], lists.data ?? [])
+  const candidates = buildBrowseRowCandidates(catalogs.data ?? [], lists.data ?? [])
   const layout = normalizeBrowseLayout(browseLayout.data ?? createDefaultBrowseLayout())
   const rows = resolveVisibleBrowseRows(candidates, layout.pages.home)
 
@@ -84,7 +84,6 @@ export function HomePage({
       </div> : null}
       {!showSetup ? (
         <BrowseSections
-          page="home"
           rows={rows.filter(row => row.kind !== 'continue')}
           continueItems={continueItems}
           listItemsByListId={listItemsByListId}

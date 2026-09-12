@@ -64,8 +64,6 @@ describe('BrowseLayoutSettings', () => {
     const layout: BrowseLayout = {
       pages: {
         home: { order: [], hidden: [] },
-        movies: { order: [], hidden: [] },
-        series: { order: [], hidden: [] },
       },
     }
 

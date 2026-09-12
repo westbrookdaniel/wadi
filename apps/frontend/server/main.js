@@ -174,13 +174,13 @@ export function createApp({ database = process.env.DATABASE_URL, sessionDays = 3
     const emptyPage = () => ({ order: [], hidden: [] });
     const defaults = { subtitles_enabled: true, subtitle_language: null, subtitle_delay_seconds: 0, subtitle_size: 1, subtitle_position: 0, subtitle_text_color: '#FFFFFF', subtitle_background_color: '#000000', subtitle_background_opacity: 0, subtitle_outline_color: '#000000', subtitle_outline_style: 'outline', subtitle_font_family: 'sans-serif', subtitle_offset_x: 0, subtitle_offset_y: 0, playback_speed: 1, preferred_audio_language: null, preferred_audio_track_id: null };
     for (const [route, column, fallback, schema] of [
-        ['browse-layout', 'browse_layout_json', { pages: { home: emptyPage(), movies: emptyPage(), series: emptyPage() } }, z.object({ pages: z.object(Object.fromEntries(['home', 'movies', 'series'].map(key => [key, z.object({ order: z.array(identity).default([]), hidden: z.array(identity).default([]), catalogModes: z.record(z.string(), z.enum(["combined", "movie", "series"])).optional() }).default(emptyPage())]))).default({}) })],
+        ['browse-layout', 'browse_layout_json', { pages: { home: emptyPage() } }, z.object({ pages: z.object(Object.fromEntries(['home'].map(key => [key, z.object({ order: z.array(identity).default([]), hidden: z.array(identity).default([]), catalogModes: z.record(z.string(), z.enum(["combined", "movie", "series"])).optional() }).default(emptyPage())]))).default({}) })],
         ['playback', 'playback_prefs_json', { stream_action: 'internal', external_player_preset: 'vlc', external_player_template: 'vlc://{url}' }, z.object({ stream_action: z.enum(['internal', 'copy', 'external']), external_player_preset: z.enum(['choose','vlc','mpv','iina','mxplayer','justplayer','outplayer','moonplayer','cineultra','infuse','vidhub','m3u','custom']).optional(), external_player_template: z.string().refine(v => /^[a-z][a-z\d+.-]*:/i.test(v) && v.includes('{url}') && !/^(javascript|data|vbscript|file|shell|powershell|cmd|ms-settings):/i.test(v)) })],
     ]) {
         app.get(`/api/settings/${route}`, async (req, res) => {
             const row = (await get(`SELECT ${column} AS value FROM user_settings WHERE user_id=? AND profile_id=?`, req.user.id, req.user.profile_id));
             const saved = row ? JSON.parse(row.value) : {};
-            res.json(Object.keys(saved).length ? saved : fallback);
+            res.json(route === 'browse-layout' ? schema.parse(Object.keys(saved).length ? saved : fallback) : Object.keys(saved).length ? saved : fallback);
         });
         app.put(`/api/settings/${route}`, async (req, res) => {
             const value = schema.parse(req.body);
@@ -263,7 +263,7 @@ export function createApp({ database = process.env.DATABASE_URL, sessionDays = 3
     for (const [route, kind] of [['catalog', 'catalog'], ['meta', 'meta'], ['streams', 'stream'], ['subtitles', 'subtitles']])
         app.get(`/api/${route}/:type/:id`, async (req, res) => {
             const { type, id } = req.params;
-            const addons = (await userAddons(req)).filter(a => kind === 'catalog' ? a.manifest.catalogs.some(c => c.id === id && c.type === type) : a.manifest.resources.some(r => {
+            const addons = (await userAddons(req)).filter(a => kind !== 'catalog' || !req.query.addon_id || a.id === req.query.addon_id).filter(a => kind === 'catalog' ? a.manifest.catalogs.some(c => c.id === id && c.type === type) : a.manifest.resources.some(r => {
                 const name = typeof r === 'string' ? r : r.name;
                 const types = typeof r === 'string' ? a.manifest.types : r.types;
                 const prefixes = typeof r === 'string' ? a.manifest.idPrefixes : r.idPrefixes;
