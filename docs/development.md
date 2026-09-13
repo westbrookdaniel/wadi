@@ -118,7 +118,7 @@ The synthetic local-conversion check runs with `node --test apps/desktop/src/med
 
 Wadi checks the public GitHub Releases API on launch, every six hours, and from Check for updates. It compares stable versions and shows Download update when a newer release exists. Clicking opens the matching installer in the browser. If no matching build exists, it opens the release page. Users install over the existing app; Wadi does not replace files, restart, or install on quit. User data stays in the existing application data directory.
 
-Releases are unsigned and do not require Apple certificates or notarization. Operating systems may ask users to approve opening the app. The version tag must match apps/desktop/package.json. The workflow builds installers for each platform into a draft release. Publish the complete draft after reviewing it. No updater YAML files or signing secrets are required.
+macOS releases use explicit ad-hoc signing (`identity: "-"`) without Apple certificates or notarization. Hardened runtime is disabled because ad-hoc signatures have no Team ID for library validation. CI verifies the finished app and bundled media binaries before uploading installers. Users must approve the first launch in System Settings → Privacy & Security → Open Anyway. Windows and Linux installers remain unsigned. The version tag must match apps/desktop/package.json. The workflow builds installers for each platform into a draft release. Publish the complete draft after reviewing it. No updater YAML files or signing secrets are required.
 
 ## iOS home-screen app
 

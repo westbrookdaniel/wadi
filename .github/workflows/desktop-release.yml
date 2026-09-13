@@ -44,6 +44,18 @@ jobs:
         shell: bash
         run: |
           pnpm --filter @wadi/desktop package --publish never
+      - name: Verify macOS app signatures
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          shopt -s nullglob
+          apps=(apps/desktop/release/mac*/Wadi.app)
+          test "${#apps[@]}" -gt 0
+          for app in "${apps[@]}"; do
+            codesign --verify --deep --strict --verbose=2 "$app"
+            codesign --verify --strict --verbose=2 "$app/Contents/Resources/media-bin/ffmpeg"
+            codesign --verify --strict --verbose=2 "$app/Contents/Resources/media-bin/ffprobe"
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: wadi-${{ matrix.os }}
@@ -74,7 +86,7 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release create "$RELEASE_TAG" --draft --title "Wadi $RELEASE_TAG" --notes "Unsigned desktop installers. Wadi checks for updates and opens the installer download in your browser. Install new versions manually."
+            gh release create "$RELEASE_TAG" --draft --title "Wadi $RELEASE_TAG" --notes "macOS installers use ad-hoc signing and are not notarized by Apple. After the first blocked launch, open System Settings > Privacy & Security > Open Anyway to approve Wadi. Windows and Linux installers remain unsigned. Wadi checks for updates and opens the installer download in your browser. Install new versions manually."
           fi
           test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true || { echo 'Refusing to replace files in a published release'; exit 1; }
           gh release upload "$RELEASE_TAG" release/* --clobber
