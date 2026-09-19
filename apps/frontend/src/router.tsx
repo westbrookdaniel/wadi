@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/button'
 import { SettingsSelect } from '@/components/ui/settings-select'
 import { readPlaybackSession, savePlaybackSession } from '@/features/media/detail/playback-session'
 
-import { metaQuery, playbackPreferencesQuery, updatePlaybackPreferences } from '@/api/queries'
+import { metaQuery, playbackPreferencesQuery } from '@/api/queries'
 import type { MediaPreview } from '@/api/types'
 import { AppShell } from '@/features/app-shell/app-shell'
 import type { NavPath } from '@/features/app-shell/nav-items'
@@ -351,10 +351,16 @@ function MediaRoute() {
               <Button onClick={() => {
                 const url = launchFailure ? getStreamUrl(launchFailure.stream) : null
                 if (!url) return
-                const next = { stream_action: 'external', external_player_template: 'vlc://{url}', external_player_preset: chosenPlayer } satisfies import('@/api/types').PlaybackPreferences
-                void openExternalPlayback(url, next).then(async () => { await updatePlaybackPreferences(next); await playbackPrefs.refetch(); setLaunchFailure(null) }).catch(error => setLaunchFailure(current => current ? { ...current, message: error instanceof Error ? error.message : 'Could not open player.' } : null))
+                const next = { stream_action: 'external', external_player_template: playbackPrefs.data?.external_player_template ?? 'vlc://{url}', external_player_preset: chosenPlayer } satisfies import('@/api/types').PlaybackPreferences
+                void openExternalPlayback(url, next).then(() => setLaunchFailure(null)).catch(error => setLaunchFailure(current => current ? { ...current, message: error instanceof Error ? error.message : 'Could not open player.' } : null))
               }}>Open player</Button>
-              <Button variant="secondary" onClick={() => { const url = launchFailure ? getStreamUrl(launchFailure.stream) : null; if (url) void navigator.clipboard.writeText(url).catch(() => setLaunchFailure(current => current ? { ...current, message: 'Clipboard access is unavailable.' } : null)) }}>Copy link</Button>
+              <Button variant="secondary" onClick={async () => {
+                const url = launchFailure ? getStreamUrl(launchFailure.stream) : null
+                if (!url) return
+                try { await navigator.clipboard.writeText(url); setLaunchFailure(current => current ? { ...current, message: 'Link copied.' } : null) }
+                catch { setLaunchFailure(current => current ? { ...current, message: 'Clipboard access is unavailable. Select the link below and copy it manually.' } : null) }
+              }}>Copy link</Button>
+              <textarea aria-label="Stream link" readOnly value={launchFailure ? getStreamUrl(launchFailure.stream) ?? "" : ""} className="w-full rounded-lg border p-3 text-sm" onFocus={event => event.currentTarget.select()} />
             </DialogContent>
           </Dialog>
           {selectedStream && selectedPlaybackTarget ? (
