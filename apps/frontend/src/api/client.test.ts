@@ -21,3 +21,13 @@ it('retains login on network failure and clears it on current-session expiry', a
   await expect(apiRequest('/api/auth/me')).rejects.toThrow()
   expect(useAppStore.getState().token).toBeNull()
 })
+it('clears all active account state and advances the session revision on expiry', async () => {
+  const store = useAppStore.getState()
+  store.setToken('expired')
+  store.setActiveProfileId('old-profile')
+  store.setSelectedListId('old-list')
+  const revision = useAppStore.getState().authRevision
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 401 })))
+  await expect(apiRequest('/api/auth/me')).rejects.toThrow()
+  expect(useAppStore.getState()).toMatchObject({ token: null, activeProfileId: null, selectedListId: null, authRevision: revision + 1 })
+})
