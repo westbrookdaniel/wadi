@@ -12,15 +12,17 @@ export function rankStreams(streams: PlayableStream[], settings: AutoPlaybackSet
     const resolution = metadata.resolution.value
     const size = metadata.sizeBytes.value
     const raw = Object.values(metadata.raw).filter(Boolean).join(' ').toLowerCase()
+    const cached = Object.values(metadata.raw).some(value => value && matchesCachedIndicator(value, settings.cachedIndicator))
     const excluded = settings.excludedWords.split(',').map(word => word.trim().toLowerCase()).filter(Boolean)
     const eligible = isDirectStream(stream)
+      && (settings.cachedMode !== 'only' || cached)
       && (resolution === null ? settings.allowUnknown : resolution <= settings.maxResolution)
       && (!settings.maxSizeGB || (size === null ? settings.allowUnknown : size <= settings.maxSizeGB * 1e9))
       && (settings.allowHdr || metadata.hdr.value === 'SDR' || metadata.hdr.value === null && settings.allowUnknown)
       && (!settings.excludeCam || metadata.sourceQuality.value !== 'CAM')
       && !excluded.some(word => raw.includes(word))
     let score = 0
-    const reasons: string[] = []
+    const reasons: string[] = settings.cachedMode !== 'any' && cached ? ['Cached indicator'] : []
     if (resolution !== null) {
       score += settings.qualityWeight * Math.max(0, 1 - Math.abs(resolution - settings.preferredResolution) / 2160)
       reasons.push(`${resolution}p`)
@@ -32,8 +34,8 @@ export function rankStreams(streams: PlayableStream[], settings: AutoPlaybackSet
     if (settings.codec !== 'any' && metadata.codec.value === settings.codec) { score += 25; reasons.push(settings.codec) }
     if (settings.language !== 'any' && metadata.languages.value?.some(lang => normalizeLanguage(lang) === settings.language || lang.startsWith(settings.language + '-'))) { score += 35; reasons.push('Preferred language') }
     if (settings.preferredAddon && stream.addon_id === settings.preferredAddon) { score += 40; reasons.push('Preferred provider') }
-    return { stream, index, score, eligible, reasons }
-  }).sort((a, b) => Number(b.eligible) - Number(a.eligible) || b.score - a.score || a.index - b.index)
+    return { stream, index, score, eligible, cached, reasons }
+  }).sort((a, b) => Number(b.eligible) - Number(a.eligible) || (settings.cachedMode === 'prefer' ? Number(b.cached) - Number(a.cached) : 0) || b.score - a.score || a.index - b.index)
 }
 
 export function nextReleasedEpisode(episodes: Episode[], currentId: string | null, now = Date.now()) {
@@ -52,4 +54,15 @@ export function nextReleasedEpisode(episodes: Episode[], currentId: string | nul
 function normalizeLanguage(language: string) {
   const aliases: Record<string, string> = { eng: 'en', spa: 'es', fra: 'fr', fre: 'fr', deu: 'de', ger: 'de', jpn: 'ja', hin: 'hi', ita: 'it' }
   return aliases[language] ?? language
+}
+
+function matchesCachedIndicator(text: string, indicator: string) {
+  // Emoji presentation selectors must not make an otherwise identical marker miss.
+  const normalize = (value: string) => value.normalize('NFC').replace(/[\uFE0E\uFE0F]/g, '').toLowerCase()
+  const marker = normalize(indicator).trim()
+  if (!marker) return false
+  const escaped = marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const before = /^[\p{L}\p{N}_]/u.test(marker) ? '(?<![\\p{L}\\p{N}_])' : ''
+  const after = /[\p{L}\p{N}_]$/u.test(marker) ? '(?![\\p{L}\\p{N}_])' : ''
+  return new RegExp(before + escaped + after, 'u').test(normalize(text))
 }

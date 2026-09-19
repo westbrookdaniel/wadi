@@ -14,6 +14,8 @@ export const autoPlaybackSchema = z.object({
   sizeWeight: z.number().min(0).max(100).default(30),
   codec: z.enum(['any', 'H.264', 'HEVC', 'AV1']).default('any'),
   language: z.string().max(20).default('any'),
+  cachedMode: z.enum(['any', 'prefer', 'only']).default('any'),
+  cachedIndicator: z.string().max(80).default('⚡'),
   preferredAddon: z.string().max(512).default(''),
   excludeCam: z.boolean().default(true),
   allowHdr: z.boolean().default(true),

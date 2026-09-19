@@ -34,3 +34,22 @@ describe('next episode eligibility', () => {
     expect(nextReleasedEpisode([episode('one', 1)], 'one', now)).toBeNull()
   })
 })
+
+it('always prefers eligible cached streams, while cached-only never selects an unmarked stream', () => {
+  const streams = [{ url: 'https://test/best', title: '1080p English 1 GB' }, { url: 'https://test/cached', name: 'Provider ⚡️', title: '720p English 2 GB' }, { url: 'https://test/oversize', title: '⚡ 2160p English' }]
+  const preferences = { ...settings, maxResolution: 1080 }
+  expect(rankStreams(streams, { ...preferences, cachedMode: 'prefer' })[0].stream.url).toBe('https://test/cached')
+  expect(rankStreams(streams, { ...preferences, cachedMode: 'only' }).filter(row => row.eligible).map(row => row.stream.url)).toEqual(['https://test/cached'])
+  expect(rankStreams(streams, { ...preferences, cachedMode: 'only', cachedIndicator: '' }).some(row => row.eligible)).toBe(false)
+  expect(rankStreams(streams, preferences)[0].stream.url).toBe('https://test/best')
+})
+it('matches literal custom markers without mistaking uncached for cached', () => {
+  const streams = [{ url: 'https://test/no', description: 'uncached' }, { url: 'https://test/yes', description: 'CACHED · 1080p' }]
+  expect(rankStreams(streams, { ...settings, cachedMode: 'only', cachedIndicator: 'cached' }).filter(row => row.eligible).map(row => row.stream.url)).toEqual(['https://test/yes'])
+  expect(rankStreams([{ url: 'https://test/literal', title: '[RD+]' }], { ...settings, cachedMode: 'only', cachedIndicator: '[RD+]' })[0].eligible).toBe(true)
+})
+it('keeps existing saved preferences when adding cached defaults', async () => {
+  const { autoPlaybackSchema } = await import('@/store/auto-playback')
+  const oldSettings = { enabled: true, skipSelection: true, preferredResolution: 720, qualityWeight: 55 }
+  expect(autoPlaybackSchema.parse(oldSettings)).toMatchObject({ ...oldSettings, cachedMode: 'any', cachedIndicator: '⚡' })
+})
