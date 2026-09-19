@@ -28,7 +28,7 @@ import type {
 
 export const queryKeys = {
   playerDefaults: ['player-defaults'] as const,
-  playerOverride: (type: string, id: string) => ['player-override', type, id] as const,
+  playerOverride: (type: string, id: string, profileId = useAppStore.getState().activeProfileId) => ['player-override', type, id, profileId] as const,
   subtitles: (type: string, id: string, context: Record<string, string> = {}) => ['subtitles', type, id, context] as const,
   me: ['me'] as const,
   addons: ['addons'] as const,
@@ -379,11 +379,11 @@ export const playerDefaultsQuery = queryOptions({
   queryFn: () => devicePlayer('wadi.device.player.v1', () => apiRequest<PlayerPreferences>('/api/settings/player-defaults')),
 })
 
-export const playerOverrideQuery = (mediaType: string, mediaId: string, enabled = true) =>
+export const playerOverrideQuery = (mediaType: string, mediaId: string, enabled = true, profileId = useAppStore.getState().activeProfileId) =>
   queryOptions({
-    queryKey: queryKeys.playerOverride(mediaType, mediaId),
+    queryKey: queryKeys.playerOverride(mediaType, mediaId, profileId),
     queryFn: () =>
-      deviceOverride(deviceOverrideKey(mediaType, mediaId), () => apiRequest<PlayerOverride>(
+      deviceOverride(deviceOverrideKey(mediaType, mediaId, profileId), () => apiRequest<PlayerOverride>(
         `/api/settings/player-override/${encodeURIComponent(mediaType)}/${encodeURIComponent(mediaId)}`,
       )),
     enabled,
@@ -426,11 +426,11 @@ export async function updatePlayerDefaults(payload: PlayerOverride) {
   return saveDevicePlayer('wadi.device.player.v1', { ...current, ...payload })
 }
 
-function deviceOverrideKey(mediaType: string, mediaId: string) {
-  return JSON.stringify(['wadi.device.override.v1', useAppStore.getState().activeProfileId, mediaType, mediaId])
+function deviceOverrideKey(mediaType: string, mediaId: string, profileId: string | null) {
+  return JSON.stringify(['wadi.device.override.v1', profileId, mediaType, mediaId])
 }
-export function updatePlayerOverride(mediaType: string, mediaId: string, payload: PlayerOverride) {
-  return saveDeviceOverride(deviceOverrideKey(mediaType, mediaId), payload)
+export function updatePlayerOverride(mediaType: string, mediaId: string, payload: PlayerOverride, profileId = useAppStore.getState().activeProfileId) {
+  return saveDeviceOverride(deviceOverrideKey(mediaType, mediaId, profileId), payload)
 }
 
 export function updateWatchProgress(payload: WatchProgressRequest) {

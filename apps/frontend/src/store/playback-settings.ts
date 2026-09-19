@@ -18,8 +18,7 @@ const playerSchema = z.object({
 })
 const memory = new Map<string, unknown>()
 function read(key: string): unknown {
-  if (memory.has(key)) return memory.get(key)
-  try { return JSON.parse(localStorage.getItem(key) ?? 'null') } catch { return null }
+  try { return JSON.parse(localStorage.getItem(key) ?? 'null') } catch { return memory.get(key) ?? null }
 }
 function save(key: string, value: unknown) {
   // Continue to work in memory when browser storage is unavailable.
@@ -44,6 +43,8 @@ export async function devicePlayer(key: string, loadLegacy: () => Promise<Player
   const stored = playerSchema.safeParse(read(key))
   if (stored.success) return stored.data
   const imported = playerSchema.parse(await loadLegacy())
+  const latest = playerSchema.safeParse(read(key))
+  if (latest.success) return latest.data
   save(key, imported); return imported
 }
 export async function saveDevicePlayer(key: string, value: PlayerPreferences) {
@@ -53,8 +54,11 @@ export async function deviceOverride(key: string, loadLegacy: () => Promise<Play
   const stored = playerSchema.partial().safeParse(read(key))
   if (stored.success) return stored.data
   const imported = playerSchema.partial().parse(await loadLegacy())
+  const latest = playerSchema.partial().safeParse(read(key))
+  if (latest.success) return latest.data
   save(key, imported); return imported
 }
 export async function saveDeviceOverride(key: string, value: PlayerOverride) {
-  const parsed = playerSchema.partial().parse(value); save(key, parsed); return parsed
+  const stored = playerSchema.partial().safeParse(read(key))
+  const parsed = playerSchema.partial().parse({ ...(stored.success ? stored.data : {}), ...value }); save(key, parsed); return parsed
 }
