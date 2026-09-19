@@ -1,3 +1,5 @@
+import { useContext } from 'react'
+import { ReleaseContext } from '../catalog/release-feed'
 import type { ListItem, MediaPreview } from '@/api/types'
 
 import { Artwork } from '@/components/artwork'
@@ -18,6 +20,8 @@ export function MediaCard({
   watched?: boolean
   progress?: { position: number; duration?: number | null }
 }) {
+  const { counts } = useContext(ReleaseContext)
+  const count = counts['name' in media ? media.id : media.media_id] ?? 0
   const title = 'name' in media ? media.name : media.title
   const type = ('type' in media ? media.type : media.media_type)  === 'series' ? 'Series' : 'Movies'
   const poster = media.poster ?? undefined
@@ -34,6 +38,7 @@ export function MediaCard({
         data-has-poster={poster ? 'true' : 'false'}
       >
         <Artwork backdropSource="catalog" src={poster} className="size-full" />
+        {type === 'Series' && count > 0 && <span aria-label={`${count} new episodes`} className="absolute top-2 left-2 rounded-full bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground shadow">+{count}</span>}
         {watched ? (
           <span className="absolute top-2 right-2 rounded-full bg-[hsl(142_72%_36%)] px-2 py-1 text-[0.72rem] font-semibold text-white">
             Watched

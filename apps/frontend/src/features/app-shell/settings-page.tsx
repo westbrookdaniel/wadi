@@ -1,3 +1,4 @@
+import { AutoPlaybackSettings } from './auto-playback-settings'
 import { AccountControls } from './account-controls'
 import { externalPlayers, validCustomTemplate } from '@/features/media/detail/external-players'
 import { DeviceSettings, ExperimentalSettings } from './device-settings'
@@ -89,7 +90,7 @@ const profileSchema = z.object({
   avatarKey: z.string().trim().max(2048).refine(value => PROFILE_AVATAR_OPTIONS.some(option => option.key === value) || isAvatarImageUrl(value), "Choose a colour or enter an HTTP image URL."),
 });
 
-const settingsSections = [['profiles', 'Profiles'], ['home', 'Home'], ['playback', 'Playback on this device'], ['plugins', 'Plugins'], ['account', 'Account'], ['experimental', 'Experimental']];
+const settingsSections = [['profiles', 'Profiles'], ['home', 'Home'], ['playback', 'Playback on this device'], ['auto-pick', 'Auto-pick & autoplay'], ['plugins', 'Plugins'], ['account', 'Account'], ['experimental', 'Experimental']];
 
 export function ProfileSettingsPage() {
   const profileId = useAppStore(state => state.activeProfileId);
@@ -119,6 +120,7 @@ export function ProfileSettingsPage() {
         <section id="profiles" className="scroll-mt-6 rounded-xl border border-border bg-card/60 p-5"><h2 className="mb-4 text-lg font-medium">Profiles</h2><ProfileManager /></section>
         <section id="home" className="scroll-mt-6"><BrowseLayoutSettings key={profileId} /></section>
         <section id="playback" className="grid scroll-mt-6 gap-5"><h2 className="text-xl font-medium">Playback on this device</h2><ExternalPlaybackSettingsSection /><DeviceSettings /></section>
+        <section id="auto-pick" className="scroll-mt-6"><AutoPlaybackSettings /></section>
         <section id="plugins" className="scroll-mt-6"><button type="button" onClick={() => navigate({ to: '/settings/plugins' })} className="flex w-full items-center gap-4 rounded-xl border border-border bg-card/60 p-5 text-left hover:bg-muted/50"><span className="grid flex-1 gap-1"><span className="text-lg font-medium">Plugins</span><span className="text-sm text-muted-foreground">Manage your Stremio-compatible addons.</span></span><ArrowRight className="size-5 shrink-0" /></button></section>
         <section id="account" className="scroll-mt-6"><button type="button" onClick={() => navigate({ to: '/settings/account' })} className="flex w-full items-center gap-4 rounded-xl border border-border bg-card/60 p-5 text-left hover:bg-muted/50"><span className="grid flex-1 gap-1"><span className="text-lg font-medium">Account details</span><span className="text-sm text-muted-foreground">Manage your email, password, and account.</span></span><ArrowRight className="size-5 shrink-0" /></button></section>
         <section id="experimental" className="scroll-mt-6"><ExperimentalSettings /></section>

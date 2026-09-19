@@ -1,3 +1,4 @@
+import { NewEpisodesSection } from './new-episodes'
 import { Link } from '@tanstack/react-router'
 import { discoverSearchForRow } from './discover'
 import { useQuery } from '@tanstack/react-query'
@@ -26,6 +27,7 @@ export function BrowseSections({
   return (
     <>
       {rows.map((row) => {
+        if (row.kind === 'new-episodes') return <NewEpisodesSection key={row.key} onOpenMedia={onOpenMedia} />
         if (row.kind === 'catalog' && row.catalogEntry) {
           return (
             <CatalogSection

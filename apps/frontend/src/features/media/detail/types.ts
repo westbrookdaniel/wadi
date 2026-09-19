@@ -16,6 +16,8 @@ export type PlaybackTarget = {
 }
 
 export type Episode = {
+  releaseConflicting?: boolean
+
   videoIds?: string[]
   id: string
   title: string

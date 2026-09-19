@@ -30,6 +30,7 @@ type SeriesStep = "episodes" | "streams";
 
 export function SeriesDetailPage({
   media,
+  autoPickAllowed = true,
   listAction,
   preferredVideoId,
   preferredSeason,
@@ -37,6 +38,7 @@ export function SeriesDetailPage({
   onBack,
   onPlay,
 }: {
+  autoPickAllowed?: boolean
   media: MediaPreview;
   listAction?: React.ReactNode;
   preferredVideoId?: string | null;
@@ -148,8 +150,10 @@ export function SeriesDetailPage({
             </Button>
             {streams.error ? <p role="alert" className="text-xs text-destructive">{streams.error.message}</p> : null}
             <StreamList
-              streams={streams.data ?? []}
-              isLoading={streams.isLoading}
+              selectionKey={selectedEpisode.id}
+          autoPickAllowed={autoPickAllowed}
+          streams={streams.data ?? []}
+              isLoading={streams.isFetching}
               onPlay={(stream) =>
                 onPlay(stream, {
                   mediaType: media.type,
@@ -168,7 +172,7 @@ export function SeriesDetailPage({
           </div>
         ) : (
           <EpisodeSelector
-            media={media}
+        media={media}
             episodes={episodes}
             seasons={seasons}
             selectedSeason={selectedSeason}

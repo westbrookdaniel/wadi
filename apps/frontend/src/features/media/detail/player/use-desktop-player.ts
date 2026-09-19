@@ -6,8 +6,8 @@ import { desktopBridge } from '@/lib/desktop'
 import { initialPlayerState, type PlayerState } from './state'
 const sessionSchema = z.object({ id:z.string(),url:z.url(),duration:z.number(),offset:z.number(),hasVideo:z.boolean(),hasAudio:z.boolean(),audioTracks:z.array(z.object({id:z.string(),label:z.string(),language:z.string()})),selectedAudioTrackId:z.string().nullable(),mode:z.enum(['direct','remux','audio','video']) })
 const hintsSchema = z.object({ proxyHeaders: z.object({ request:z.record(z.string(),z.string()).optional() }).optional() })
-export function useDesktopPlayer({ videoRef, source, hints, savedPosition, watched, onProgressCommit }: {
-  videoRef:RefObject<HTMLVideoElement | null>; source?:string; hints:unknown; savedPosition:number; watched:boolean; onProgressCommit:(position:number,duration:number)=>void
+export function useDesktopPlayer({ videoRef, source, hints, savedPosition, watched, onProgressCommit, onEnded }: {
+  videoRef:RefObject<HTMLVideoElement | null>; source?:string; hints:unknown; savedPosition:number; watched:boolean; onEnded?:()=>void; onProgressCommit:(position:number,duration:number)=>void
 }) {
   const conversionEnabled = useDeviceStore(state => state.conversionEnabled)
   const [state,setState]=useState<PlayerState>(initialPlayerState)
@@ -23,6 +23,8 @@ export function useDesktopPlayer({ videoRef, source, hints, savedPosition, watch
   const job=useRef<string|null>(null)
   const session=useRef<{offset:number;direct:boolean}|null>(null)
   const activeSource=useRef<string|null>(null)
+  const endedCallback = useRef(onEnded)
+  useEffect(() => { endedCallback.current = onEnded }, [onEnded])
   const commit=useRef(onProgressCommit)
   const [generation,restart]=useState(0)
   const parsed=hintsSchema.safeParse(hints)
@@ -60,7 +62,7 @@ export function useDesktopPlayer({ videoRef, source, hints, savedPosition, watch
     }
     const failed=()=>{if(!cancelled)update({status:'error',error:conversionEnabled ? 'Playback failed. Retry with full conversion or choose another stream.' : 'Playback failed. Enable audio and video conversion in device settings or choose another stream.'})}
     video.addEventListener('error',failed)
-    const ended=()=>{playing.current=false;update({playing:false});commit.current(position.current,duration)}
+    const ended=()=>{playing.current=false;update({playing:false});commit.current(position.current,duration);endedCallback.current?.()}
     const playbackChanged=()=>{if(playable){playing.current=!video.paused;sync()}}
     video.addEventListener('play',playbackChanged);video.addEventListener('pause',playbackChanged);video.addEventListener('timeupdate',sync);video.addEventListener('volumechange',sync);video.addEventListener('ended',ended)
     void desktop.media('start',{id,url:source,headers:JSON.parse(headers),position:position.current,audio:audio.current,speed:speed.current,forceVideo:conversionEnabled && forceVideo.current,conversionEnabled}).then(async value=>{

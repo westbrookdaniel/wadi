@@ -46,6 +46,14 @@ export function mergeEpisodeSources(sources, watchStates = [], now = Date.now())
 
 export function addEpisodeRoutes(app, { db, userAddons, fetchMetadata, clock = Date.now, ttlMs = 6 * 60 * 60 * 1000 }) {
   const pending = new Map();
+  app.get('/api/episode-library', async (req, res) => {
+    const parsed = z.string().max(512).optional().safeParse(req.query.listId);
+    if (!parsed.success) return res.status(400).json({ error: 'Invalid list ID' });
+    const params = [req.user.id, req.user.profile_id];
+    if (parsed.data) params.push(parsed.data);
+    const rows = await db.all(`SELECT DISTINCT ON (media_id) media_id,title,poster FROM list_items WHERE user_id=? AND profile_id=? AND media_type='series' ${parsed.data ? 'AND list_id=?' : ''} ORDER BY media_id,created_at DESC LIMIT 51`, ...params);
+    res.json({ items: rows.slice(0,50), truncated: rows.length > 50 });
+  });
   app.get('/api/episodes/:type/:id', async (req, res) => {
     const { type, id } = req.params;
     if (type !== 'series' || !id || id.length > 512) return res.status(400).json({ error: 'A series ID is required' });

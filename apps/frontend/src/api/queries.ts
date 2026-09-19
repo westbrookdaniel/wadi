@@ -119,7 +119,7 @@ export const metaQuery = (contentType: string, mediaId: string, enabled = true) 
 
 export const episodesQuery = (mediaId: string, profileId: string | null) => queryOptions({
   queryKey: ['episodes', mediaId, profileId],
-  queryFn: async () => episodeCatalogSchema.parse(await apiRequest<unknown>('/api/episodes/series/' + encodeURIComponent(mediaId))),
+  queryFn: async ({ signal }) => episodeCatalogSchema.parse(await apiRequest<unknown>('/api/episodes/series/' + encodeURIComponent(mediaId), { signal })),
   enabled: Boolean(mediaId && profileId),
   staleTime: 60_000,
 })
