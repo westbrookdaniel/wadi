@@ -1,0 +1,53 @@
+name: Linux desktop checks
+on:
+  pull_request:
+    paths:
+      - 'apps/desktop/**'
+      - 'apps/frontend/**'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.github/workflows/linux-desktop.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/desktop/**'
+      - 'apps/frontend/**'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/linux-desktop.yml'
+permissions:
+  contents: read
+jobs:
+  linux-desktop:
+    runs-on: ubuntu-latest
+    env:
+      WADI_WEB_ORIGIN: https://watchwadi.com
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: bash -n apps/desktop/scripts/setup-linux.sh
+      - run: pnpm --filter @wadi/desktop package --linux deb AppImage --publish never
+      - run: pnpm --filter @wadi/desktop test
+      - name: Verify Linux desktop package
+        shell: bash
+        run: |
+          mkdir /tmp/wadi-package
+          dpkg-deb -x apps/desktop/release/*.deb /tmp/wadi-package
+          desktop=/tmp/wadi-package/usr/share/applications/wadi.desktop
+          grep -Fx 'StartupWMClass=wadi' "$desktop"
+          grep -Fx 'Exec=/opt/Wadi/wadi --fullscreen' "$desktop"
+          test -f /tmp/wadi-package/usr/share/icons/hicolor/48x48/apps/wadi.png
+          test -f /tmp/wadi-package/usr/share/icons/hicolor/256x256/apps/wadi.png
+          test -x /tmp/wadi-package/opt/Wadi/wadi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-desktop
+          path: |
+            apps/desktop/release/*.deb
+            apps/desktop/release/*.AppImage

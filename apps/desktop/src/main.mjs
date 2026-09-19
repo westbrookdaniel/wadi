@@ -13,8 +13,21 @@ const config = JSON.parse(await readFile(join(here, '../desktop-config.json'), '
 const origin = new URL(config.origin).origin;
 const legacyUserData = join(app.getPath('appData'), '@wadi/desktop');
 app.setName('Wadi');
+if (process.platform === 'linux') {
+  app.setDesktopName('wadi.desktop');
+  app.commandLine.appendSwitch('class', 'wadi');
+}
 if (existsSync(legacyUserData)) app.setPath('userData', legacyUserData);
 protocol.registerSchemesAsPrivileged([{ scheme: 'wadi', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }]);
+const desktopSettingsFile = join(app.getPath('userData'), 'desktop-settings.json');
+let startFullscreen = false;
+try { startFullscreen = JSON.parse(await readFile(desktopSettingsFile, 'utf8')).startFullscreen === true; } catch { /* First launch. */ }
+async function saveStartFullscreen(value) {
+  await mkdir(app.getPath('userData'), { recursive: true });
+  await writeFile(desktopSettingsFile, JSON.stringify({ startFullscreen: value }));
+  startFullscreen = value;
+}
+const fullscreenPreference = () => ({ label: 'Start in Fullscreen', type: 'checkbox', checked: startFullscreen, click: item => { void saveStartFullscreen(item.checked).catch(error => dialog.showErrorBox('Could not save desktop settings', error.message)); } });
 let updates;
 let window, media, token = null, authServer = null, cancelSignIn = null;
 const tokenFile = () => join(app.getPath('userData'), 'session.enc');
@@ -92,7 +105,7 @@ async function signIn() {
 async function startDesktop() {
 if (process.platform === 'darwin') {
   app.dock?.setIcon(join(here, '../resources/icon-mac.png'));
-  Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: 'Wadi', submenu: [{ role: 'about' }, { label: 'Check for Updates…', click: () => void updates?.check(true) }, { label: 'Settings…', accelerator: 'Command+,', click: () => { window?.show(); window?.focus(); window?.webContents.send('open-settings'); } }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] }, { role: 'editMenu' }, { role: 'viewMenu' }, { role: 'windowMenu' }]));
+  Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: 'Wadi', submenu: [{ role: 'about' }, { label: 'Check for Updates…', click: () => void updates?.check(true) }, { label: 'Settings…', accelerator: 'Command+,', click: () => { window?.show(); window?.focus(); window?.webContents.send('open-settings'); } }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] }, { role: 'editMenu' }, { label: 'View', submenu: [{ role: 'reload' }, { role: 'forceReload' }, { role: 'toggleDevTools' }, { type: 'separator' }, { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' }, { type: 'separator' }, { role: 'togglefullscreen' }, fullscreenPreference()] }, { role: 'windowMenu' }]));
 }
 
 try { if (safeStorage.isEncryptionAvailable()) token = safeStorage.decryptString(await readFile(tokenFile())); } catch { /* First launch or unavailable keyring. */ }
@@ -112,7 +125,7 @@ session.defaultSession.setPermissionCheckHandler((webContents, permission, reque
   permission === 'fullscreen' && webContents === window?.webContents && details.isMainFrame && requestingOrigin === 'wadi://app');
 session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) =>
   callback(permission === 'fullscreen' && webContents === window?.webContents && details.isMainFrame && details.requestingUrl.startsWith('wadi://app/')));
-media = await createMediaService({ directory: join(app.getPath('userData'), 'media-cache'), binaries: app.isPackaged ? join(process.resourcesPath, 'media-bin') : join(here, '../assets') });
+media = await createMediaService({ directory: join(app.getPath('userData'), 'media-cache'), binaries: process.env.WADI_MEDIA_BIN_DIR || (app.isPackaged ? join(process.resourcesPath, 'media-bin') : join(here, '../assets')) });
 for (const [name, handler] of Object.entries({
   'open-page': path => shell.openExternal(new URL(z.enum(['/terms','/privacy']).parse(path), origin).href),
   'app-version': () => app.getVersion(),
@@ -128,7 +141,7 @@ for (const [name, handler] of Object.entries({
   media: (action, payload) => media.command(action, payload),
   external: openExternal,
 })) ipcMain.handle(name, (event, ...args) => { trusted(event); return handler(...args); });
-window = new BrowserWindow({ icon: join(here, '../resources/icon.png'), titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 16, y: 16 }, width: 1440, height: 900, minWidth: 760, minHeight: 520, backgroundColor:'#090909', autoHideMenuBar:true, webPreferences: { backgroundThrottling:false, preload: join(here,'preload.cjs'), nodeIntegration:false, contextIsolation:true, sandbox:true } });
+window = new BrowserWindow({ fullscreen: process.argv.includes('--fullscreen') || startFullscreen, icon: join(here, '../resources/icon.png'), titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 16, y: 16 }, width: 1440, height: 900, minWidth: 760, minHeight: 520, backgroundColor:'#090909', autoHideMenuBar:true, webPreferences: { backgroundThrottling:false, preload: join(here,'preload.cjs'), nodeIntegration:false, contextIsolation:true, sandbox:true } });
 window.webContents.on('will-navigate', (event, url) => { if (!url.startsWith('wadi://app/')) event.preventDefault(); });
 window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 await window.loadURL('wadi://app/');
@@ -139,7 +152,7 @@ updates = createUpdates({
   notify: state => { if (!window?.isDestroyed()) window.webContents.send('update-state', state); },
   feedback: message => dialog.showMessageBox(window, { type: 'info', title: 'Wadi updates', message, buttons: ['OK'] }),
 });
-if (process.platform !== 'darwin') Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: 'Wadi', submenu: [{ label: 'Check for Updates…', click: () => void updates.check(true) }, { type: 'separator' }, { role: 'quit' }] }, { role: 'editMenu' }, { role: 'viewMenu' }]));
+if (process.platform !== 'darwin') Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: 'Wadi', submenu: [{ label: 'Check for Updates…', click: () => void updates.check(true) }, { type: 'separator' }, { role: 'quit' }] }, { role: 'editMenu' }, { label: 'View', submenu: [{ role: 'reload' }, { role: 'forceReload' }, { role: 'toggleDevTools' }, { type: 'separator' }, { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' }, { type: 'separator' }, { role: 'togglefullscreen' }, fullscreenPreference()] }]));
 app.on('window-all-closed', () => app.quit());
 let quitting = false;
 app.on('before-quit', event => { if (quitting) return; event.preventDefault(); updates?.dispose(); quitting = true; authServer?.close(); void media.close().finally(() => app.exit(0)); });

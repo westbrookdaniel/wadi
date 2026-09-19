@@ -48,7 +48,7 @@ for (const mode of ['audio', 'remux', 'video']) test(`${mode}: retains paused se
     await service.command('progress', { id, position: 24 });
     await sleep(1000);
     assert.notEqual(await playlist(), paused, 'advancing the playhead must release the converter');
-    assert.deepEqual(await service.command('status', id), { error: null });
+    assert.deepEqual(await service.command('status', id), { error: null, encoder: mode === 'video' ? 'libx264' : 'copy' });
     await service.command('stop', id);
     assert.equal((await fetch(session.url)).status, 404);
     assert.deepEqual(await service.command('status', id), { error: 'Playback session ended' });
