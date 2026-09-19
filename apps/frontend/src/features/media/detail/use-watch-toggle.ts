@@ -26,6 +26,7 @@ export function useWatchToggle(mediaType: string, mediaId: string, videoId: stri
           items: index >= 0 ? items.map((item, itemIndex) => (itemIndex === index ? state : item)) : [...items, state],
         }
       })
+      queryClient.invalidateQueries({ queryKey: ["episodes", mediaId] })
       queryClient.invalidateQueries({ queryKey: queryKeys.watchData(mediaType, mediaId) })
       queryClient.invalidateQueries({ queryKey: queryKeys.continueWatching(20) })
       queryClient.invalidateQueries({ queryKey: queryKeys.continueWatching(12) })

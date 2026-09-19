@@ -226,3 +226,22 @@ it('remembers a season when returning to the show and respects a URL override', 
   renderSeriesDetailPage({ preferredSeason: '1' })
   expect(screen.getByRole('combobox', { name: 'Season' })).toHaveTextContent('Season 1')
 })
+it('keeps the linked provider ID selected after duplicate episodes merge', async () => {
+  const { useAppStore } = await import('@/store/app-store')
+  useAppStore.getState().setActiveProfileId('alias-profile')
+  apiRequestMock.mockImplementation((path: string) => {
+    if (path === '/api/episodes/series/series-1') return Promise.resolve({
+      media_type: 'series', media_id: 'series-1', stale: false, sources: [],
+      items: [{ id: 'provider-a:2:1', videoIds: ['provider-a:2:1', 'provider-b:2:1'], addonIds: ['a', 'b'], title: 'Merged premiere', season: 2, episode: 1, releasePrecision: 'unknown', releaseState: 'unknown', releaseConflicting: false, watched: false, position_seconds: 0 }],
+    })
+    if (path.startsWith('/api/streams/')) return Promise.resolve({ responses: [] })
+    if (path.startsWith('/api/watch-data/')) return Promise.resolve({ media_type: 'series', media_id: 'series-1', items: [] })
+    return Promise.resolve({ items: [] })
+  })
+  const page = renderSeriesDetailPage({ preferredVideoId: 'provider-b:2:1' })
+  try {
+    await waitFor(() => expect(apiRequestMock).toHaveBeenCalledWith('/api/streams/series/provider-b:2:1'))
+    expect(screen.getByRole('button', { name: 'Change Episode' })).toBeInTheDocument()
+    expect(screen.getByText('Merged premiere')).toBeInTheDocument()
+  } finally { page.unmount(); useAppStore.getState().setActiveProfileId(null) }
+})

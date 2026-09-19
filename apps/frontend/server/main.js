@@ -1,3 +1,4 @@
+import { addEpisodeRoutes } from './episodes.js';
 import { emailVerification } from './email-verification.js';
 import { fetchAddonJson } from './addon-fetch.js';
 import { createDatabase } from './database.js';
@@ -265,6 +266,12 @@ export function createApp({ database = process.env.DATABASE_URL, sessionDays = 3
     app.delete('/api/addons/:id', async (req, res) => { (await ownAddon(req, req.params.id)); (await run('DELETE FROM addons WHERE id=?', req.params.id)); res.sendStatus(204); });
     app.post('/api/addons/:id/configure', async (req, res) => { (await ownAddon(req, req.params.id)); (await run("UPDATE addons SET config_json=?,updated_at=wadi_now() WHERE id=?", JSON.stringify(req.body), req.params.id)); res.json((await ownAddon(req, req.params.id))); });
     app.get('/api/catalogs', async (req, res) => res.json({ items: (await userAddons(req)).flatMap(a => a.manifest.catalogs.map(catalog => ({ addon_id: a.id, addon_name: a.manifest.name, catalog }))) }));
+    addEpisodeRoutes(app, { db, userAddons, fetchMetadata: async (addon, type, id) => {
+        const url = manifestUrl(addon.source_url);
+        url.pathname = url.pathname.replace(/\/manifest.json$/, '') + '/meta/' + encodeURIComponent(type) + '/' + encodeURIComponent(id) + '.json';
+        if (addon.config) url.searchParams.set('config', JSON.stringify(addon.config));
+        return fetchJson(url);
+    } });
     for (const [route, kind] of [['catalog', 'catalog'], ['meta', 'meta'], ['streams', 'stream'], ['subtitles', 'subtitles']])
         app.get(`/api/${route}/:type/:id`, async (req, res) => {
             const { type, id } = req.params;
