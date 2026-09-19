@@ -53,7 +53,7 @@ export function BrowseLayoutSettings() {
   const activeLayout = draftLayout ?? savedLayout
   const candidates = useMemo(
     () => buildBrowseRowCandidates(catalogs.data ?? [], lists.data ?? []),
-    [activePage, catalogs.data, lists.data],
+    [catalogs.data, lists.data],
   )
   const resolvedRows = resolveOrderedBrowseRows(candidates, activeLayout.pages[activePage])
   const orderedRows = [...resolvedRows.filter(row => row.kind === 'continue'), ...resolvedRows.filter(row => row.kind !== 'continue')]
@@ -136,7 +136,7 @@ export function BrowseLayoutSettings() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="m-0 text-[1.05rem] font-[520] tracking-normal">Home layout</h3>
-          <p className="m-0 text-sm text-muted-foreground">Reorder rows and hide sections on Home.</p>
+          <p className="m-0 text-sm text-muted-foreground">Reorder rows and hide sections. These choices follow this profile across devices.</p>
         </div>
         <Button
           type="button"
@@ -147,6 +147,16 @@ export function BrowseLayoutSettings() {
         </Button>
       </div>
 
+      <fieldset className="grid gap-3 border-b border-border pb-5" disabled={isLoading || Boolean(hasError)}>
+        <legend className="mb-3 text-sm font-medium">Hero</legend>
+        <label className="flex items-center justify-between gap-3 text-sm">Show hero<input type="checkbox" className="size-5" checked={!activeLayout.hero?.hidden} onChange={event => setDraftLayout({ ...activeLayout, hero: { source: 'auto', rotate: true, ...activeLayout.hero, hidden: !event.target.checked } })} /></label>
+        <label className="grid gap-2 text-sm">Hero content<SettingsSelect value={activeLayout.hero?.source ?? 'auto'} onValueChange={source => setDraftLayout({ ...activeLayout, hero: { hidden: false, rotate: true, ...activeLayout.hero, source } })}>
+          <option value="auto">First available catalog</option>
+          {candidates.filter(row => row.kind !== 'continue').map(row => <option key={row.key} value={row.key}>{row.title}</option>)}
+        </SettingsSelect></label>
+        <label className="flex items-center justify-between gap-3 text-sm">Rotate suggestions<input type="checkbox" className="size-5" checked={activeLayout.hero?.rotate !== false} onChange={event => setDraftLayout({ ...activeLayout, hero: { hidden: false, source: 'auto', ...activeLayout.hero, rotate: event.target.checked } })} /></label>
+        <Button variant="ghost" type="button" className="justify-self-start" onClick={() => setDraftLayout(createDefaultBrowseLayout())}>Reset home to defaults</Button>
+      </fieldset>
       {isLoading ? <LoadingState label="Loading browse layout" /> : null}
       {saveMutation.error ? <ErrorState error={saveMutation.error} /> : null}
       {catalogs.error ? <ErrorState error={catalogs.error} /> : null}

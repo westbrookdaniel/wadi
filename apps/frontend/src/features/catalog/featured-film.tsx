@@ -6,21 +6,24 @@ import type { CatalogEntry, MediaPreview } from '@/api/types'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Artwork } from '@/components/artwork'
 
-export function FeaturedFilm({ entry, onOpen }: { entry: CatalogEntry; onOpen: (media: MediaPreview) => void }) {
+export function FeaturedFilm({ entry, onOpen, rotate = true }: { entry: CatalogEntry; onOpen: (media: MediaPreview) => void; rotate?: boolean }) {
   const query = useQuery(catalogQuery(entry.catalog.type, entry.catalog.id, { addon_id: entry.addon_id }))
-  const films = (query.data ?? []).filter(item => item.background || item.poster).slice(0, 6)
+  return <FeaturedTitles items={query.data ?? []} loading={query.isLoading} failed={Boolean(query.error)} onOpen={onOpen} rotate={rotate} />
+}
+export function FeaturedTitles({ items, loading = false, failed = false, onOpen, rotate = true }: { items: MediaPreview[]; loading?: boolean; failed?: boolean; onOpen: (media: MediaPreview) => void; rotate?: boolean }) {
+  const films = items.filter(item => item.background || item.poster).slice(0, 6)
   const [index, setIndex] = useState(0)
   const [paused, setPaused] = useState(false)
   const [interacting, setInteracting] = useState(false)
   useEffect(() => {
-    if (paused || interacting || films.length < 2 || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    if (!rotate || paused || interacting || films.length < 2 || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
     const timer = window.setInterval(() => {
       if (!document.hidden) setIndex(current => (current + 1) % films.length)
     }, 8000)
     return () => window.clearInterval(timer)
-  }, [films.length, paused, interacting])
+  }, [films.length, paused, interacting, rotate])
   const film = films[index % Math.max(1, films.length)]
-  if (!film) return <section className="featured-film !bg-muted" aria-label={query.isLoading ? 'Loading suggestions' : 'No suggestions available'}>{query.isLoading ? <Skeleton className="absolute inset-0 rounded-[14px]" /> : <p className="absolute inset-0 grid place-items-center text-sm text-muted-foreground">{query.error ? 'Suggestions are temporarily unavailable.' : 'No suggestions available.'}</p>}</section>
+  if (!film) return <section className="featured-film !bg-muted" aria-label={loading ? 'Loading suggestions' : 'No suggestions available'}>{loading ? <Skeleton className="absolute inset-0 rounded-[14px]" /> : <p className="absolute inset-0 grid place-items-center text-sm text-muted-foreground">{failed ? 'Suggestions are temporarily unavailable.' : 'No suggestions available.'}</p>}</section>
   return (
     <section className="featured-film" aria-label="Suggestions" onMouseEnter={() => setInteracting(true)} onMouseLeave={() => setInteracting(false)} onFocus={() => setInteracting(true)} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setInteracting(false) }}>
       <div key={`${film.type}:${film.id}`} className="featured-film-slide">

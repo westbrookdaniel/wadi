@@ -23,6 +23,7 @@ import { z } from "zod";
 
 import {
   addonsQuery,
+  meQuery,
   reorderAddons,
   createProfile,
   deleteProfile,
@@ -89,23 +90,22 @@ const profileSchema = z.object({
 });
 
 export function ProfileSettingsPage() {
-  const navigate = useNavigate();
-
-  return (
-    <div className={cn(pageStack, "settings-area max-w-[1040px] gap-6")}>
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-medium tracking-tight">Settings</h1>
-        <Button variant="secondary" size="sm" onClick={() => navigate({ to: "/settings/account" })}>Account & addons</Button>
-      </header>
-      <section className="settings-panel"><ProfileManager /></section>
-      <DeviceSettings />
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
-        <BrowseLayoutSettings />
-        <ExternalPlaybackSettingsSection />
+  const account = useQuery(meQuery(true));
+  const profileId = useAppStore(state => state.activeProfileId);
+  return <div className={cn(pageStack, "settings-area max-w-[1120px] gap-8")}>
+    <header><h1 className="text-3xl font-medium tracking-tight">Settings</h1><p className="mt-2 text-sm text-muted-foreground">Make Wadi yours. Profile choices sync; playback stays on this device.</p></header>
+    <div className="grid gap-8 md:grid-cols-[180px_minmax(0,1fr)]">
+      <nav aria-label="Settings sections" className="flex flex-wrap content-start gap-1 md:sticky md:top-6 md:flex-col md:self-start">
+        {[['profiles','Profiles'],['home','Home'],['playback','Playback on this device'],['plugins','Plugins'],['account','Account']].map(([id,label]) => <a key={id} href={'#'+id} className="rounded-lg px-3 py-2.5 text-sm hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">{label}</a>)}
+      </nav>
+      <div className="grid min-w-0 gap-10">
+        <section id="profiles" className="scroll-mt-6"><ProfileManager /></section>
+        <section id="home" className="scroll-mt-6"><BrowseLayoutSettings key={profileId} /></section>
+        <section id="playback" className="grid scroll-mt-6 gap-5"><h2 className="text-xl font-medium">Playback on this device</h2><ExternalPlaybackSettingsSection /><DeviceSettings /><ExperimentalSettings /></section>
+        {account.data ? <AccountSettingsPage user={account.data} embedded /> : account.error ? <ErrorState error={account.error} /> : <LoadingState label="Loading account" />}
       </div>
-      <ExperimentalSettings />
     </div>
-  );
+  </div>;
 }
 
 function ExternalPlaybackSettingsSection() {
@@ -118,7 +118,7 @@ function ExternalPlaybackSettingsSection() {
     mutationFn: (payload: PlaybackPreferences) => updatePlaybackPreferences(payload),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.playbackPreferences });
-      toast({ title: "External playback settings updated." });
+      toast({ title: "Playback settings saved on this device." });
     },
   });
 
@@ -156,7 +156,7 @@ function ExternalPlaybackSettingsSection() {
         External playback
       </h3>
       <p className="m-0 pb-3 text-sm text-muted-foreground">
-        Choose where streams open. External apps must be installed and may not report watch progress back to Wadi.
+        Choose where streams open on this device. External apps must be installed and may not report watch progress back to Wadi.
       </p>
 
       <div className="grid min-w-0 grid-cols-1 gap-3">
@@ -174,7 +174,7 @@ function ExternalPlaybackSettingsSection() {
 
         <Label className="grid min-w-0 gap-1.5">External player
           <SettingsSelect value={data.external_player_preset ?? 'custom'} onValueChange={value => updateDraft('external_player_preset', value)}>
-            {externalPlayers.map(player => <option key={player.id} value={player.id}>{player.label} · {player.platforms}</option>)}
+            {externalPlayers.map(player => <option key={player.id} value={player.id}>{player.label}</option>)}
           </SettingsSelect>
         </Label>
         {(data.external_player_preset ?? 'custom') === 'custom' && <Label className="grid min-w-0 gap-1.5">
@@ -196,7 +196,7 @@ function ExternalPlaybackSettingsSection() {
   );
 }
 
-export function AccountSettingsPage({ user }: { user: User }) {
+export function AccountSettingsPage({ user, embedded = false }: { user: User; embedded?: boolean }) {
   const queryClient = useQueryClient();
   const setToken = useAppStore((state) => state.setToken);
   const navigate = useNavigate();
@@ -237,8 +237,8 @@ export function AccountSettingsPage({ user }: { user: User }) {
 
   return (
     <div className={cn(pageStack, "settings-area max-w-[1040px]")}>
-      <header className="grid gap-6">
-        <div>
+      <header id="account" className={cn("grid scroll-mt-6 gap-6", embedded && "order-2")}>
+        <div hidden={embedded}>
           <Button
             variant="ghost"
             type="button"
@@ -269,11 +269,11 @@ export function AccountSettingsPage({ user }: { user: User }) {
         </div>
       </header>
 
-      <AccountControls email={user.email} />
-      <section className="grid gap-4 pt-2 pb-6">
+      <div className={embedded ? "order-3" : undefined}><AccountControls email={user.email} /></div>
+      <section id="plugins" className={cn("grid scroll-mt-6 gap-4 pt-2 pb-6", embedded && "order-1")}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="m-0 text-[1.05rem] font-[520] tracking-normal">
-            Installed addons
+            Plugins
           </h2>
           <Button
             type="button"
@@ -283,6 +283,7 @@ export function AccountSettingsPage({ user }: { user: User }) {
             Add addon
           </Button>
         </div>
+        <p className="text-sm leading-relaxed text-muted-foreground">Wadi works with Stremio-compatible addons. Add a manifest URL to get catalogs, metadata, streams, or subtitles. Available features depend on the addon.</p>
         <Input
           type="search"
           placeholder="Search installed addons"
@@ -525,7 +526,7 @@ function ProfileManager() {
         open={Boolean(editingProfile)}
         onOpenChange={(open) => !open && setEditingProfileId(null)}
       >
-        <DialogContent>
+        <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Edit profile</DialogTitle>
             <DialogDescription>
@@ -534,6 +535,8 @@ function ProfileManager() {
           </DialogHeader>
           {editingProfile ? (
             <ProfileEditorForm
+              key={editingProfile.id}
+              onCancel={() => setEditingProfileId(null)}
               submitLabel="Save changes"
               isPending={updateMutation.isPending}
               error={updateMutation.error}
@@ -638,6 +641,7 @@ function ProfileActionsMenu({
 }
 
 function ProfileEditorForm({
+  onCancel,
   initialName,
   initialAvatarKey,
   submitLabel,
@@ -645,6 +649,7 @@ function ProfileEditorForm({
   error,
   onSubmit,
 }: {
+  onCancel?: () => void;
   initialName: string;
   initialAvatarKey: string;
   submitLabel: string;
@@ -674,6 +679,8 @@ function ProfileEditorForm({
             <Label htmlFor={field.name}>Name</Label>
             <Input
               id={field.name}
+              maxLength={32}
+              autoComplete="off"
               value={field.state.value}
               onBlur={field.handleBlur}
               onChange={(event) => field.handleChange(event.target.value)}
@@ -729,6 +736,7 @@ function ProfileEditorForm({
       </form.Field>
       {error ? <ErrorState error={error} /> : null}
       <DialogFooter>
+        {onCancel ? <Button type="button" variant="ghost" disabled={isPending} onClick={onCancel}>Cancel</Button> : null}
         <Button type="submit" disabled={isPending}>
           {submitLabel}
         </Button>
