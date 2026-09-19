@@ -76,7 +76,7 @@ export function BrowseSections({
                 <div>
                   <h2 className="m-0 tracking-normal">{row.list.name}</h2>
                 </div>
-                <Link to="/discover" search={discoverSearchForRow(row)} aria-label={`See all ${row.list.name}`} className="rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">See all</Link>
+                <Link to="/discover" search={discoverSearchForRow(row)} aria-label={`See all ${row.list.name}`} className="shrink-0 whitespace-nowrap rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">See all</Link>
               </div>
               <MediaRow>
                 {items.map((item) => {

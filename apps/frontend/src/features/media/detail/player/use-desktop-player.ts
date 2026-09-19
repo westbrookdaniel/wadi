@@ -95,6 +95,7 @@ export function useDesktopPlayer({ videoRef, source, hints, savedPosition, watch
     }
   },[source,headers,generation,videoRef,update,conversionEnabled])
   const pause=useCallback((_commit=false)=>{
+    void _commit
     playing.current=false
     videoRef.current?.pause()
     update({playing:false})
@@ -107,6 +108,7 @@ export function useDesktopPlayer({ videoRef, source, hints, savedPosition, watch
     } else if(stateRef.current.status!=='loading') restart(n=>n+1)
   },[videoRef,update])
   const seek=useCallback(async(seconds:number,_commit=false)=>{
+    void _commit
     const target=Math.max(0,Math.min(seconds,stateRef.current.duration||seconds))
     const video=videoRef.current, current=session.current
     position.current=target

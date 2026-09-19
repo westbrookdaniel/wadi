@@ -96,14 +96,14 @@ export function StreamList({
           </p>
           {filteredRows.map(({ stream, index, sourceLabel }, i) => (
             <button
-              className="grid h-fit cursor-pointer content-between gap-1 rounded-lg border border-border bg-card/80 p-2.5 text-xs leading-relaxed text-left text-card-foreground hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/30 focus-visible:outline-none [&_small]:text-[0.76rem] [&_small]:text-primary [&_span]:text-muted-foreground"
+              className="grid min-w-0 h-fit cursor-pointer content-between gap-1 rounded-lg border border-border bg-card/80 p-2.5 text-xs leading-relaxed text-left text-card-foreground hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/30 focus-visible:outline-none [&_small]:text-[0.76rem] [&_small]:text-primary [&_span]:text-muted-foreground"
               type="button"
               key={`${i}-${stream.addon_id}-${stream.title ?? stream.name ?? index}`}
               onClick={() => onPlay(stream)}
             >
-              <p className="font-medium text-[13px] leading-snug whitespace-pre-line">{stream.title ?? stream.name ?? `Stream ${index + 1}`}</p>
-              <p className="max-w-full break-words text-[11px] leading-relaxed text-muted-foreground line-clamp-3">{streamDetail(stream)}</p>
-              <p className="text-[10px] text-muted-foreground max-w-full break-all">{sourceLabel}</p>
+              <p className="font-medium text-sm leading-snug whitespace-pre-line [overflow-wrap:anywhere]">{stream.title ?? stream.name ?? `Stream ${index + 1}`}</p>
+              <p className="max-w-full whitespace-pre-wrap [overflow-wrap:anywhere] text-sm leading-relaxed text-muted-foreground">{streamDetail(stream)}</p>
+              <p className="text-sm text-muted-foreground max-w-full break-all">{sourceLabel}</p>
             </button>
           ))}
         </div>

@@ -59,7 +59,7 @@ export function CatalogSection({
           </h2>
           <p className={mutedText}>{entry.addon_name}</p>
         </div>
-        {seeAll ? <Link to="/discover" search={seeAll} aria-label={`See all ${title} from ${entry.addon_name}`} className="shrink-0 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">See all</Link> : null}
+        {seeAll ? <Link to="/discover" search={seeAll} aria-label={`See all ${title} from ${entry.addon_name}`} className="shrink-0 shrink-0 whitespace-nowrap rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">See all</Link> : null}
       </div>
 
       {!catalog.data.length && (!nearViewport || catalog.isLoading) ? <PosterSkeletonRow /> : null}
