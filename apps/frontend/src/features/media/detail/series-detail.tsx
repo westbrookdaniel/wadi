@@ -52,7 +52,7 @@ export function SeriesDetailPage({
   const episodeCatalog = useQuery(episodesQuery(media.id, profileId))
   const episodes = useMemo(() => episodeCatalog.data && (!episodeCatalog.data.stale || episodeCatalog.data.items.length) ? episodeCatalog.data.items : parseEpisodes(media.raw), [episodeCatalog.data, media.raw]);
   const preferredEpisode = episodes.find(
-    (episode) => episode.id === preferredVideoId,
+    (episode) => matchesEpisode(episode, preferredVideoId),
   );
   const preferredSeasonFromSearch =
     preferredSeason === undefined ? undefined : parseSeasonValue(preferredSeason);
@@ -76,15 +76,15 @@ export function SeriesDetailPage({
     string | null
   >(null);
   const selectedEpisodeId =
-    selectedEpisodeIdOverride ?? preferredEpisode?.id ?? null;
+    selectedEpisodeIdOverride ?? (preferredEpisode ? preferredVideoId ?? preferredEpisode.id : null);
   const [stepOverride, setStepOverride] = useState<SeriesStep | null>(null);
   const step = stepOverride ?? (preferredEpisode ? "streams" : "episodes");
   const selectedEpisode =
-    episodes.find((episode) => episode.id === selectedEpisodeId) ?? null;
+    episodes.find((episode) => matchesEpisode(episode, selectedEpisodeId)) ?? null;
   const streams = useQuery(
     streamsQuery(
       media.type,
-      selectedEpisode?.id ?? "",
+      selectedEpisode ? selectedEpisodeId ?? selectedEpisode.id : "",
       Boolean(selectedEpisode),
     ),
   );
@@ -106,12 +106,12 @@ export function SeriesDetailPage({
         return null;
       }
       const currentEpisode = episodes.find(
-        (episode) => episode.id === currentEpisodeId,
+        (episode) => matchesEpisode(episode, currentEpisodeId),
       );
       return currentEpisode?.season === season ? currentEpisodeId : null;
     });
     const currentEpisode = episodes.find(
-      (episode) => episode.id === selectedEpisodeId,
+      (episode) => matchesEpisode(episode, selectedEpisodeId),
     );
     onSelectionChange?.({
       season,
@@ -155,7 +155,7 @@ export function SeriesDetailPage({
                   mediaType: media.type,
                   mediaId: media.id,
                   overrideMediaId: media.id,
-                  videoId: selectedEpisode.id,
+                  videoId: selectedEpisodeId ?? selectedEpisode.id,
                   seriesEpisodes: episodes,
                   episodeContext: {
                     season: selectedEpisode.season,
@@ -389,4 +389,8 @@ function formatWatchDuration(duration: number) {
   const seconds = Math.max(0, Math.floor(duration));
   const minutes = Math.floor(seconds / 60);
   return `${minutes}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function matchesEpisode(episode: Episode, id: string | null | undefined) {
+  return Boolean(id && (episode.id === id || episode.videoIds?.includes(id)))
 }

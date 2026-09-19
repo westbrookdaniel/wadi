@@ -22,3 +22,15 @@ test('does not call a future or uncertain release available; latest watch action
   const item=mergeEpisodeSources(sources,[{video_id:'x',watched:1,updated_at:'2026-09-18'},{video_id:'y',watched:0,updated_at:'2026-09-19'}])[0];
   assert.equal(item.releaseState,'unknown');assert.equal(item.releaseConflicting,true);assert.equal(item.watched,false);
 });
+test('uses a precise release on the same day and rejects conflicting release times', () => {
+  const source = (addonId, released) => ({ addonId, episodes: normalizeEpisodes([{ id: addonId, season: 1, episode: 1, released }]) });
+  const precise = source('precise', '2026-09-19T10:00:00Z');
+  for (const sources of [[source('day', '2026-09-19'), precise], [precise, source('day', '2026-09-19')]]) {
+    const [item] = mergeEpisodeSources(sources, [], Date.parse('2026-09-19T11:00:00Z'));
+    assert.equal(item.releasePrecision, 'instant');
+    assert.equal(item.releaseState, 'released');
+  }
+  const [conflicting] = mergeEpisodeSources([precise, source('later', '2026-09-19T12:00:00Z')], [], Date.parse('2026-09-19T11:00:00Z'));
+  assert.equal(conflicting.releaseState, 'unknown');
+  assert.equal(conflicting.releaseConflicting, true);
+});

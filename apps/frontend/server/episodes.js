@@ -26,7 +26,12 @@ export function mergeEpisodeSources(sources, watchStates = [], now = Date.now())
     else {
       if (!previous.videoIds.includes(episode.id)) previous.videoIds.push(episode.id);
       if (!previous.addonIds.includes(source.addonId)) previous.addonIds.push(source.addonId);
-      if (episode.released && previous.released && episode.released.slice(0, 10) !== previous.released.slice(0, 10)) previous.releaseConflicting = true;
+      if (episode.released && previous.released) {
+        const differentDay = episode.released.slice(0, 10) !== previous.released.slice(0, 10);
+        const differentInstant = episode.releasePrecision === 'instant' && previous.releasePrecision === 'instant' && episode.released !== previous.released;
+        if (differentDay || differentInstant) previous.releaseConflicting = true;
+        else if (episode.releasePrecision === 'instant') Object.assign(previous, { released: episode.released, releasePrecision: 'instant' });
+      }
       if (!previous.released && episode.released) Object.assign(previous, { released: episode.released, releasePrecision: episode.releasePrecision });
       previous.thumbnail ??= episode.thumbnail; previous.overview ??= episode.overview;
     }
