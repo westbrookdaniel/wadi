@@ -10,10 +10,15 @@ import {
   useNavigate,
 } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
+import { openExternalPlayback, externalPlayers } from '@/features/media/detail/external-players'
+import { getStreamUrl } from '@/features/media/detail/stream-playback'
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { SettingsSelect } from '@/components/ui/settings-select'
 import { readPlaybackSession, savePlaybackSession } from '@/features/media/detail/playback-session'
 
-import { metaQuery } from '@/api/queries'
+import { metaQuery, playbackPreferencesQuery } from '@/api/queries'
 import type { MediaPreview } from '@/api/types'
 import { AppShell } from '@/features/app-shell/app-shell'
 import type { NavPath } from '@/features/app-shell/nav-items'
@@ -121,6 +126,12 @@ const accountSettingsRoute = createRoute({
   component: AccountSettingsRoute,
 })
 
+const pluginsSettingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/settings/plugins",
+  component: () => <AccountSettingsRoute view="plugins" />,
+})
+
 const addAddonRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/account/add-addon',
@@ -152,6 +163,7 @@ const routeTree = rootRoute.addChildren([
   seriesRoute,
   settingsRoute,
   accountSettingsRoute,
+  pluginsSettingsRoute,
   addAddonRoute,
   mediaRoute,
 ])
@@ -213,7 +225,7 @@ function ProfileSettingsRoute() {
   )
 }
 
-function AccountSettingsRoute() {
+function AccountSettingsRoute({ view = "account" }: { view?: "account" | "plugins" }) {
   const navigate = useNavigate()
 
   return (
@@ -224,7 +236,7 @@ function AccountSettingsRoute() {
           label="account settings page"
           onNavigate={(path) => navigate({ to: path })}
         >
-          <AccountSettingsPage user={user} />
+          <AccountSettingsPage user={user} view={view} />
         </AppShell>
       )}
     </ProtectedRoute>
@@ -275,6 +287,9 @@ function BrowseRoute({
 }
 
 function MediaRoute() {
+  const playbackPrefs = useQuery(playbackPreferencesQuery)
+  const [launchFailure, setLaunchFailure] = useState<{ stream: PlayableStream; message: string } | null>(null)
+  const [chosenPlayer, setChosenPlayer] = useState("vlc")
   const navigate = useNavigate()
   const { type, id } = mediaRoute.useParams()
   const { videoId, episode, season, from, playback } = mediaRoute.useSearch()
@@ -289,6 +304,15 @@ function MediaRoute() {
   const backSearch = backPath === '/discover' ? discoverSearchSchema.parse(defaultParseSearch(from?.includes('?') ? from.slice(from.indexOf('?')) : '')) : undefined
 
   const playStream = (stream: PlayableStream, target: PlaybackTarget) => {
+    if (!playbackPrefs.data) {
+      setLaunchFailure({ stream, message: 'Playback preferences are not ready. Choose a player below or try again.' }); return
+    }
+    if (playbackPrefs.data.stream_action === 'external') {
+      const url = getStreamUrl(stream)
+      if (!url) { setLaunchFailure({ stream, message: 'This stream has no playable link.' }); return }
+      void openExternalPlayback(url, playbackPrefs.data).catch(error => setLaunchFailure({ stream, message: error instanceof Error ? error.message : 'Could not open player.' }))
+      return
+    }
     const key = savePlaybackSession(stream, target)
     void navigate({ to: '/media/$type/$id', params: { type, id }, search: previous => ({ ...previous, playback: key, episode: target.videoId ?? undefined, season: target.episodeContext?.season?.toString() }), replace: Boolean(playback) })
   }
@@ -321,6 +345,24 @@ function MediaRoute() {
           label={`${displayMedia.name} page`}
           onNavigate={(path) => navigate({ to: path })}
         >
+          <Dialog open={Boolean(launchFailure)} onOpenChange={open => { if (!open) setLaunchFailure(null) }}>
+            <DialogContent><DialogTitle>Open stream</DialogTitle><DialogDescription>{launchFailure?.message}</DialogDescription>
+              <SettingsSelect aria-label="External player" value={chosenPlayer} onValueChange={setChosenPlayer}>{externalPlayers.filter(player => player.id !== 'custom').map(player => <option key={player.id} value={player.id}>{player.label}</option>)}</SettingsSelect>
+              <Button onClick={() => {
+                const url = launchFailure ? getStreamUrl(launchFailure.stream) : null
+                if (!url) return
+                const next = { stream_action: 'external', external_player_template: playbackPrefs.data?.external_player_template ?? 'vlc://{url}', external_player_preset: chosenPlayer } satisfies import('@/api/types').PlaybackPreferences
+                void openExternalPlayback(url, next).then(() => setLaunchFailure(null)).catch(error => setLaunchFailure(current => current ? { ...current, message: error instanceof Error ? error.message : 'Could not open player.' } : null))
+              }}>Open player</Button>
+              <Button variant="secondary" onClick={async () => {
+                const url = launchFailure ? getStreamUrl(launchFailure.stream) : null
+                if (!url) return
+                try { await navigator.clipboard.writeText(url); setLaunchFailure(current => current ? { ...current, message: 'Link copied.' } : null) }
+                catch { setLaunchFailure(current => current ? { ...current, message: 'Clipboard access is unavailable. Select the link below and copy it manually.' } : null) }
+              }}>Copy link</Button>
+              <textarea aria-label="Stream link" readOnly value={launchFailure ? getStreamUrl(launchFailure.stream) ?? "" : ""} className="w-full rounded-lg border p-3 text-sm" onFocus={event => event.currentTarget.select()} />
+            </DialogContent>
+          </Dialog>
           {selectedStream && selectedPlaybackTarget ? (
             <StreamPlaybackPage
               media={displayMedia}

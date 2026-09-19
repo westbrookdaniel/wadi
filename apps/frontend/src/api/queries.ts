@@ -1,3 +1,5 @@
+import { devicePlayback, saveDevicePlayback, devicePlayer, saveDevicePlayer, deviceOverride, saveDeviceOverride } from '@/store/playback-settings'
+import { useAppStore } from '@/store/app-store'
 import type { PlayerOverride, PlayerPreferences, SubtitleInfo, WatchProgressRequest } from './types'
 import { queryOptions } from '@tanstack/react-query'
 
@@ -26,7 +28,7 @@ import type {
 
 export const queryKeys = {
   playerDefaults: ['player-defaults'] as const,
-  playerOverride: (type: string, id: string) => ['player-override', type, id] as const,
+  playerOverride: (type: string, id: string, profileId = useAppStore.getState().activeProfileId) => ['player-override', type, id, profileId] as const,
   subtitles: (type: string, id: string, context: Record<string, string> = {}) => ['subtitles', type, id, context] as const,
   me: ['me'] as const,
   addons: ['addons'] as const,
@@ -177,7 +179,7 @@ export const profilesQuery = queryOptions({
 
 export const playbackPreferencesQuery = queryOptions({
   queryKey: queryKeys.playbackPreferences,
-  queryFn: () => apiRequest<PlaybackPreferences>('/api/settings/playback'),
+  queryFn: () => devicePlayback(() => apiRequest<PlaybackPreferences>('/api/settings/playback')),
 })
 
 export function login(email: string, password: string) {
@@ -309,10 +311,7 @@ export function setWatchState(payload: WatchStateRequest) {
 }
 
 export function updatePlaybackPreferences(payload: PlaybackPreferences) {
-  return apiRequest<PlaybackPreferences>('/api/settings/playback', {
-    method: 'PUT',
-    body: payload,
-  })
+  return saveDevicePlayback(payload)
 }
 
 export function findWatchState(data: WatchDataResponse | undefined, videoId: string | null) {
@@ -377,16 +376,16 @@ export type SubtitleQueryContext = {
 
 export const playerDefaultsQuery = queryOptions({
   queryKey: queryKeys.playerDefaults,
-  queryFn: () => apiRequest<PlayerPreferences>('/api/settings/player-defaults'),
+  queryFn: () => devicePlayer('wadi.device.player.v1', () => apiRequest<PlayerPreferences>('/api/settings/player-defaults')),
 })
 
-export const playerOverrideQuery = (mediaType: string, mediaId: string, enabled = true) =>
+export const playerOverrideQuery = (mediaType: string, mediaId: string, enabled = true, profileId = useAppStore.getState().activeProfileId) =>
   queryOptions({
-    queryKey: queryKeys.playerOverride(mediaType, mediaId),
+    queryKey: queryKeys.playerOverride(mediaType, mediaId, profileId),
     queryFn: () =>
-      apiRequest<PlayerOverride>(
+      deviceOverride(deviceOverrideKey(mediaType, mediaId, profileId), () => apiRequest<PlayerOverride>(
         `/api/settings/player-override/${encodeURIComponent(mediaType)}/${encodeURIComponent(mediaId)}`,
-      ),
+      )),
     enabled,
   })
 
@@ -422,21 +421,16 @@ export const subtitlesQuery = (
 }
 
 
-export function updatePlayerDefaults(payload: PlayerOverride) {
-  return apiRequest<PlayerPreferences>('/api/settings/player-defaults', {
-    method: 'PUT',
-    body: payload,
-  })
+export async function updatePlayerDefaults(payload: PlayerOverride) {
+  const current = await devicePlayer('wadi.device.player.v1', () => apiRequest<PlayerPreferences>('/api/settings/player-defaults'))
+  return saveDevicePlayer('wadi.device.player.v1', { ...current, ...payload })
 }
 
-export function updatePlayerOverride(mediaType: string, mediaId: string, payload: PlayerOverride) {
-  return apiRequest<PlayerOverride>(
-    `/api/settings/player-override/${encodeURIComponent(mediaType)}/${encodeURIComponent(mediaId)}`,
-    {
-      method: 'PUT',
-      body: payload,
-    },
-  )
+function deviceOverrideKey(mediaType: string, mediaId: string, profileId: string | null) {
+  return JSON.stringify(['wadi.device.override.v1', profileId, mediaType, mediaId])
+}
+export function updatePlayerOverride(mediaType: string, mediaId: string, payload: PlayerOverride, profileId = useAppStore.getState().activeProfileId) {
+  return saveDeviceOverride(deviceOverrideKey(mediaType, mediaId, profileId), payload)
 }
 
 export function updateWatchProgress(payload: WatchProgressRequest) {

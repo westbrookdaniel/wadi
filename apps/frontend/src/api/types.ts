@@ -187,6 +187,7 @@ export type BrowseLayoutPage = {
 }
 
 export type BrowseLayout = {
+  hero?: { hidden: boolean; source: string; rotate: boolean }
   pages: { home: BrowseLayoutPage }
 }
 

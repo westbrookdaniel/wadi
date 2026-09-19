@@ -1,3 +1,4 @@
+import { useAppStore } from '@/store/app-store'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
@@ -47,10 +48,11 @@ export function usePlayerPreferences({
   streamSubtitleList: SubtitleTrackOption[]
   streamSubtitlesLoading?: boolean
 }) {
+  const profileId = useAppStore(state => state.activeProfileId)
   const queryClient = useQueryClient()
   const playerDefaults = useQuery(playerDefaultsQuery)
   const playerOverride = useQuery(
-    playerOverrideQuery(mediaType, overrideMediaId, Boolean(overrideMediaId)),
+    playerOverrideQuery(mediaType, overrideMediaId, Boolean(overrideMediaId), profileId),
   )
   const [playbackState, setPlaybackState] = useState<LocalPlaybackState>(initialLocalPlaybackState)
   const hydratedOverrideKeyRef = useRef<string | null>(null)
@@ -59,10 +61,10 @@ export function usePlayerPreferences({
   const lastPersistedOverrideRef = useRef<string | null>(null)
   const saveOverrideTimerRef = useRef<number | null>(null)
 
-  const mergedPrefs = useMemo(() => playerDefaults.data
+  const mergedPrefs = useMemo(() => playerDefaults.data && playerOverride.isSuccess
     ? { ...playerDefaults.data, ...(playerOverride.data ?? {}) } satisfies HydratedPreferenceSource
-    : null, [playerDefaults.data, playerOverride.data])
-  const overrideHydrationKey = `${mediaType}:${overrideMediaId}`
+    : null, [playerDefaults.data, playerOverride.data, playerOverride.isSuccess])
+  const overrideHydrationKey = JSON.stringify([profileId, mediaType, overrideMediaId])
 
   const updatePlaybackState = useCallback((patch: Partial<LocalPlaybackState>) => {
     setPlaybackState((current) => {
@@ -72,10 +74,10 @@ export function usePlayerPreferences({
   }, [])
 
   const overrideMutation = useMutation({
-    mutationFn: (payload: PlayerOverride) => updatePlayerOverride(mediaType, overrideMediaId, payload),
+    mutationFn: (payload: PlayerOverride) => updatePlayerOverride(mediaType, overrideMediaId, payload, profileId),
     onSuccess: async () => {
       await queryClient.invalidateQueries({
-        queryKey: queryKeys.playerOverride(mediaType, overrideMediaId),
+        queryKey: queryKeys.playerOverride(mediaType, overrideMediaId, profileId),
       })
     },
   })
@@ -168,7 +170,7 @@ export function usePlayerPreferences({
         window.clearTimeout(saveOverrideTimerRef.current)
       }
     }
-  }, [overrideMediaId, persistOverride, playbackState, streamSubtitleList])
+  }, [overrideMediaId, overrideHydrationKey, persistOverride, playbackState, streamSubtitleList])
 
   return {
     playbackState,

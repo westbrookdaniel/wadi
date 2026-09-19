@@ -31,6 +31,7 @@ export function createDefaultBrowseLayout(): BrowseLayout {
 
 export function normalizeBrowseLayout(layout: Partial<BrowseLayout> | null | undefined): BrowseLayout {
   return {
+    ...(layout?.hero ? { hero: layout.hero } : {}),
     pages: {
       home: normalizeBrowseLayoutPage(layout?.pages?.home),
     },

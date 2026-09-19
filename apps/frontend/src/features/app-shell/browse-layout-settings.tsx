@@ -53,7 +53,7 @@ export function BrowseLayoutSettings() {
   const activeLayout = draftLayout ?? savedLayout
   const candidates = useMemo(
     () => buildBrowseRowCandidates(catalogs.data ?? [], lists.data ?? []),
-    [activePage, catalogs.data, lists.data],
+    [catalogs.data, lists.data],
   )
   const resolvedRows = resolveOrderedBrowseRows(candidates, activeLayout.pages[activePage])
   const orderedRows = [...resolvedRows.filter(row => row.kind === 'continue'), ...resolvedRows.filter(row => row.kind !== 'continue')]
@@ -132,21 +132,23 @@ export function BrowseLayoutSettings() {
   }
 
   return (
-    <section className="grid gap-3 rounded-xl border border-border bg-card/60 p-4">
+    <section className="grid gap-5 rounded-xl border border-border bg-card/60 p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="m-0 text-[1.05rem] font-[520] tracking-normal">Home layout</h3>
-          <p className="m-0 text-sm text-muted-foreground">Reorder rows and hide sections on Home.</p>
+          <p className="m-0 text-sm text-muted-foreground">Choose what appears on Home for this profile.</p>
         </div>
-        <Button
-          type="button"
-          onClick={() => saveMutation.mutate(activeLayout)}
-          disabled={!isDirty || saveMutation.isPending || isLoading || Boolean(hasError)}
-        >
-          Save layout
-        </Button>
       </div>
 
+      <fieldset className="grid gap-4 rounded-lg bg-muted/40 p-4" disabled={isLoading || Boolean(hasError)}>
+        <legend className="px-1 text-sm font-medium">Featured hero</legend>
+        <label className="flex items-center justify-between gap-3 text-sm">Show hero<input type="checkbox" className="size-5 shrink-0 accent-primary" checked={!activeLayout.hero?.hidden} onChange={event => setDraftLayout({ ...activeLayout, hero: { source: 'auto', rotate: true, ...activeLayout.hero, hidden: !event.target.checked } })} /></label>
+        <label className="grid gap-2 text-sm sm:grid-cols-[minmax(0,1fr)_minmax(180px,260px)] sm:items-center">Hero content<SettingsSelect disabled={activeLayout.hero?.hidden} value={activeLayout.hero?.source ?? 'auto'} onValueChange={source => setDraftLayout({ ...activeLayout, hero: { hidden: false, rotate: true, ...activeLayout.hero, source } })}>
+          <option value="auto">First available catalog</option>
+          {candidates.filter(row => row.kind !== 'continue').map(row => <option key={row.key} value={row.key}>{row.title}</option>)}
+        </SettingsSelect></label>
+        <label className="flex items-center justify-between gap-3 text-sm">Rotate suggestions<input type="checkbox" className="size-5 shrink-0 accent-primary" disabled={activeLayout.hero?.hidden} checked={activeLayout.hero?.rotate !== false} onChange={event => setDraftLayout({ ...activeLayout, hero: { hidden: false, source: 'auto', ...activeLayout.hero, rotate: event.target.checked } })} /></label>
+      </fieldset>
       {isLoading ? <LoadingState label="Loading browse layout" /> : null}
       {saveMutation.error ? <ErrorState error={saveMutation.error} /> : null}
       {catalogs.error ? <ErrorState error={catalogs.error} /> : null}
@@ -157,6 +159,7 @@ export function BrowseLayoutSettings() {
         <EmptyState title="No rows to customize" body="Install addons or create watchlists to populate browse sections." />
       ) : null}
 
+      <div><h4 className="text-sm font-medium">Home rows</h4><p className="mt-1 text-xs text-muted-foreground">Drag to reorder. Use the eye to show or hide a row.</p></div>
       {!isLoading && !hasError && orderedRows.length ? (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
           <SortableContext items={orderedRows.filter(row => row.kind !== 'continue').map((row) => row.key)} strategy={verticalListSortingStrategy}>
@@ -182,6 +185,14 @@ export function BrowseLayoutSettings() {
           </SortableContext>
         </DndContext>
       ) : null}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4"><Button variant="ghost" type="button" disabled={isLoading || Boolean(hasError)} onClick={() => setDraftLayout(createDefaultBrowseLayout())}>Reset to defaults</Button>        <Button
+          type="button"
+          onClick={() => saveMutation.mutate(activeLayout)}
+          disabled={!isDirty || saveMutation.isPending || isLoading || Boolean(hasError)}
+        >
+          Save layout
+        </Button>
+</div>
     </section>
   )
 }
@@ -222,7 +233,7 @@ function SortableLayoutRow({
         {...listeners}
       >
         <GripVertical className="size-4" aria-hidden="true" />
-      </button> : null}
+      </button> : <span className="size-8 shrink-0" aria-hidden="true" />}
       <div className="min-w-0 flex-1">
         <p className="m-0 flex items-center gap-2 truncate text-sm font-medium">
           <span className="truncate">{row.title}</span>

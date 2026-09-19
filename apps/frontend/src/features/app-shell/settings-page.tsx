@@ -5,11 +5,12 @@ import { RevealedImage } from '@/components/revealed-image'
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "@tanstack/react-form";
 import {
   ArrowLeft,
+  ArrowRight,
   GripVertical,
   Copy,
   Ellipsis,
@@ -88,24 +89,42 @@ const profileSchema = z.object({
   avatarKey: z.string().trim().max(2048).refine(value => PROFILE_AVATAR_OPTIONS.some(option => option.key === value) || isAvatarImageUrl(value), "Choose a colour or enter an HTTP image URL."),
 });
 
-export function ProfileSettingsPage() {
-  const navigate = useNavigate();
+const settingsSections = [['profiles', 'Profiles'], ['home', 'Home'], ['playback', 'Playback on this device'], ['plugins', 'Plugins'], ['account', 'Account'], ['experimental', 'Experimental']];
 
-  return (
-    <div className={cn(pageStack, "settings-area max-w-[1040px] gap-6")}>
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-medium tracking-tight">Settings</h1>
-        <Button variant="secondary" size="sm" onClick={() => navigate({ to: "/settings/account" })}>Account & addons</Button>
-      </header>
-      <section className="settings-panel"><ProfileManager /></section>
-      <DeviceSettings />
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
-        <BrowseLayoutSettings />
-        <ExternalPlaybackSettingsSection />
+export function ProfileSettingsPage() {
+  const profileId = useAppStore(state => state.activeProfileId);
+  const navigate = useNavigate();
+  const [activeSection, setActiveSection] = useState('profiles');
+  useEffect(() => {
+    const update = () => {
+      const sections = settingsSections.flatMap(([id]) => {
+        const element = document.getElementById(id);
+        return element ? [element] : [];
+      });
+      const current = sections.filter(element => element.getBoundingClientRect().top <= 160).at(-1) ?? sections[0];
+      if (current) setActiveSection(current.id);
+    };
+    update();
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    return () => { window.removeEventListener('scroll', update, true); window.removeEventListener('resize', update); };
+  }, []);
+  return <div className={cn(pageStack, "settings-area max-w-[1120px] gap-8")}>
+    <header><h1 className="text-3xl font-medium tracking-tight">Settings</h1></header>
+    <div className="grid gap-8 md:grid-cols-[180px_minmax(0,1fr)]">
+      <nav aria-label="Settings sections" className="flex flex-wrap content-start gap-1 md:sticky md:top-6 md:flex-col md:self-start">
+        {settingsSections.map(([id,label]) => <a key={id} href={'#'+id} onClick={() => setActiveSection(id)} aria-current={activeSection === id ? 'location' : undefined} className={cn("rounded-lg px-3 py-2.5 text-sm transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring", activeSection === id ? "bg-primary/15 font-medium text-foreground" : "text-muted-foreground")}>{label}</a>)}
+      </nav>
+      <div className="grid min-w-0 gap-8">
+        <section id="profiles" className="scroll-mt-6 rounded-xl border border-border bg-card/60 p-5"><h2 className="mb-4 text-lg font-medium">Profiles</h2><ProfileManager /></section>
+        <section id="home" className="scroll-mt-6"><BrowseLayoutSettings key={profileId} /></section>
+        <section id="playback" className="grid scroll-mt-6 gap-5"><h2 className="text-xl font-medium">Playback on this device</h2><ExternalPlaybackSettingsSection /><DeviceSettings /></section>
+        <section id="plugins" className="scroll-mt-6"><button type="button" onClick={() => navigate({ to: '/settings/plugins' })} className="flex w-full items-center gap-4 rounded-xl border border-border bg-card/60 p-5 text-left hover:bg-muted/50"><span className="grid flex-1 gap-1"><span className="text-lg font-medium">Plugins</span><span className="text-sm text-muted-foreground">Manage your Stremio-compatible addons.</span></span><ArrowRight className="size-5 shrink-0" /></button></section>
+        <section id="account" className="scroll-mt-6"><button type="button" onClick={() => navigate({ to: '/settings/account' })} className="flex w-full items-center gap-4 rounded-xl border border-border bg-card/60 p-5 text-left hover:bg-muted/50"><span className="grid flex-1 gap-1"><span className="text-lg font-medium">Account details</span><span className="text-sm text-muted-foreground">Manage your email, password, and account.</span></span><ArrowRight className="size-5 shrink-0" /></button></section>
+        <section id="experimental" className="scroll-mt-6"><ExperimentalSettings /></section>
       </div>
-      <ExperimentalSettings />
     </div>
-  );
+  </div>;
 }
 
 function ExternalPlaybackSettingsSection() {
@@ -118,7 +137,7 @@ function ExternalPlaybackSettingsSection() {
     mutationFn: (payload: PlaybackPreferences) => updatePlaybackPreferences(payload),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.playbackPreferences });
-      toast({ title: "External playback settings updated." });
+      toast({ title: "Playback settings saved on this device." });
     },
   });
 
@@ -156,7 +175,7 @@ function ExternalPlaybackSettingsSection() {
         External playback
       </h3>
       <p className="m-0 pb-3 text-sm text-muted-foreground">
-        Choose where streams open. External apps must be installed and may not report watch progress back to Wadi.
+        Choose where streams open on this device. External apps must be installed and may not report watch progress back to Wadi.
       </p>
 
       <div className="grid min-w-0 grid-cols-1 gap-3">
@@ -174,7 +193,7 @@ function ExternalPlaybackSettingsSection() {
 
         <Label className="grid min-w-0 gap-1.5">External player
           <SettingsSelect value={data.external_player_preset ?? 'custom'} onValueChange={value => updateDraft('external_player_preset', value)}>
-            {externalPlayers.map(player => <option key={player.id} value={player.id}>{player.label} · {player.platforms}</option>)}
+            {externalPlayers.map(player => <option key={player.id} value={player.id}>{player.label}</option>)}
           </SettingsSelect>
         </Label>
         {(data.external_player_preset ?? 'custom') === 'custom' && <Label className="grid min-w-0 gap-1.5">
@@ -196,11 +215,11 @@ function ExternalPlaybackSettingsSection() {
   );
 }
 
-export function AccountSettingsPage({ user }: { user: User }) {
+export function AccountSettingsPage({ user, view = "account" }: { user: User; view?: "account" | "plugins" }) {
   const queryClient = useQueryClient();
   const setToken = useAppStore((state) => state.setToken);
   const navigate = useNavigate();
-  const addons = useQuery(addonsQuery);
+  const addons = useQuery({ ...addonsQuery, enabled: view === "plugins" });
   const [search, setSearch] = useState("");
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
   const reorderMutation = useMutation({
@@ -237,7 +256,7 @@ export function AccountSettingsPage({ user }: { user: User }) {
 
   return (
     <div className={cn(pageStack, "settings-area max-w-[1040px]")}>
-      <header className="grid gap-6">
+      <header id="account" className="grid scroll-mt-6 gap-6">
         <div>
           <Button
             variant="ghost"
@@ -246,31 +265,31 @@ export function AccountSettingsPage({ user }: { user: User }) {
             onClick={() => navigate({ to: "/settings" })}
           >
             <ArrowLeft aria-hidden="true" />
-            Back to profile settings
+            Back to settings
           </Button>
         </div>
         <div className="flex min-h-[52px] flex-wrap items-center justify-between gap-4">
           <div className="grid gap-1">
             <h1 className="m-0 text-[clamp(1.2rem,2vw,1.7rem)] font-[520] tracking-normal">
-              Account settings
+              {view === "plugins" ? "Plugins" : "Account settings"}
             </h1>
             <p className="m-0 text-sm text-muted-foreground">
               {user.email}
             </p>
           </div>
-          <Button
+          {view === "account" ? <Button
             variant="secondary"
             type="button"
             onClick={() => logoutMutation.mutate()}
           >
             <LogOut aria-hidden="true" />
             Logout
-          </Button>
+          </Button> : null}
         </div>
       </header>
 
-      <AccountControls email={user.email} />
-      <section className="grid gap-4 pt-2 pb-6">
+      {view === "account" ? <AccountControls email={user.email} /> : null}
+      {view === "plugins" ? <section id="plugins" className="grid scroll-mt-6 gap-4 pt-2 pb-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="m-0 text-[1.05rem] font-[520] tracking-normal">
             Installed addons
@@ -283,6 +302,7 @@ export function AccountSettingsPage({ user }: { user: User }) {
             Add addon
           </Button>
         </div>
+        <p className="text-sm leading-relaxed text-muted-foreground">Wadi works with Stremio-compatible addons. Add a manifest URL to get catalogs, metadata, streams, or subtitles. Available features depend on the addon.</p>
         <Input
           type="search"
           placeholder="Search installed addons"
@@ -327,14 +347,14 @@ export function AccountSettingsPage({ user }: { user: User }) {
             body="Install a Stremio-compatible addon to unlock catalogs and streams."
           />
         ) : null}
-      </section>
+      </section> : null}
     </div>
   );
 }
 
 export function SettingsPage(props: { user?: Pick<User, "id" | "email"> }) {
   if (props.user) {
-    return <AccountSettingsPage user={{ ...props.user, active_profile_id: "" }} />;
+    return <AccountSettingsPage user={{ ...props.user, active_profile_id: "" }} view="plugins" />;
   }
   return <ProfileSettingsPage />;
 }
@@ -425,11 +445,6 @@ function ProfileManager() {
 
   return (
     <div className="grid gap-3">
-      <div>
-        <h3 className="m-0 text-sm text-muted-foreground">
-          Profiles
-        </h3>
-      </div>
       <div className="flex gap-2 flex-wrap max-[800px]:flex-col">
         {profileList.map((profile) => {
           const isActive = profile.id === activeProfileId;
@@ -525,7 +540,7 @@ function ProfileManager() {
         open={Boolean(editingProfile)}
         onOpenChange={(open) => !open && setEditingProfileId(null)}
       >
-        <DialogContent>
+        <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Edit profile</DialogTitle>
             <DialogDescription>
@@ -534,6 +549,8 @@ function ProfileManager() {
           </DialogHeader>
           {editingProfile ? (
             <ProfileEditorForm
+              key={editingProfile.id}
+              onCancel={() => setEditingProfileId(null)}
               submitLabel="Save changes"
               isPending={updateMutation.isPending}
               error={updateMutation.error}
@@ -638,6 +655,7 @@ function ProfileActionsMenu({
 }
 
 function ProfileEditorForm({
+  onCancel,
   initialName,
   initialAvatarKey,
   submitLabel,
@@ -645,6 +663,7 @@ function ProfileEditorForm({
   error,
   onSubmit,
 }: {
+  onCancel?: () => void;
   initialName: string;
   initialAvatarKey: string;
   submitLabel: string;
@@ -674,6 +693,8 @@ function ProfileEditorForm({
             <Label htmlFor={field.name}>Name</Label>
             <Input
               id={field.name}
+              maxLength={32}
+              autoComplete="off"
               value={field.state.value}
               onBlur={field.handleBlur}
               onChange={(event) => field.handleChange(event.target.value)}
@@ -729,6 +750,7 @@ function ProfileEditorForm({
       </form.Field>
       {error ? <ErrorState error={error} /> : null}
       <DialogFooter>
+        {onCancel ? <Button type="button" variant="ghost" disabled={isPending} onClick={onCancel}>Cancel</Button> : null}
         <Button type="submit" disabled={isPending}>
           {submitLabel}
         </Button>
@@ -763,7 +785,7 @@ export function AddAddonPage() {
           ? "Addon updated"
           : "Addon installed",
       });
-      navigate({ to: "/settings/account" });
+      navigate({ to: "/settings/plugins" });
     },
   });
 
@@ -867,7 +889,7 @@ export function AddAddonPage() {
               <Button
                 variant="secondary"
                 type="button"
-                onClick={() => navigate({ to: "/settings/account" })}
+                onClick={() => navigate({ to: "/settings/plugins" })}
               >
                 Cancel
               </Button>

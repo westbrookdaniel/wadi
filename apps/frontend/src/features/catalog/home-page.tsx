@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { pageStack } from '@/lib/styles'
 
 import { ContinuePanel } from './continue-panel'
-import { FeaturedFilm } from './featured-film'
+import { FeaturedFilm, FeaturedTitles } from './featured-film'
 import { BrowseSections } from './browse-sections'
 import { buildBrowseRowCandidates, createDefaultBrowseLayout, normalizeBrowseLayout, resolveVisibleBrowseRows } from './browse-layout'
 
@@ -36,6 +36,11 @@ export function HomePage({
   const layout = normalizeBrowseLayout(browseLayout.data ?? createDefaultBrowseLayout())
   const rows = resolveVisibleBrowseRows(candidates, layout.pages.home)
 
+  const heroRow = candidates.find(row => row.key === layout.hero?.source)
+  const heroEntry = heroRow?.catalogEntry ?? catalogs.data?.[0]
+  const heroList = heroRow?.list ? listItemsByListId[heroRow.list.id] ?? [] : null
+  const heroItems: MediaPreview[] = (heroList ?? []).map(item => ({ id: item.media_id, type: item.media_type, name: item.title, poster: item.poster ?? undefined, raw: item.meta ?? {} }))
+  const showHero = !layout.hero?.hidden && Boolean(heroList ? heroItems.length : heroEntry)
   const continueItems = continueWatching.data ?? []
   const hasCatalogs = Boolean(catalogs.data?.length)
   const hasContinueWatching = Boolean(continueItems.length)
@@ -76,8 +81,8 @@ export function HomePage({
         />
       ) : null}
 
-      {!isLoading && !showSetup ? <div className={showContinueWatching && hasCatalogs ? 'home-top' : undefined}>
-        {catalogs.data?.[0] ? <FeaturedFilm entry={catalogs.data[0]} onOpen={onOpenMedia} /> : null}
+      {!isLoading && !showSetup ? <div className={showContinueWatching && showHero ? 'home-top' : undefined}>
+        {showHero ? heroList ? <FeaturedTitles items={heroItems} rotate={layout.hero?.rotate} onOpen={onOpenMedia} /> : heroEntry ? <FeaturedFilm key={layout.hero?.source ?? 'auto'} entry={heroEntry} rotate={layout.hero?.rotate} onOpen={onOpenMedia} /> : null : null}
         {showContinueWatching ? <ContinuePanel items={continueItems} onOpen={onOpenMedia} /> : null}
       </div> : null}
       {!isLoading && !showSetup ? (
