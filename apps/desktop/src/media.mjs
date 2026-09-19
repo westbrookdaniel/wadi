@@ -147,21 +147,23 @@ export async function createMediaService({ directory, binaries }) {
       return describe(`${base}/resource/${job.resourceId}`,'direct',0);
     }
     const encoder=process.env.WADI_VIDEO_ENCODER ?? (process.platform==='darwin'?'h264_videotoolbox':'libx264');
-    if(!['h264_videotoolbox','h264_nvenc','h264_qsv','h264_amf','libx264'].includes(encoder))throw new Error('Unsupported WADI_VIDEO_ENCODER');
+    if(!['h264_videotoolbox','h264_nvenc','h264_qsv','h264_amf','h264_vaapi','libx264'].includes(encoder))throw new Error('Unsupported WADI_VIDEO_ENCODER');
     const launch = chosen => {
-      const args=['-hide_banner','-loglevel','error','-nostdin','-y',...networkArgs(input),'-ss',String(input.position),'-i',input.url];
+      const args=['-hide_banner','-loglevel','error','-nostdin','-y',...(chosen==='h264_vaapi'&&video&&!copyVideo?['-vaapi_device',process.env.WADI_VAAPI_DEVICE||'/dev/dri/renderD128']:[]),...networkArgs(input),'-ss',String(input.position),'-i',input.url];
       if(video)args.push('-map',`0:${video.index}`,'-c:v',copyVideo?'copy':chosen);
       if(video&&!copyVideo){
         if(chosen==='libx264')args.push('-preset','veryfast','-crf','21');
         else args.push('-b:v','6000k');
         if(chosen==='h264_videotoolbox')args.push('-allow_sw','1');
-        args.push('-pix_fmt','yuv420p','-force_key_frames','expr:gte(t,n_forced*4)');
+        if(chosen==='h264_vaapi')args.push('-vf','format=nv12,hwupload');
+        else args.push('-pix_fmt','yuv420p');
+        args.push('-force_key_frames','expr:gte(t,n_forced*4)');
       }
       if(audio){args.push('-map',`0:${audio.index}`,'-c:a',copyAudio?'copy':'aac');if(!copyAudio)args.push('-b:a','192k','-ac','2');}
       // A local username activates FFmpeg's automatic Expect: 100-continue
       // handshake on each upload. The random path token authorizes this endpoint.
       args.push('-sn','-dn','-max_muxing_queue_size','2048','-f','hls','-hls_time','4','-hls_list_size','24','-method','PUT','-http_persistent','1','-hls_segment_filename',`http://producer@127.0.0.1:${server.address().port}/${producerSecret}/${id}/segment%d.ts`,`http://producer@127.0.0.1:${server.address().port}/${producerSecret}/${id}/index.m3u8`);
-      const child=spawn(ffmpeg,args,{stdio:['ignore','ignore','pipe'],windowsHide:true});job.process=child;
+      const child=spawn(ffmpeg,args,{stdio:['ignore','ignore','pipe'],windowsHide:true});job.process=child;job.encoder=video?(copyVideo?'copy':chosen):null;
       // Provider URLs and credentials from stderr must not reach logs or UI.
       child.stderr.resume();
       child.on('error',()=>{job.error='Could not start the bundled media converter';});
@@ -200,7 +202,7 @@ export async function createMediaService({ directory, binaries }) {
         const waiters=[...job.waiters];job.waiters.clear();for(const wake of waiters)wake();
         return {error:job.error};
       }
-      if(action==='status'){const job=jobs.get(z.string().uuid().parse(payload));if(!job)return {error:'Playback session ended'};job.touched=Date.now();return {error:job.error};}
+      if(action==='status'){const job=jobs.get(z.string().uuid().parse(payload));if(!job)return {error:'Playback session ended'};job.touched=Date.now();return {error:job.error,encoder:job.encoder};}
       if(action==='resource'){const input=sourceSchema.parse(payload);if(resources.size>=200)resources.delete(resources.keys().next().value);const id=randomUUID();resources.set(id,{...input,touched:Date.now()});return `${base}/resource/${id}`;}
       throw new Error('Unknown media operation');
     },

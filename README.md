@@ -36,6 +36,8 @@ Wadi uses addons to find catalogs and stream sources. It does not provide a film
 
 Download Wadi from [GitHub Releases](https://github.com/westbrookdaniel/wadi/releases/latest). Installers are available for Apple Silicon Macs, Windows x64 and Linux x64. macOS releases use ad-hoc signing without Apple notarization. After the first blocked launch, approve Wadi in System Settings → Privacy & Security → Open Anyway. Windows and Linux installers remain unsigned. Wadi checks GitHub for new versions and opens the installer download when you choose Download update. Install it over your existing app to keep your settings and sign-in.
 
+For Linux installation, fullscreen, optional GPU conversion and AirPlay setup, see [Linux desktop setup](docs/linux-desktop.md).
+
 ## Run locally
 
 You’ll need **Node.js 24**, **pnpm 10.33.2**, and **Docker Compose** or a PostgreSQL database.

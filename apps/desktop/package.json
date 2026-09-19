@@ -1,6 +1,6 @@
 {
   "name": "@wadi/desktop",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "type": "module",
   "main": "src/main.mjs",
@@ -8,7 +8,9 @@
     "prepare:assets": "node scripts/prepare.mjs",
     "build": "pnpm prepare:assets && vite build",
     "dev": "pnpm build && electron .",
-    "package": "pnpm build && electron-builder --config electron-builder.config.cjs"
+    "package": "pnpm build && electron-builder --config electron-builder.config.cjs",
+    "test": "node --test src/*.test.mjs",
+    "test:vaapi": "node scripts/check-vaapi.mjs"
   },
   "dependencies": {
     "zod": "^4.3.6"
@@ -66,8 +68,14 @@
       ],
       "category": "AudioVideo",
       "maintainer": "Wadi contributors",
-      "icon": "resources/icon.png",
-      "executableName": "wadi"
+      "icon": "resources/icons",
+      "executableName": "wadi",
+      "syncDesktopName": true,
+      "desktop": {
+        "entry": {
+          "StartupWMClass": "wadi"
+        }
+      }
     },
     "nsis": {
       "oneClick": false,
@@ -75,11 +83,24 @@
     },
     "artifactName": "Wadi-${version}-${os}-${arch}.${ext}",
     "deb": {
-      "packageName": "wadi"
+      "packageName": "wadi",
+      "desktop": {
+        "entry": {
+          "StartupWMClass": "wadi",
+          "Actions": "Fullscreen;"
+        },
+        "desktopActions": {
+          "Fullscreen": {
+            "Name": "Open Fullscreen",
+            "Exec": "/opt/Wadi/wadi --fullscreen"
+          }
+        }
+      }
     }
   },
   "description": "Wadi media browser and desktop player",
   "author": "Wadi contributors",
   "license": "MIT",
-  "homepage": "https://watchwadi.com"
+  "homepage": "https://watchwadi.com",
+  "desktopName": "wadi.desktop"
 }
