@@ -48,3 +48,8 @@ it('matches literal custom markers without mistaking uncached for cached', () =>
   expect(rankStreams(streams, { ...settings, cachedMode: 'only', cachedIndicator: 'cached' }).filter(row => row.eligible).map(row => row.stream.url)).toEqual(['https://test/yes'])
   expect(rankStreams([{ url: 'https://test/literal', title: '[RD+]' }], { ...settings, cachedMode: 'only', cachedIndicator: '[RD+]' })[0].eligible).toBe(true)
 })
+it('keeps existing saved preferences when adding cached defaults', async () => {
+  const { autoPlaybackSchema } = await import('@/store/auto-playback')
+  const oldSettings = { enabled: true, skipSelection: true, preferredResolution: 720, qualityWeight: 55 }
+  expect(autoPlaybackSchema.parse(oldSettings)).toMatchObject({ ...oldSettings, cachedMode: 'any', cachedIndicator: '⚡' })
+})

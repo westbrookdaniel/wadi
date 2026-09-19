@@ -11,7 +11,7 @@ export function AutoPlaybackSettings() {
   const [draft, setDraft] = useState<Partial<PlaybackSettings>>({})
   const settings = { ...savedSettings, ...draft }
   const update = (patch: Partial<PlaybackSettings>) => setDraft(current => ({ ...current, ...patch }))
-  const needsIndicator = settings.cachedMode !== 'any' && !settings.cachedIndicator.replace(/[\uFE0E\uFE0F]/g, '').trim()
+  const needsIndicator = settings.enabled && settings.cachedMode !== 'any' && !settings.cachedIndicator.replace(/[\uFE0E\uFE0F]/g, '').trim()
   const isDirty = JSON.stringify(settings) !== JSON.stringify(savedSettings)
   const addons = useQuery(addonsQuery)
   return <section className="grid gap-5 rounded-xl border border-border bg-card/60 p-5">

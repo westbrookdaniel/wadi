@@ -56,7 +56,7 @@ function normalizeLanguage(language: string) {
   return aliases[language] ?? language
 }
 
-export function matchesCachedIndicator(text: string, indicator: string) {
+function matchesCachedIndicator(text: string, indicator: string) {
   // Emoji presentation selectors must not make an otherwise identical marker miss.
   const normalize = (value: string) => value.normalize('NFC').replace(/[\uFE0E\uFE0F]/g, '').toLowerCase()
   const marker = normalize(indicator).trim()
