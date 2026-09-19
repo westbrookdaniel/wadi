@@ -23,11 +23,12 @@ type ApiOptions = {
 }
 
 export async function apiRequest<T>(path: string, options: ApiOptions = {}) {
+  const revision = useAppStore.getState().authRevision
   const desktop = desktopBridge()
   if (desktop) {
     const response = await desktop.request(path, { method: options.method, body: options.body })
     if (response.status >= 400) {
-      if (response.status === 401) clearStoredToken()
+      if (response.status === 401 && revision === useAppStore.getState().authRevision) clearStoredToken()
       throw new ApiError(response.status, response.body)
     }
     return response.body as T
@@ -57,7 +58,7 @@ export async function apiRequest<T>(path: string, options: ApiOptions = {}) {
   const body = text ? parseBody(text) : null
 
   if (!response.ok) {
-    if (response.status === 401) {
+    if (response.status === 401 && revision === useAppStore.getState().authRevision) {
       clearStoredToken()
     }
 

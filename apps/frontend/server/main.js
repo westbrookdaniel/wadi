@@ -85,7 +85,11 @@ export function createApp({ database = process.env.DATABASE_URL, sessionDays = 3
     });
     addAccountRoutes(app, db);
     app.get('/api/server-capabilities', (_req, res) => res.json({ conversion: false }));
-    app.get('/api/auth/me', (req, res) => res.json({ id: req.user.id, email: req.user.email, active_profile_id: req.user.profile_id }));
+    app.get('/api/auth/me', async (req, res) => {
+        // Renew active sessions near expiry without writing on every request.
+        await run('UPDATE sessions SET expires_at=? WHERE token_hash=? AND expires_at<?', new Date(Date.now() + sessionDays * 86400000).toISOString(), req.tokenHash, new Date(Date.now() + sessionDays * 86400000 / 2).toISOString());
+        res.json({ id: req.user.id, email: req.user.email, active_profile_id: req.user.profile_id });
+    });
     app.post('/api/auth/logout', async (req, res) => { (await run('DELETE FROM sessions WHERE token_hash=?', req.tokenHash)); res.sendStatus(204); });
     const ownProfile = async (req, id) => (await get('SELECT * FROM profiles WHERE id=? AND user_id=?', id, req.user.id)) ?? fail(404, 'Profile not found');
     app.get('/api/profiles', async (req, res) => res.json({ items: (await all('SELECT * FROM profiles WHERE user_id=? ORDER BY created_at', req.user.id)) }));
