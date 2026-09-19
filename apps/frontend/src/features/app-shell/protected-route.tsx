@@ -1,3 +1,5 @@
+import { rememberedProfile, rememberProfile } from './remembered-profile';
+import { useDeviceStore } from '@/store/device-store';
 import { Navigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, type ReactNode } from "react";
@@ -20,6 +22,7 @@ export function ProtectedRoute({
 }: {
   children: (user: User) => ReactNode;
 }) {
+  const askForProfile = useDeviceStore(state => state.askForProfile);
   const token = useAppStore((state) => state.token);
   const activeProfileId = useAppStore((state) => state.activeProfileId);
   const setActiveProfileId = useAppStore((state) => state.setActiveProfileId);
@@ -37,6 +40,7 @@ export function ProtectedRoute({
       setSelectedListId(null);
       if (token && typeof window !== "undefined") {
         window.sessionStorage.setItem("wadi.profile.selected_token", token);
+        if (me.data) rememberProfile(me.data.id, data.active_profile_id);
       }
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.me }),
@@ -50,11 +54,18 @@ export function ProtectedRoute({
     },
   });
 
+  const remembered = me.data ? activeProfileId ?? rememberedProfile(me.data.id) : null;
+  const desiredProfile = profiles.data?.length === 1 ? profiles.data[0]?.id
+    : !askForProfile && profiles.data?.some(profile => profile.id === remembered) ? remembered : null;
+  const { mutate: restoreProfile, isPending: restoring, isError: restoreFailed } = selectProfileMutation;
   useEffect(() => {
-    if (me.data?.active_profile_id) {
-      setActiveProfileId(me.data.active_profile_id);
+    if (!desiredProfile || !me.data || restoring || restoreFailed) return;
+    if (me.data.active_profile_id !== desiredProfile) restoreProfile(desiredProfile);
+    else {
+      if (activeProfileId !== desiredProfile) setActiveProfileId(desiredProfile);
+      rememberProfile(me.data.id, desiredProfile);
     }
-  }, [me.data?.active_profile_id, setActiveProfileId]);
+  }, [desiredProfile, activeProfileId, me.data, restoreProfile, restoring, restoreFailed, setActiveProfileId]);
 
   if (!token) {
     return <Navigate to="/login" replace />;
@@ -107,26 +118,10 @@ export function ProtectedRoute({
     return <main className="grid min-h-screen place-content-center gap-4 p-8"><p>Could not load profiles.</p><button className="underline" onClick={() => void profiles.refetch()}>Retry</button></main>;
   }
 
-  if (profiles.data.length === 1) {
-    const profile = profiles.data[0];
-    if (
-      activeProfileId !== profile.id ||
-      me.data.active_profile_id !== profile.id
-    ) {
-      if (!selectProfileMutation.isPending) {
-        selectProfileMutation.mutate(profile.id);
-      }
-      return (
-        <main
-          className={cn(
-            "grid min-h-svh content-center justify-items-center gap-[clamp(34px,7vh,72px)] px-6 py-[clamp(36px,8vw,96px)]",
-            appBackground,
-          )}
-        >
-          <LoadingState label="Preparing profile" />
-        </main>
-      );
-    }
+  if (desiredProfile && (me.data.active_profile_id !== desiredProfile || activeProfileId !== desiredProfile)) {
+    return <main className="grid min-h-svh place-content-center gap-4 p-8">
+      {selectProfileMutation.error ? <><p>Could not restore your profile.</p><button onClick={() => selectProfileMutation.mutate(desiredProfile)}>Retry</button></> : <LoadingState label="Restoring profile" />}
+    </main>;
   }
 
   const selectedToken =
@@ -135,7 +130,7 @@ export function ProtectedRoute({
       : window.sessionStorage.getItem("wadi.profile.selected_token");
   const requiresSelection =
     profiles.data.length > 1 &&
-    (selectedToken !== token || activeProfileId !== me.data.active_profile_id);
+    (!desiredProfile && (selectedToken !== token || activeProfileId !== me.data.active_profile_id));
 
   if (requiresSelection) {
     return (
@@ -149,6 +144,7 @@ export function ProtectedRoute({
             <h1 className=" text-center m-0 text-[clamp(1.5rem,3vw,2.1rem)] font-[560]">
               Who&apos;s watching?
             </h1>
+          {selectProfileMutation.error ? <p role="alert">Could not select profile. Please try again.</p> : null}
           <div className="flex flex-wrap justify-center items-center gap-8">
             {profiles.data.map((profile) => (
               <button

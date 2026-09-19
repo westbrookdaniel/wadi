@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import {
   Navigate,
+  redirect,
   createRootRoute,
   createRoute,
   createRouter,
@@ -44,7 +45,7 @@ const rootRoute = createRootRoute()
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
-  component: () => <Navigate to="/home" replace />,
+  beforeLoad: () => { throw redirect({ to: useAppStore.getState().token ? '/home' : '/login', replace: true }) },
 })
 
 const loginRoute = createRoute({

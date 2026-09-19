@@ -5,6 +5,7 @@ const TOKEN_KEY = 'wadi.auth.token'
 const PROFILE_KEY = 'wadi.auth.profile_id'
 
 type AppStore = {
+  authRevision: number
   token: string | null
   activeProfileId: string | null
   selectedListId: string | null
@@ -21,7 +22,8 @@ const readStoredToken = () => {
   return desktopBridge() ? null : window.localStorage.getItem(TOKEN_KEY)
 }
 
-export const useAppStore = create<AppStore>((set) => ({
+export const useAppStore = create<AppStore>((set, get) => ({
+  authRevision: 0,
   token: readStoredToken(),
   activeProfileId: typeof window === 'undefined' ? null : window.localStorage.getItem(PROFILE_KEY),
   selectedListId: null,
@@ -35,7 +37,11 @@ export const useAppStore = create<AppStore>((set) => ({
       window.localStorage.removeItem(PROFILE_KEY)
     }
 
-    set({ token })
+    if (!token) {
+      window.localStorage.removeItem(PROFILE_KEY)
+      window.sessionStorage.removeItem("wadi.profile.selected_token")
+    }
+    set({ ...(token ? { token } : { token: null, activeProfileId: null, selectedListId: null }), authRevision: get().authRevision + 1 })
   },
   setActiveProfileId: (activeProfileId) => {
     if (activeProfileId) {

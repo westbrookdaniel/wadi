@@ -30,12 +30,13 @@ async function api(path, options = {}) {
   if (url.origin !== origin) throw new Error('Invalid API origin');
   const method = z.enum(['GET','POST','PUT','DELETE']).parse(options.method ?? 'GET');
   const headers = { 'Content-Type': 'application/json' };
-  if (token) headers.Authorization = `Bearer ${token}`;
+  const requestToken = token;
+  if (requestToken) headers.Authorization = `Bearer ${requestToken}`;
   const body = options.body === undefined ? undefined : JSON.stringify(options.body);
   if (body && body.length > 1024*1024) throw new Error('Request too large');
   const response = await fetch(url, { method, headers, body, redirect: 'error', signal: AbortSignal.timeout(30000) });
   const text = await response.text();
-  if (response.status === 401 || (path === '/api/auth/logout' || path === '/api/account' && method === 'DELETE') && response.ok) await saveToken(null);
+  if (requestToken === token && (response.status === 401 || (path === '/api/auth/logout' || path === '/api/account' && method === 'DELETE') && response.ok)) await saveToken(null);
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { return { status: 503, body: { error: 'Wadi is temporarily unavailable. Please try again.' } }; }
   return { status: response.status, body: data };

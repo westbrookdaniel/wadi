@@ -36,7 +36,11 @@ test('Node API preserves auth, profile isolation, lists, progress, addons withou
  await request('/api/auth/me','GET',undefined,401);
  const pending=await request('/api/auth/register','POST',{email:'test@example.com',password:'test-password'},202);
  const auth=await request('/api/auth/verify-email','POST',{challenge:pending.challenge,code:sentCode});token=auth.token;
+ const shortExpiry = new Date(Date.now() + 60000).toISOString();
+ await db.run('UPDATE sessions SET expires_at=? WHERE user_id=?', shortExpiry, auth.user.id);
  assert.equal((await request('/api/auth/me')).id,auth.user.id);
+ const renewed = await db.get('SELECT expires_at FROM sessions WHERE user_id=?', auth.user.id);
+ assert.ok(Date.parse(renewed.expires_at) > Date.now() + 20 * 86400000, 'active session renews near expiry');
  const saved=(await request('/api/lists')).items[0];assert.equal(saved.is_default,true);
  await request(`/api/lists/${saved.id}`,'DELETE',undefined,400);
  await request(`/api/lists/${saved.id}/items`,'POST',{media_type:'movie',media_id:'test:film',title:'Film'},201);
