@@ -5,11 +5,12 @@ import { RevealedImage } from '@/components/revealed-image'
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "@tanstack/react-form";
 import {
   ArrowLeft,
+  ArrowRight,
   GripVertical,
   Copy,
   Ellipsis,
@@ -23,7 +24,6 @@ import { z } from "zod";
 
 import {
   addonsQuery,
-  meQuery,
   reorderAddons,
   createProfile,
   deleteProfile,
@@ -89,20 +89,39 @@ const profileSchema = z.object({
   avatarKey: z.string().trim().max(2048).refine(value => PROFILE_AVATAR_OPTIONS.some(option => option.key === value) || isAvatarImageUrl(value), "Choose a colour or enter an HTTP image URL."),
 });
 
+const settingsSections = [['profiles', 'Profiles'], ['home', 'Home'], ['playback', 'Playback on this device'], ['plugins', 'Plugins'], ['account', 'Account'], ['experimental', 'Experimental']];
+
 export function ProfileSettingsPage() {
-  const account = useQuery(meQuery(true));
   const profileId = useAppStore(state => state.activeProfileId);
+  const navigate = useNavigate();
+  const [activeSection, setActiveSection] = useState('profiles');
+  useEffect(() => {
+    const update = () => {
+      const sections = settingsSections.flatMap(([id]) => {
+        const element = document.getElementById(id);
+        return element ? [element] : [];
+      });
+      const current = sections.filter(element => element.getBoundingClientRect().top <= 160).at(-1) ?? sections[0];
+      if (current) setActiveSection(current.id);
+    };
+    update();
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    return () => { window.removeEventListener('scroll', update, true); window.removeEventListener('resize', update); };
+  }, []);
   return <div className={cn(pageStack, "settings-area max-w-[1120px] gap-8")}>
-    <header><h1 className="text-3xl font-medium tracking-tight">Settings</h1><p className="mt-2 text-sm text-muted-foreground">Make Wadi yours. Profile choices sync; playback stays on this device.</p></header>
+    <header><h1 className="text-3xl font-medium tracking-tight">Settings</h1></header>
     <div className="grid gap-8 md:grid-cols-[180px_minmax(0,1fr)]">
       <nav aria-label="Settings sections" className="flex flex-wrap content-start gap-1 md:sticky md:top-6 md:flex-col md:self-start">
-        {[['profiles','Profiles'],['home','Home'],['playback','Playback on this device'],['plugins','Plugins'],['account','Account']].map(([id,label]) => <a key={id} href={'#'+id} className="rounded-lg px-3 py-2.5 text-sm hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">{label}</a>)}
+        {settingsSections.map(([id,label]) => <a key={id} href={'#'+id} onClick={() => setActiveSection(id)} aria-current={activeSection === id ? 'location' : undefined} className={cn("rounded-lg px-3 py-2.5 text-sm transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring", activeSection === id ? "bg-primary/15 font-medium text-foreground" : "text-muted-foreground")}>{label}</a>)}
       </nav>
-      <div className="grid min-w-0 gap-10">
-        <section id="profiles" className="scroll-mt-6"><ProfileManager /></section>
+      <div className="grid min-w-0 gap-8">
+        <section id="profiles" className="scroll-mt-6 rounded-xl border border-border bg-card/60 p-5"><h2 className="mb-4 text-lg font-medium">Profiles</h2><ProfileManager /></section>
         <section id="home" className="scroll-mt-6"><BrowseLayoutSettings key={profileId} /></section>
-        <section id="playback" className="grid scroll-mt-6 gap-5"><h2 className="text-xl font-medium">Playback on this device</h2><ExternalPlaybackSettingsSection /><DeviceSettings /><ExperimentalSettings /></section>
-        {account.data ? <AccountSettingsPage user={account.data} embedded /> : account.error ? <ErrorState error={account.error} /> : <LoadingState label="Loading account" />}
+        <section id="playback" className="grid scroll-mt-6 gap-5"><h2 className="text-xl font-medium">Playback on this device</h2><ExternalPlaybackSettingsSection /><DeviceSettings /></section>
+        <section id="plugins" className="scroll-mt-6"><button type="button" onClick={() => navigate({ to: '/settings/plugins' })} className="flex w-full items-center gap-4 rounded-xl border border-border bg-card/60 p-5 text-left hover:bg-muted/50"><span className="grid flex-1 gap-1"><span className="text-lg font-medium">Plugins</span><span className="text-sm text-muted-foreground">Manage your Stremio-compatible addons.</span></span><ArrowRight className="size-5 shrink-0" /></button></section>
+        <section id="account" className="scroll-mt-6"><button type="button" onClick={() => navigate({ to: '/settings/account' })} className="flex w-full items-center gap-4 rounded-xl border border-border bg-card/60 p-5 text-left hover:bg-muted/50"><span className="grid flex-1 gap-1"><span className="text-lg font-medium">Account details</span><span className="text-sm text-muted-foreground">Manage your email, password, and account.</span></span><ArrowRight className="size-5 shrink-0" /></button></section>
+        <section id="experimental" className="scroll-mt-6"><ExperimentalSettings /></section>
       </div>
     </div>
   </div>;
@@ -196,11 +215,11 @@ function ExternalPlaybackSettingsSection() {
   );
 }
 
-export function AccountSettingsPage({ user, embedded = false }: { user: User; embedded?: boolean }) {
+export function AccountSettingsPage({ user, view = "account" }: { user: User; view?: "account" | "plugins" }) {
   const queryClient = useQueryClient();
   const setToken = useAppStore((state) => state.setToken);
   const navigate = useNavigate();
-  const addons = useQuery(addonsQuery);
+  const addons = useQuery({ ...addonsQuery, enabled: view === "plugins" });
   const [search, setSearch] = useState("");
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
   const reorderMutation = useMutation({
@@ -237,8 +256,8 @@ export function AccountSettingsPage({ user, embedded = false }: { user: User; em
 
   return (
     <div className={cn(pageStack, "settings-area max-w-[1040px]")}>
-      <header id="account" className={cn("grid scroll-mt-6 gap-6", embedded && "order-2")}>
-        <div hidden={embedded}>
+      <header id="account" className="grid scroll-mt-6 gap-6">
+        <div>
           <Button
             variant="ghost"
             type="button"
@@ -246,34 +265,34 @@ export function AccountSettingsPage({ user, embedded = false }: { user: User; em
             onClick={() => navigate({ to: "/settings" })}
           >
             <ArrowLeft aria-hidden="true" />
-            Back to profile settings
+            Back to settings
           </Button>
         </div>
         <div className="flex min-h-[52px] flex-wrap items-center justify-between gap-4">
           <div className="grid gap-1">
             <h1 className="m-0 text-[clamp(1.2rem,2vw,1.7rem)] font-[520] tracking-normal">
-              Account settings
+              {view === "plugins" ? "Plugins" : "Account settings"}
             </h1>
             <p className="m-0 text-sm text-muted-foreground">
               {user.email}
             </p>
           </div>
-          <Button
+          {view === "account" ? <Button
             variant="secondary"
             type="button"
             onClick={() => logoutMutation.mutate()}
           >
             <LogOut aria-hidden="true" />
             Logout
-          </Button>
+          </Button> : null}
         </div>
       </header>
 
-      <div className={embedded ? "order-3" : undefined}><AccountControls email={user.email} /></div>
-      <section id="plugins" className={cn("grid scroll-mt-6 gap-4 pt-2 pb-6", embedded && "order-1")}>
+      {view === "account" ? <AccountControls email={user.email} /> : null}
+      {view === "plugins" ? <section id="plugins" className="grid scroll-mt-6 gap-4 pt-2 pb-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="m-0 text-[1.05rem] font-[520] tracking-normal">
-            Plugins
+            Installed addons
           </h2>
           <Button
             type="button"
@@ -328,14 +347,14 @@ export function AccountSettingsPage({ user, embedded = false }: { user: User; em
             body="Install a Stremio-compatible addon to unlock catalogs and streams."
           />
         ) : null}
-      </section>
+      </section> : null}
     </div>
   );
 }
 
 export function SettingsPage(props: { user?: Pick<User, "id" | "email"> }) {
   if (props.user) {
-    return <AccountSettingsPage user={{ ...props.user, active_profile_id: "" }} />;
+    return <AccountSettingsPage user={{ ...props.user, active_profile_id: "" }} view="plugins" />;
   }
   return <ProfileSettingsPage />;
 }
@@ -426,11 +445,6 @@ function ProfileManager() {
 
   return (
     <div className="grid gap-3">
-      <div>
-        <h3 className="m-0 text-sm text-muted-foreground">
-          Profiles
-        </h3>
-      </div>
       <div className="flex gap-2 flex-wrap max-[800px]:flex-col">
         {profileList.map((profile) => {
           const isActive = profile.id === activeProfileId;
@@ -771,7 +785,7 @@ export function AddAddonPage() {
           ? "Addon updated"
           : "Addon installed",
       });
-      navigate({ to: "/settings/account" });
+      navigate({ to: "/settings/plugins" });
     },
   });
 
@@ -875,7 +889,7 @@ export function AddAddonPage() {
               <Button
                 variant="secondary"
                 type="button"
-                onClick={() => navigate({ to: "/settings/account" })}
+                onClick={() => navigate({ to: "/settings/plugins" })}
               >
                 Cancel
               </Button>

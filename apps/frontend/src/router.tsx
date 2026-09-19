@@ -126,6 +126,12 @@ const accountSettingsRoute = createRoute({
   component: AccountSettingsRoute,
 })
 
+const pluginsSettingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/settings/plugins",
+  component: () => <AccountSettingsRoute view="plugins" />,
+})
+
 const addAddonRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/account/add-addon',
@@ -157,6 +163,7 @@ const routeTree = rootRoute.addChildren([
   seriesRoute,
   settingsRoute,
   accountSettingsRoute,
+  pluginsSettingsRoute,
   addAddonRoute,
   mediaRoute,
 ])
@@ -218,7 +225,7 @@ function ProfileSettingsRoute() {
   )
 }
 
-function AccountSettingsRoute() {
+function AccountSettingsRoute({ view = "account" }: { view?: "account" | "plugins" }) {
   const navigate = useNavigate()
 
   return (
@@ -229,7 +236,7 @@ function AccountSettingsRoute() {
           label="account settings page"
           onNavigate={(path) => navigate({ to: path })}
         >
-          <AccountSettingsPage user={user} />
+          <AccountSettingsPage user={user} view={view} />
         </AppShell>
       )}
     </ProtectedRoute>
