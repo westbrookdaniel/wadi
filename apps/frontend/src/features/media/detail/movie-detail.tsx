@@ -36,7 +36,7 @@ export function MovieDetailPage({
       sideContent={
         <StreamList
           selectionKey={media.id}
-          autoPickAllowed={autoPickAllowed}
+          autoPickAllowed={autoPickAllowed && !streams.error}
           streams={streams.data ?? []}
           isLoading={streams.isFetching}
           onPlay={(stream) =>

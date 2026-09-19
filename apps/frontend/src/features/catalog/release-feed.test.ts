@@ -20,3 +20,8 @@ it('bounds traffic and prevents cancelled queued requests from starting', async 
   await Promise.all(running)
   await expect(withReleaseSlot(new AbortController().signal, async () => 'next')).resolves.toBe('next')
 })
+it('moves an upcoming release into the feed as time passes without a provider refresh', () => {
+  const row = release('today', '2026-09-20', { releaseState: 'upcoming' })
+  expect(selectReleases([row], defaultReleasePreferences, Date.parse('2026-09-20T23:59:00Z'))[0].episode.releaseState).toBe('upcoming')
+  expect(selectReleases([row], defaultReleasePreferences, Date.parse('2026-09-21T00:01:00Z'))[0].episode.releaseState).toBe('released')
+})

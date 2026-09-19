@@ -151,8 +151,8 @@ export function SeriesDetailPage({
             {streams.error ? <p role="alert" className="text-xs text-destructive">{streams.error.message}</p> : null}
             <StreamList
               selectionKey={selectedEpisode.id}
-          autoPickAllowed={autoPickAllowed}
-          streams={streams.data ?? []}
+              autoPickAllowed={autoPickAllowed && !streams.error}
+              streams={streams.data ?? []}
               isLoading={streams.isFetching}
               onPlay={(stream) =>
                 onPlay(stream, {
@@ -172,7 +172,7 @@ export function SeriesDetailPage({
           </div>
         ) : (
           <EpisodeSelector
-        media={media}
+            media={media}
             episodes={episodes}
             seasons={seasons}
             selectedSeason={selectedSeason}

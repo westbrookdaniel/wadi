@@ -102,7 +102,7 @@ export function ProfileSettingsPage() {
         const element = document.getElementById(id);
         return element ? [element] : [];
       });
-      const current = sections.filter(element => element.getBoundingClientRect().top <= 160).at(-1) ?? sections[0];
+      const current = sections.filter(element => element.getBoundingClientRect().top <= Math.min(240, window.innerHeight / 3)).at(-1) ?? sections[0];
       if (current) setActiveSection(current.id);
     };
     update();

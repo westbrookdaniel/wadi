@@ -10,7 +10,11 @@ export const ReleaseContext = createContext<{ releases: Release[]; counts: Recor
 
 export function selectReleases(releases: Release[], preferences: NewEpisodesPreferences, now: number) {
   const start = now - preferences.days * 86400000
-  return releases.filter(({ episode }) => !episode.releaseConflicting && episode.released && (preferences.includeSpecials || episode.season !== 0) && Date.parse(episode.released) >= start && Date.parse(episode.released) <= now + 7 * 86400000)
+  return releases.map(({ show, episode }) => {
+    const releaseTime = episode.released ? Date.parse(episode.released) + (episode.releasePrecision === 'date' ? 86400000 : 0) : NaN
+    const releaseState: Release['episode']['releaseState'] = episode.releaseConflicting || !Number.isFinite(releaseTime) ? 'unknown' : releaseTime <= now ? 'released' : 'upcoming'
+    return { show, episode: { ...episode, releaseState } }
+  }).filter(({ episode }) => !episode.releaseConflicting && episode.released && (preferences.includeSpecials || episode.season !== 0) && Date.parse(episode.released) >= start && Date.parse(episode.released) <= now + 7 * 86400000)
     .sort((a, b) => (a.episode.released ?? '').localeCompare(b.episode.released ?? '') || a.show.title.localeCompare(b.show.title))
 }
 

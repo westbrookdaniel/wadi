@@ -495,6 +495,7 @@ export function MediaPlayerPage({
   }, [pendingEpisode, episodeStreams.data, episodeStreams.isFetching, episodeStreams.error, autoSettings, externalPreferences.data, changeEpisode])
 
   const onTogglePlay = useCallback(() => {
+    setUpNext(null)
     if (castConnected) {
       const paused = !(castState.paused === true)
       void castTransport.sendMessage({ type: "setProp", propName: "paused", propValue: paused })
@@ -504,6 +505,7 @@ export function MediaPlayerPage({
   }, [castConnected, castState.paused, castTransport, player])
 
   const onSeek = useCallback((seconds: number) => {
+    setUpNext(null)
     if (castConnected) {
       void castTransport.sendMessage({ type: "setProp", propName: "time", propValue: seconds })
       return
@@ -658,7 +660,7 @@ export function MediaPlayerPage({
             episodeContext={activeTarget.episodeContext ?? null}
             hasEpisodeSwapper={Boolean(activeTarget.seriesEpisodes?.length)}
             forceVisible={tvMode || controlsVisible || !player.state.playing || episodeSheetOpen}
-            onOpenEpisodeSwapper={() => setEpisodeSheetOpen(true)}
+            onOpenEpisodeSwapper={() => { setUpNext(null); setEpisodeSheetOpen(true) }}
             subtitleTracks={streamSubtitleList}
             selectedSubtitleId={playbackState.selectedSubtitleId}
             onSelectSubtitle={(id) => {
@@ -773,7 +775,7 @@ export function MediaPlayerPage({
                 selectedEpisodeId={activeTarget.videoId}
                 selectedSeason={selectedSwapSeason}
                 onSeasonChange={season => { setSelectedSwapSeason(season); saveLastSeason(useAppStore.getState().activeProfileId, activeTarget.mediaId, season) }}
-                onSelectEpisode={setPendingEpisode}
+                onSelectEpisode={episode => { setUpNext(null); setPendingEpisode(episode) }}
               />
               {pendingEpisode && !episodeStreams.isFetching ? <div className="grid gap-3"><p className="text-sm">Choose a stream for {pendingEpisode.title}</p>{episodeStreams.error ? <><p role="alert" className="text-sm text-destructive">Could not load streams.</p><Button onClick={() => void episodeStreams.refetch()}>Retry</Button></> : <StreamList autoPickAllowed={false} streams={episodeStreams.data ?? []} isLoading={false} onPlay={changeEpisode} />}</div> : null}
               {pendingEpisode && episodeStreams.isFetching ? (

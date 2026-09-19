@@ -62,7 +62,7 @@ export function useDesktopPlayer({ videoRef, source, hints, savedPosition, watch
     }
     const failed=()=>{if(!cancelled)update({status:'error',error:conversionEnabled ? 'Playback failed. Retry with full conversion or choose another stream.' : 'Playback failed. Enable audio and video conversion in device settings or choose another stream.'})}
     video.addEventListener('error',failed)
-    const ended=()=>{playing.current=false;update({playing:false});commit.current(position.current,duration);endedCallback.current?.()}
+    const ended=()=>{position.current=offset+video.currentTime;playing.current=false;update({playing:false,currentTime:position.current});commit.current(position.current,duration);if(duration>0 && position.current>=duration-2)endedCallback.current?.()}
     const playbackChanged=()=>{if(playable){playing.current=!video.paused;sync()}}
     video.addEventListener('play',playbackChanged);video.addEventListener('pause',playbackChanged);video.addEventListener('timeupdate',sync);video.addEventListener('volumechange',sync);video.addEventListener('ended',ended)
     void desktop.media('start',{id,url:source,headers:JSON.parse(headers),position:position.current,audio:audio.current,speed:speed.current,forceVideo:conversionEnabled && forceVideo.current,conversionEnabled}).then(async value=>{
