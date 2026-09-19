@@ -1,3 +1,4 @@
+import { episodeCatalogSchema } from '@/features/media/detail/episode-catalog'
 import { parseStreamMetadata } from '@/features/media/detail/stream-metadata'
 import { devicePlayback, saveDevicePlayback, devicePlayer, saveDevicePlayer, deviceOverride, saveDeviceOverride } from '@/store/playback-settings'
 import { useAppStore } from '@/store/app-store'
@@ -115,6 +116,13 @@ export const metaQuery = (contentType: string, mediaId: string, enabled = true) 
     queryFn: () => apiRequest<ApiResponses>(`/api/meta/${contentType}/${mediaId}`),
     enabled,
   })
+
+export const episodesQuery = (mediaId: string, profileId: string | null) => queryOptions({
+  queryKey: ['episodes', mediaId, profileId],
+  queryFn: async () => episodeCatalogSchema.parse(await apiRequest<unknown>('/api/episodes/series/' + encodeURIComponent(mediaId))),
+  enabled: Boolean(mediaId && profileId),
+  staleTime: 60_000,
+})
 
 export const streamsQuery = (contentType: string, mediaId: string, enabled = true) =>
   queryOptions({

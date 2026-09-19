@@ -7,7 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-import { findWatchState, streamsQuery, watchDataQuery } from "@/api/queries";
+import { episodesQuery, streamsQuery, watchDataQuery } from "@/api/queries";
 import type { MediaPreview, WatchDataResponse } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import {
@@ -48,7 +48,9 @@ export function SeriesDetailPage({
   onBack: () => void;
   onPlay: (stream: PlayableStream, target: PlaybackTarget) => void;
 }) {
-  const episodes = useMemo(() => parseEpisodes(media.raw), [media.raw]);
+  const profileId = useAppStore(state => state.activeProfileId)
+  const episodeCatalog = useQuery(episodesQuery(media.id, profileId))
+  const episodes = useMemo(() => episodeCatalog.data && (!episodeCatalog.data.stale || episodeCatalog.data.items.length) ? episodeCatalog.data.items : parseEpisodes(media.raw), [episodeCatalog.data, media.raw]);
   const preferredEpisode = episodes.find(
     (episode) => episode.id === preferredVideoId,
   );
@@ -58,7 +60,6 @@ export function SeriesDetailPage({
     number | null | undefined
   >(undefined);
   const seasons = uniqueSeasons(episodes);
-  const profileId = useAppStore(state => state.activeProfileId)
   const rememberedSeason = useMemo(() => readLastSeason(profileId, media.id), [profileId, media.id])
   const selectedSeason = selectedSeasonOverride !== undefined ? selectedSeasonOverride
     : preferredEpisode ? preferredEpisode.season
@@ -270,7 +271,7 @@ function EpisodeSelector({
             key={episode.id}
             episode={episode}
             media={media}
-            watchState={findWatchState(watchData, episode.id)}
+            watchState={watchData?.items.filter(state => (episode.videoIds ?? [episode.id]).includes(state.video_id ?? "")).sort((a, b) => (b.updated_at ?? "").localeCompare(a.updated_at ?? ""))[0]}
             watchUnavailable={!watchData}
             onClick={() => onSelectEpisode(episode)}
           />

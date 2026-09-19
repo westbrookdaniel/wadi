@@ -128,3 +128,15 @@ CREATE TABLE IF NOT EXISTS email_send_limits (
   count INTEGER NOT NULL,
   expires_at TEXT NOT NULL
 );
+
+-- Provider metadata is account-scoped; watch state is joined per profile at read time.
+CREATE TABLE IF NOT EXISTS episode_catalogs (
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  addon_id TEXT NOT NULL REFERENCES addons(id) ON DELETE CASCADE,
+  media_type TEXT NOT NULL,
+  media_id TEXT NOT NULL,
+  source_version TEXT NOT NULL,
+  episodes_json TEXT NOT NULL,
+  fetched_at TEXT NOT NULL,
+  PRIMARY KEY(user_id, addon_id, media_type, media_id)
+);

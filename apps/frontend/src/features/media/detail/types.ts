@@ -16,6 +16,7 @@ export type PlaybackTarget = {
 }
 
 export type Episode = {
+  videoIds?: string[]
   id: string
   title: string
   season: number | null
