@@ -48,6 +48,7 @@ describe('browse-layout helpers', () => {
     expect(visible.map((row) => row.key)).toEqual([
       'watchlist:one',
       CONTINUE_WATCHING_ROW_KEY,
+      'new_episodes',
       'catalog:addon-b:series:b',
     ])
   })
@@ -64,8 +65,8 @@ it('combines matching home catalogs only within an addon and persists per-row me
   const series = { ...movie, catalog: { id: 'popular', type: 'series', name: 'Popular' } };
   const other = { ...series, addon_id: 'other' };
   const rows = buildBrowseRowCandidates([movie, series, other], []);
-  expect(rows).toHaveLength(3);
-  expect(rows[1].catalogEntries).toEqual([movie, series]);
-  const layout = normalizeBrowseLayoutPage({ order: [], hidden: [], catalogModes: { [rows[1].key]: 'series' } });
-  expect(resolveVisibleBrowseRows(rows, layout)[1].catalogEntries).toEqual([series]);
+  expect(rows).toHaveLength(4);
+  expect(rows[2].catalogEntries).toEqual([movie, series]);
+  const layout = normalizeBrowseLayoutPage({ order: [], hidden: [], catalogModes: { [rows[2].key]: 'series' } });
+  expect(resolveVisibleBrowseRows(rows, layout)[2].catalogEntries).toEqual([series]);
 });

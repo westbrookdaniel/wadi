@@ -21,6 +21,11 @@ test('episode catalog refresh, outage fallback, provider removal and profile iso
   async function request(path,method='GET',body,status=200){const response=await fetch(base+path,{method,headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{})},body:body?JSON.stringify(body):undefined});assert.equal(response.status,status);return response.status===204?null:response.json();}
   const pending=await request('/api/auth/register','POST',{email:'episode@example.com',password:'local-episode-test'},202);
   const auth=await request('/api/auth/verify-email','POST',{challenge:pending.challenge,code});token=auth.token;
+  const saved=(await request('/api/lists')).items[0];
+  await request(`/api/lists/${saved.id}/items`,'POST',{media_type:'series',media_id:'show',title:'Example show'},201);
+  const library=await request('/api/episode-library');assert.equal(library.items.length,1);assert.equal(library.items[0].media_id,'show');
+  assert.equal((await request('/api/episode-library?listId=someone-elses-list')).items.length,0);
+  await request('/api/episode-library?listId=one&listId=two','GET',undefined,400);
   const a=await request('/api/addons/install','POST',{url:upstream+'/a/manifest.json'},201);
   await request('/api/addons/install','POST',{url:upstream+'/b/manifest.json'},201);
   const first=await request('/api/episodes/series/show');assert.equal(first.items.length,1);assert.deepEqual(first.items[0].videoIds,['a:1','b:1']);assert.equal(requests,2);
@@ -30,6 +35,7 @@ test('episode catalog refresh, outage fallback, provider removal and profile iso
   const profile=await request('/api/profiles','POST',{name:'Second',avatar_key:'avatar-2'},201);
   await request('/api/profiles/select','POST',{profile_id:profile.id});
   assert.equal((await request('/api/episodes/series/show')).items[0].watched,false);
+  assert.equal((await request('/api/episode-library')).items.length,0,'release library is profile scoped');
   await db.run("UPDATE episode_catalogs SET fetched_at='2000-01-01T00:00:00Z'");failing=true;
   const stale=await request('/api/episodes/series/show');assert.equal(stale.stale,true);assert.equal(stale.items.length,1);assert.equal(stale.sources.length,2);
   await request('/api/addons/'+a.id,'DELETE',undefined,204);

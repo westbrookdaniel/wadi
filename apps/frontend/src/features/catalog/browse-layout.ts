@@ -5,7 +5,7 @@ import type {
   UserList,
 } from '@/api/types'
 
-export type BrowseRowKind = 'catalog' | 'watchlist' | 'continue'
+export type BrowseRowKind = 'catalog' | 'watchlist' | 'continue' | 'new-episodes'
 
 export type BrowseRowCandidate = {
   key: string
@@ -31,6 +31,7 @@ export function createDefaultBrowseLayout(): BrowseLayout {
 
 export function normalizeBrowseLayout(layout: Partial<BrowseLayout> | null | undefined): BrowseLayout {
   return {
+    ...(layout?.newEpisodes ? { newEpisodes: layout.newEpisodes } : {}),
     ...(layout?.hero ? { hero: layout.hero } : {}),
     pages: {
       home: normalizeBrowseLayoutPage(layout?.pages?.home),
@@ -75,6 +76,7 @@ export function buildBrowseRowCandidates(
   const rows: BrowseRowCandidate[] = []
 
   rows.push({ key: CONTINUE_WATCHING_ROW_KEY, kind: 'continue', title: 'Continue Watching' })
+  rows.push({ key: 'new_episodes', kind: 'new-episodes', title: 'New episodes', subtitle: 'Releases from shows in your lists' })
 
   for (const entry of catalogs) {
     if (entry.catalog.extra?.some(extra => extra.name === 'search' && extra.isRequired)) continue

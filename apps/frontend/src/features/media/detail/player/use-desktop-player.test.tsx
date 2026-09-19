@@ -17,6 +17,7 @@ vi.mock('hls.js', () => ({ default: class {
 afterEach(() => { delete window.wadiDesktop; vi.restoreAllMocks() })
 
 it('keeps the conversion session on pause, resume, buffered seek and speed changes', async () => {
+  const ended = vi.fn()
   const video = document.createElement('video')
   let paused = true
   Object.defineProperty(video, 'paused', { get: () => paused })
@@ -35,7 +36,7 @@ it('keeps the conversion session on pause, resume, buffered seek and speed chang
     signIn: async () => true, request: async () => ({ status: 200, body: null }), openExternal: async () => {},
   }
   const videoRef = { current: video }
-  const { result, unmount } = renderHook(() => useDesktopPlayer({ videoRef, source: 'https://example.com/movie.mkv', hints: {}, savedPosition: 0, watched: false, onProgressCommit: () => {} }))
+  const { result, unmount } = renderHook(() => useDesktopPlayer({ videoRef, source: 'https://example.com/movie.mkv', hints: {}, savedPosition: 0, watched: false, onProgressCommit: () => {}, onEnded: ended }))
   await waitFor(() => expect(result.current.state.playing).toBe(true))
   act(() => { video.currentTime = 12; video.dispatchEvent(new Event('timeupdate')); result.current.pause() })
   expect(result.current.state.currentTime).toBe(12)
@@ -55,6 +56,10 @@ it('keeps the conversion session on pause, resume, buffered seek and speed chang
   await waitFor(() => expect(result.current.state.status).toBe('ready'))
   expect(result.current.state.playing).toBe(false)
   expect(media.mock.calls.filter(([action]) => action === 'start')).toHaveLength(2)
+  act(() => { video.currentTime = 5; video.dispatchEvent(new Event('ended')) })
+  expect(ended).not.toHaveBeenCalled()
+  act(() => { video.currentTime = 80; video.dispatchEvent(new Event('ended')) })
+  expect(ended).toHaveBeenCalledOnce()
   unmount()
   expect(media.mock.calls.filter(([action]) => action === 'stop')).toHaveLength(2)
 })

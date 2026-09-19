@@ -21,6 +21,7 @@ import { useMemo, useState } from 'react'
 
 import { browseLayoutQuery, catalogsQuery, listsQuery, queryKeys, updateBrowseLayout } from '@/api/queries'
 import type { BrowseLayout } from '@/api/types'
+import { defaultReleasePreferences } from '../catalog/release-feed'
 import { EmptyState, ErrorState, LoadingState } from '@/components/status'
 import { SettingsSelect } from '@/components/ui/settings-select'
 import { Button } from '@/components/ui/button'
@@ -51,6 +52,7 @@ export function BrowseLayoutSettings() {
 
   const savedLayout = normalizeBrowseLayout(browseLayout.data ?? createDefaultBrowseLayout())
   const activeLayout = draftLayout ?? savedLayout
+  const releasePreferences = { ...defaultReleasePreferences, ...activeLayout.newEpisodes }
   const candidates = useMemo(
     () => buildBrowseRowCandidates(catalogs.data ?? [], lists.data ?? []),
     [catalogs.data, lists.data],
@@ -145,9 +147,16 @@ export function BrowseLayoutSettings() {
         <label className="flex items-center justify-between gap-3 text-sm">Show hero<input type="checkbox" className="size-5 shrink-0 accent-primary" checked={!activeLayout.hero?.hidden} onChange={event => setDraftLayout({ ...activeLayout, hero: { source: 'auto', rotate: true, ...activeLayout.hero, hidden: !event.target.checked } })} /></label>
         <label className="grid gap-2 text-sm sm:grid-cols-[minmax(0,1fr)_minmax(180px,260px)] sm:items-center">Hero content<SettingsSelect disabled={activeLayout.hero?.hidden} value={activeLayout.hero?.source ?? 'auto'} onValueChange={source => setDraftLayout({ ...activeLayout, hero: { hidden: false, rotate: true, ...activeLayout.hero, source } })}>
           <option value="auto">First available catalog</option>
-          {candidates.filter(row => row.kind !== 'continue').map(row => <option key={row.key} value={row.key}>{row.title}</option>)}
+          {candidates.filter(row => row.kind === 'catalog' || row.kind === 'watchlist').map(row => <option key={row.key} value={row.key}>{row.title}</option>)}
         </SettingsSelect></label>
         <label className="flex items-center justify-between gap-3 text-sm">Rotate suggestions<input type="checkbox" className="size-5 shrink-0 accent-primary" disabled={activeLayout.hero?.hidden} checked={activeLayout.hero?.rotate !== false} onChange={event => setDraftLayout({ ...activeLayout, hero: { hidden: false, source: 'auto', ...activeLayout.hero, rotate: event.target.checked } })} /></label>
+      </fieldset>
+      <fieldset className="grid gap-4 rounded-lg bg-muted/40 p-4" disabled={isLoading || Boolean(hasError)}>
+        <legend className="px-1 text-sm font-medium">New episodes</legend>
+        <p className="text-xs text-muted-foreground">Follow releases for shows in your lists. These choices follow this profile.</p>
+        <label className="grid gap-2 text-sm sm:grid-cols-2 sm:items-center">Follow shows from<SettingsSelect value={releasePreferences.listId || 'all'} onValueChange={value => setDraftLayout({ ...activeLayout, newEpisodes: { ...releasePreferences, listId: value === 'all' ? '' : value } })}><option value="all">All lists</option>{lists.data?.map(list => <option key={list.id} value={list.id}>{list.name}</option>)}</SettingsSelect></label>
+        <label className="grid gap-2 text-sm sm:grid-cols-2 sm:items-center">Count releases from<SettingsSelect value={String(releasePreferences.days)} onValueChange={value => setDraftLayout({ ...activeLayout, newEpisodes: { ...releasePreferences, days: Number(value) } })}>{[7,14,30,90].map(days => <option key={days} value={days}>Last {days} days</option>)}</SettingsSelect></label>
+        {([{ key: 'showBadges', label: 'Show +X badges on show cards' }, { key: 'showCalendar', label: 'Show release calendar' }, { key: 'includeSpecials', label: 'Include specials' }] as const).map(({ key, label }) => <label key={key} className="flex items-center justify-between gap-3 text-sm">{label}<input type="checkbox" className="size-5 shrink-0 accent-primary" checked={releasePreferences[key]} onChange={event => setDraftLayout({ ...activeLayout, newEpisodes: { ...releasePreferences, [key]: event.target.checked } })} /></label>)}
       </fieldset>
       {isLoading ? <LoadingState label="Loading browse layout" /> : null}
       {saveMutation.error ? <ErrorState error={saveMutation.error} /> : null}

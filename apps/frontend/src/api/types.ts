@@ -186,7 +186,10 @@ export type BrowseLayoutPage = {
   hidden: string[]
 }
 
+export type NewEpisodesPreferences = { showBadges: boolean; showCalendar: boolean; days: number; includeSpecials: boolean; listId: string }
+
 export type BrowseLayout = {
+  newEpisodes?: NewEpisodesPreferences
   hero?: { hidden: boolean; source: string; rotate: boolean }
   pages: { home: BrowseLayoutPage }
 }

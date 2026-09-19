@@ -1,3 +1,8 @@
+import { useAutoPlayback } from '@/store/auto-playback'
+import { nextReleasedEpisode, rankStreams, isDirectStream } from '../auto-pick'
+import { NextEpisodePrompt } from './next-episode-prompt'
+import { StreamList } from '../stream-list'
+import { episodesQuery } from '@/api/queries'
 import { useDesktopPlayer } from './use-desktop-player'
 import { desktopBridge } from '@/lib/desktop'
 import { DesktopDownload } from '@/components/desktop-download'
@@ -91,6 +96,10 @@ export function MediaPlayerPage({
   target: PlaybackTarget
   onBack: () => void
 }) {
+  const autoSettings = useAutoPlayback(state => state.settings)
+  const profileId = useAppStore(state => state.activeProfileId)
+  const releaseCatalog = useQuery({ ...episodesQuery(target.mediaId, profileId), enabled: target.mediaType === "series" && Boolean(profileId) })
+  const [upNext, setUpNext] = useState<Episode | null>(null)
   const tvMode = useDeviceStore(state => state.tvMode)
   const queryClient = useQueryClient()
   const [activeStream, setActiveStream] = useState(stream)
@@ -200,6 +209,7 @@ export function MediaPlayerPage({
           items: index >= 0 ? items.map((item, itemIndex) => (itemIndex === index ? state : item)) : [...items, state],
         }
       })
+      queryClient.invalidateQueries({ queryKey: ['episodes', activeTarget.mediaId] })
       queryClient.invalidateQueries({ queryKey: queryKeys.watchData(activeTarget.mediaType, activeTarget.mediaId) })
       queryClient.invalidateQueries({ queryKey: queryKeys.continueWatching(20) })
       queryClient.invalidateQueries({ queryKey: queryKeys.continueWatching(12) })
@@ -219,6 +229,11 @@ export function MediaPlayerPage({
     progressMutateRef.current?.({ position, duration: finiteDuration(duration) })
   }, [activeTarget])
 
+  const onEnded = useCallback(() => {
+    if (!autoSettings.autoplayNext || castConnected || externalPreferences.data?.stream_action !== 'internal') return
+    const next = nextReleasedEpisode(releaseCatalog.data?.items ?? activeTarget.seriesEpisodes ?? [], activeTarget.videoId)
+    if (next) setUpNext(next)
+  }, [autoSettings.autoplayNext, castConnected, externalPreferences.data, releaseCatalog.data, activeTarget])
   const webPlayer = useMediabunnyPlayer({
     canvasRef,
     url: proxiedStreamUrl,
@@ -229,9 +244,10 @@ export function MediaPlayerPage({
     selectedAudioTrackId: playbackState.selectedAudioTrackId,
     initialPlaybackSpeed: playbackState.playbackSpeed,
     onProgressCommit: saveProgress,
+    onEnded,
   })
 
-  const desktopPlayer = useDesktopPlayer({ videoRef, source: desktop && !watchData.isLoading ? streamUrl : undefined, hints: activeStream.behaviorHints, savedPosition: readPlaybackPosition(activeTarget) ?? watchState.position_seconds, watched: watchState.watched, onProgressCommit: saveProgress })
+  const desktopPlayer = useDesktopPlayer({ videoRef, source: desktop && !watchData.isLoading ? streamUrl : undefined, hints: activeStream.behaviorHints, savedPosition: readPlaybackPosition(activeTarget) ?? watchState.position_seconds, watched: watchState.watched, onProgressCommit: saveProgress, onEnded })
   const player = desktop ? desktopPlayer : webPlayer
 
   const [controlsVisible, setControlsVisible] = useState(true)
@@ -460,22 +476,26 @@ export function MediaPlayerPage({
     subtitleCues,
   ])
 
-  useEffect(() => {
-    if (!pendingEpisode || !episodeStreams.data?.length) {
-      return
-    }
-    const nextStream = episodeStreams.data[0]
-    const nextTarget = { ...activeTarget, videoId: pendingEpisode.id, episodeContext: { season: pendingEpisode.season, episode: pendingEpisode.episode, title: pendingEpisode.title } }
+  const changeEpisode = useCallback((nextStream: PlayableStream) => {
+    if (!pendingEpisode) return
+    const nextTarget = { ...activeTarget, videoId: pendingEpisode.id, seriesEpisodes: releaseCatalog.data?.items ?? activeTarget.seriesEpisodes, episodeContext: { season: pendingEpisode.season, episode: pendingEpisode.episode, title: pendingEpisode.title } }
     saveProgress(player.state.currentTime, player.state.duration)
     if (onPlaybackChange) onPlaybackChange(nextStream, nextTarget)
-    // Apply the episode returned by the asynchronous stream query.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     else { setActiveTarget(nextTarget); setActiveStream(nextStream) }
     setPendingEpisode(null)
+    setUpNext(null)
     setEpisodeSheetOpen(false)
-  }, [episodeStreams.data, pendingEpisode, activeTarget, onPlaybackChange, player.state.currentTime, player.state.duration, saveProgress])
+  }, [pendingEpisode, activeTarget, releaseCatalog.data, saveProgress, player.state.currentTime, player.state.duration, onPlaybackChange])
+  useEffect(() => {
+    if (!pendingEpisode || episodeStreams.isFetching || episodeStreams.error || !episodeStreams.data) return
+    const next = autoSettings.enabled ? rankStreams(episodeStreams.data, autoSettings).find(row => row.eligible)?.stream : episodeStreams.data.find(isDirectStream)
+    // Completing the provider request transitions the external player and its episode state together.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (next && externalPreferences.data?.stream_action === 'internal') changeEpisode(next)
+  }, [pendingEpisode, episodeStreams.data, episodeStreams.isFetching, episodeStreams.error, autoSettings, externalPreferences.data, changeEpisode])
 
   const onTogglePlay = useCallback(() => {
+    setUpNext(null)
     if (castConnected) {
       const paused = !(castState.paused === true)
       void castTransport.sendMessage({ type: "setProp", propName: "paused", propValue: paused })
@@ -485,6 +505,7 @@ export function MediaPlayerPage({
   }, [castConnected, castState.paused, castTransport, player])
 
   const onSeek = useCallback((seconds: number) => {
+    setUpNext(null)
     if (castConnected) {
       void castTransport.sendMessage({ type: "setProp", propName: "time", propValue: seconds })
       return
@@ -639,7 +660,7 @@ export function MediaPlayerPage({
             episodeContext={activeTarget.episodeContext ?? null}
             hasEpisodeSwapper={Boolean(activeTarget.seriesEpisodes?.length)}
             forceVisible={tvMode || controlsVisible || !player.state.playing || episodeSheetOpen}
-            onOpenEpisodeSwapper={() => setEpisodeSheetOpen(true)}
+            onOpenEpisodeSwapper={() => { setUpNext(null); setEpisodeSheetOpen(true) }}
             subtitleTracks={streamSubtitleList}
             selectedSubtitleId={playbackState.selectedSubtitleId}
             onSelectSubtitle={(id) => {
@@ -742,20 +763,22 @@ export function MediaPlayerPage({
             </div>
           ) : null}
 
-          <Dialog open={episodeSheetOpen} onOpenChange={setEpisodeSheetOpen}>
+          {upNext && autoSettings.autoplayNext && externalPreferences.data?.stream_action === 'internal' ? <NextEpisodePrompt key={upNext.id} episode={upNext} seconds={autoSettings.countdownSeconds} onCancel={() => setUpNext(null)} onContinue={() => { setPendingEpisode(upNext); setUpNext(null); setEpisodeSheetOpen(true) }} /> : null}
+          <Dialog open={episodeSheetOpen} onOpenChange={open => { setEpisodeSheetOpen(open); if (!open) setPendingEpisode(null) }}>
             <DialogContent
               showCloseButton
               className="dark player-sheet top-0 right-0 left-auto h-dvh max-h-none w-[min(430px,100vw)] translate-x-0 translate-y-0 content-start overflow-y-auto rounded-none p-0 data-open:slide-in-from-right-full data-closed:slide-out-to-right-full data-open:zoom-in-100 data-closed:zoom-out-100"
             >
               <DialogTitle className="pr-12">Episodes</DialogTitle>
               <EpisodeSwapper
-                episodes={activeTarget.seriesEpisodes ?? []}
+                episodes={releaseCatalog.data?.items ?? activeTarget.seriesEpisodes ?? []}
                 selectedEpisodeId={activeTarget.videoId}
                 selectedSeason={selectedSwapSeason}
                 onSeasonChange={season => { setSelectedSwapSeason(season); saveLastSeason(useAppStore.getState().activeProfileId, activeTarget.mediaId, season) }}
-                onSelectEpisode={setPendingEpisode}
+                onSelectEpisode={episode => { setUpNext(null); setPendingEpisode(episode) }}
               />
-              {pendingEpisode && episodeStreams.isLoading ? (
+              {pendingEpisode && !episodeStreams.isFetching ? <div className="grid gap-3"><p className="text-sm">Choose a stream for {pendingEpisode.title}</p>{episodeStreams.error ? <><p role="alert" className="text-sm text-destructive">Could not load streams.</p><Button onClick={() => void episodeStreams.refetch()}>Retry</Button></> : <StreamList autoPickAllowed={false} streams={episodeStreams.data ?? []} isLoading={false} onPlay={changeEpisode} />}</div> : null}
+              {pendingEpisode && episodeStreams.isFetching ? (
                 <p className="text-sm text-muted-foreground">Loading streams for {pendingEpisode.title}…</p>
               ) : null}
             </DialogContent>
@@ -1486,6 +1509,7 @@ function useMediabunnyPlayer({
   selectedAudioTrackId,
   initialPlaybackSpeed,
   onProgressCommit,
+  onEnded,
 }: {
   canvasRef: RefObject<HTMLCanvasElement | null>
   url?: string
@@ -1495,6 +1519,7 @@ function useMediabunnyPlayer({
   preferredAudioLanguage: string | null
   selectedAudioTrackId: string | null
   initialPlaybackSpeed: number
+  onEnded?: () => void
   onProgressCommit: (position: number, duration: number) => void
 }) {
   const [state, setState] = useState<PlayerState>(initialPlayerState)
@@ -1519,6 +1544,8 @@ function useMediabunnyPlayer({
   const animationFrameRef = useRef<number | null>(null)
   const renderIntervalRef = useRef<number | null>(null)
   const renderRef = useRef<(requestNextFrame?: boolean) => void>(() => undefined)
+  const endedCallback = useRef(onEnded)
+  useEffect(() => { endedCallback.current = onEnded }, [onEnded])
   const onProgressCommitRef = useRef(onProgressCommit)
   const playbackRateRef = useRef(Math.max(0.25, Math.min(initialPlaybackSpeed || 1, 3)))
 
@@ -1727,6 +1754,7 @@ function useMediabunnyPlayer({
       if (playingRef.current && playbackTime >= durationRef.current) {
         pause(true)
         playbackTimeAtStartRef.current = durationRef.current
+        endedCallback.current?.()
       }
 
       const nextFrame = nextFrameRef.current

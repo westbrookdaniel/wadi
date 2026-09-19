@@ -22,12 +22,14 @@ export function WatchlistAddButton({ media }: { media: MediaPreview }) {
   const addMutation = useMutation({
     mutationFn: (listId: string) => addListItem(listId, media),
     onSuccess: async (_item, listId) => {
+      await queryClient.invalidateQueries({ queryKey: ['lists', 'episode-library'] })
       await queryClient.invalidateQueries({ queryKey: queryKeys.listItems(listId) })
     },
   })
   const removeMutation = useMutation({
     mutationFn: ({ listId, itemId }: { listId: string; itemId: string }) => deleteListItem(listId, itemId),
     onSuccess: async (_item, values) => {
+      await queryClient.invalidateQueries({ queryKey: ['lists', 'episode-library'] })
       await queryClient.invalidateQueries({ queryKey: queryKeys.listItems(values.listId) })
     },
   })

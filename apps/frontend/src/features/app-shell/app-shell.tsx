@@ -1,3 +1,4 @@
+import { ReleaseProvider } from '../catalog/release-provider'
 import { WebFullscreen } from '@/components/web-fullscreen'
 import { DesktopDownload } from '@/components/desktop-download'
 import { type ReactNode } from "react";
@@ -110,7 +111,7 @@ export function AppShell({
         )}
         aria-label={label}
       >
-        <div key={location.pathname} className={hideNavigation ? undefined : "route-arrival"}>{children}</div>
+        <div key={location.pathname} className={hideNavigation ? undefined : "route-arrival"}><ReleaseProvider key={activeProfileId} enabled={['/home', '/discover', '/watchlists', '/search'].includes(location.pathname)}>{children}</ReleaseProvider></div>
       </main>
     </div>
   );

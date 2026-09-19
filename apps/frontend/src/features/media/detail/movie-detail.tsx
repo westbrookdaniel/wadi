@@ -11,10 +11,12 @@ import { WatchedButton } from './watch-state'
 
 export function MovieDetailPage({
   media,
+  autoPickAllowed = true,
   listAction,
   onBack,
   onPlay,
 }: {
+  autoPickAllowed?: boolean
   media: MediaPreview
   listAction?: React.ReactNode
   onBack: () => void
@@ -33,8 +35,10 @@ export function MovieDetailPage({
       sideTitle="Streams"
       sideContent={
         <StreamList
+          selectionKey={media.id}
+          autoPickAllowed={autoPickAllowed && !streams.error}
           streams={streams.data ?? []}
-          isLoading={streams.isLoading}
+          isLoading={streams.isFetching}
           onPlay={(stream) =>
             onPlay(stream, {
               mediaType: media.type,

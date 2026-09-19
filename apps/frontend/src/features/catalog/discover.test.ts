@@ -12,11 +12,11 @@ describe('Discover selections and pagination', () => {
   it('matches combined Home rows, their per-row content settings and addon identity', () => {
     const catalogs = [movie, series, { ...movie, addon_id: 'other' }]
     const rows = buildBrowseRowCandidates(catalogs, [])
-    const combined = rows[1]!
+    const combined = rows[2]!
     const selection = discoverSearchForRow(combined)
     expect(discoverSources(catalogs, []).find(source => source.key === selection.catalog)).toMatchObject({ entries: [movie, series] })
     expect(selection.type).toBeUndefined()
-    const filtered = resolveVisibleBrowseRows(rows, { order: [], hidden: [], catalogModes: { [combined.key]: 'series' } })[1]!
+    const filtered = resolveVisibleBrowseRows(rows, { order: [], hidden: [], catalogModes: { [combined.key]: 'series' } })[2]!
     expect(discoverSearchForRow(filtered)).toEqual({ catalog: combined.key, type: 'series' })
     expect(discoverSources(catalogs, [])).toHaveLength(2)
   })

@@ -1,5 +1,8 @@
+import { useAutoPlayback } from '@/store/auto-playback'
+import { rankStreams } from './auto-pick'
+import { playbackPreferencesQuery } from '@/api/queries'
 import { useQuery } from '@tanstack/react-query'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { addonsQuery } from '@/api/queries'
 import {
@@ -25,13 +28,28 @@ type StreamRow = {
 
 export function StreamList({
   streams,
+  selectionKey,
+  autoPickAllowed = true,
   isLoading,
   onPlay,
 }: {
+  selectionKey?: string
+  autoPickAllowed?: boolean
   streams: PlayableStream[]
   isLoading: boolean
   onPlay: (stream: PlayableStream) => void
 }) {
+  const settings = useAutoPlayback(state => state.settings)
+  const playback = useQuery(playbackPreferencesQuery)
+  const ranked = useMemo(() => rankStreams(streams, settings), [streams, settings])
+  const recommendation = settings.enabled && !isLoading ? ranked.find(row => row.eligible) : undefined
+  const orderedStreams = settings.enabled ? ranked.map(row => row.stream) : streams
+  const attempted = useRef<string | null>(null)
+  useEffect(() => {
+    if (!selectionKey || !autoPickAllowed || !settings.enabled || !settings.skipSelection || isLoading || playback.data?.stream_action !== 'internal' || !recommendation || attempted.current === selectionKey) return
+    attempted.current = selectionKey
+    onPlay(recommendation.stream)
+  }, [selectionKey, autoPickAllowed, settings.enabled, settings.skipSelection, isLoading, playback.data, recommendation, onPlay])
   const addons = useQuery(addonsQuery)
   const sourceLabelsById = useMemo(() => {
     const map = new Map<string, string>()
@@ -42,10 +60,10 @@ export function StreamList({
   }, [addons.data])
   const rows = useMemo<StreamRow[]>(
     () =>
-      streams.map((stream, index) =>
+      orderedStreams.map((stream, index) =>
         normalizeStreamRow(stream, index, sourceLabelsById),
       ),
-    [sourceLabelsById, streams],
+    [sourceLabelsById, orderedStreams],
   )
   const [filterValue, setFilterValue] = useState<string>(FILTER_ALL)
   const filterOptions = useMemo(() => buildFilterOptions(rows), [rows])
@@ -71,6 +89,7 @@ export function StreamList({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
+      {settings.enabled && !recommendation ? <p className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">No stream matches your auto-pick rules. Choose one below or adjust your settings.</p> : null}
       <div className="grid gap-2">
         <Select value={activeFilterValue} onValueChange={setFilterValue}>
           <SelectTrigger className="w-full justify-between rounded-lg border border-border bg-card/70 px-2.5 text-sm" aria-label="Source filter">
@@ -101,6 +120,7 @@ export function StreamList({
               key={`${i}-${stream.addon_id}-${stream.title ?? stream.name ?? index}`}
               onClick={() => onPlay(stream)}
             >
+              {stream === recommendation?.stream ? <span className="!text-primary text-xs font-medium">Recommended{recommendation.reasons.length ? ' · ' + recommendation.reasons.join(' · ') : ''}</span> : null}
               <p className="font-medium text-sm leading-snug whitespace-pre-line [overflow-wrap:anywhere]">{stream.title ?? stream.name ?? `Stream ${index + 1}`}</p>
               <p className="max-w-full whitespace-pre-wrap [overflow-wrap:anywhere] text-sm leading-relaxed text-muted-foreground">{streamDetail(stream)}</p>
               <p className="text-sm text-muted-foreground max-w-full break-all">{sourceLabel}</p>
