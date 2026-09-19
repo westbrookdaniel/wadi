@@ -1,7 +1,6 @@
 import { WebFullscreen } from '@/components/web-fullscreen'
 import { DesktopDownload } from '@/components/desktop-download'
-import { useEffect, type ReactNode } from "react";
-import { desktopBridge } from "@/lib/desktop";
+import { type ReactNode } from "react";
 import { useLocation } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 

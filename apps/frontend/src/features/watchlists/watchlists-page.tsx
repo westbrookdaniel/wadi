@@ -94,11 +94,11 @@ export function WatchlistsPage({ onOpenMedia }: { onOpenMedia: (media: MediaPrev
       <div className="flex min-w-0 items-center gap-3 max-[800px]:flex-col max-[800px]:items-stretch max-[800px]:gap-2">
         <div className="flex min-w-0 flex-1 items-center gap-1">
           <nav aria-label="Watchlists" className="flex min-w-0 flex-1 gap-1 overflow-x-auto">
-            {(lists.data ?? []).map(list => <button key={list.id} type="button" onClick={() => { setSelectedListId(list.id); setFilter('') }} aria-pressed={activeListId === list.id} className={cn('flex h-9 shrink-0 items-center gap-2 rounded-lg border px-3 text-sm transition', activeListId === list.id ? 'border-border bg-muted text-foreground' : 'border-transparent text-muted-foreground hover:bg-muted/40')}>
+            {[...(lists.data ?? [])].sort((a, b) => Number(b.is_default) - Number(a.is_default)).map(list => <button key={list.id} type="button" onClick={() => { setSelectedListId(list.id); setFilter('') }} aria-pressed={activeListId === list.id} className={cn('flex h-9 shrink-0 items-center gap-2 rounded-lg border px-3 text-sm transition', activeListId === list.id ? 'border-border bg-muted text-foreground' : 'border-transparent text-muted-foreground hover:bg-muted/40')}>
               {list.is_default ? <Bookmark className="size-3.5" aria-hidden="true" /> : null}{list.name}
             </button>)}
           </nav>
-          {activeList && !activeList.is_default ? <Button variant="ghost" size="icon-sm" className="text-muted-foreground" aria-label="List settings" title="Manage list" onClick={() => void openListSettingsDialog()}><Settings className="size-3.5" /></Button> : null}
+          {activeList && !activeList.is_default ? <Button variant="ghost" size="icon" className="size-11 shrink-0 text-muted-foreground" aria-label="List settings" title="Manage list" onClick={() => void openListSettingsDialog()}><Settings className="size-5" /></Button> : null}
         </div>
         {activeList ? <div className="flex min-w-0 items-center gap-2">
           <Button variant="ghost" size="sm" className={cn('hidden flex-1 justify-start border border-border text-muted-foreground', !searchExpanded && 'max-[800px]:flex')} onClick={() => { setSearchExpanded(true); requestAnimationFrame(() => searchInput.current?.focus()) }}><Search className="size-3.5" />Search this list</Button>
