@@ -42,7 +42,7 @@ function WebAuthPage({ mode, onModeChange }: { mode: AuthMode; onModeChange: (mo
       if ('verification_required' in data) { setPendingVerification(data); return }
       queryClient.clear()
       setToken(data.token)
-      setActiveProfileId(data.active_profile_id ?? data.user.active_profile_id)
+      setActiveProfileId(null)
       await queryClient.invalidateQueries({ queryKey: queryKeys.me })
     },
   })
@@ -60,7 +60,7 @@ function WebAuthPage({ mode, onModeChange }: { mode: AuthMode; onModeChange: (mo
   })
 
   if (pendingVerification) return <VerifyEmailForm key={pendingVerification.challenge} pending={pendingVerification} resend={() => mutation.mutate(form.state.values)} resending={mutation.isPending} resendError={mutation.error} back={() => { setPendingVerification(null); mutation.reset() }} onVerified={async data => {
-    queryClient.clear(); setToken(data.token); setActiveProfileId(data.active_profile_id ?? data.user.active_profile_id)
+    queryClient.clear(); setToken(data.token); setActiveProfileId(null)
     await queryClient.invalidateQueries({ queryKey: queryKeys.me })
   }} />
 
