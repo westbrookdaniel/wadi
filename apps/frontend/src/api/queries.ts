@@ -1,3 +1,4 @@
+import { parseStreamMetadata } from '@/features/media/detail/stream-metadata'
 import { devicePlayback, saveDevicePlayback, devicePlayer, saveDevicePlayer, deviceOverride, saveDeviceOverride } from '@/store/playback-settings'
 import { useAppStore } from '@/store/app-store'
 import type { PlayerOverride, PlayerPreferences, SubtitleInfo, WatchProgressRequest } from './types'
@@ -123,7 +124,7 @@ export const streamsQuery = (contentType: string, mediaId: string, enabled = tru
         `/api/streams/${contentType}/${mediaId}`,
       )
       return data.responses.flatMap((item) =>
-        (item.response.streams ?? []).map((stream) => ({ ...stream, addon_id: item.addon_id })),
+        (item.response.streams ?? []).map((stream) => ({ ...stream, addon_id: item.addon_id, parsedMetadata: parseStreamMetadata(stream) })),
       )
     },
     enabled,
