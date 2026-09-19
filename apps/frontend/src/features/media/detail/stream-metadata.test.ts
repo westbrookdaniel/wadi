@@ -32,3 +32,9 @@ describe('stream metadata', () => {
     expect(parsed.resolution.value).toBe(720);expect(parsed.episode.value).toEqual({season:3,episode:4})
   })
 })
+it('recognizes joined audio-channel tags and shorthand episode ranges', () => {
+  const parsed = parseStreamMetadata({ filename: 'Show.S01E02-04.1080p.WEB-DL.DDP5.1.H264.mkv' })
+  expect(parsed.audioChannels.value).toBe('5.1')
+  expect(parsed.episode.value).toEqual({ season: 1, episode: 2, lastEpisode: 4 })
+  expect(parseStreamMetadata({ filename: 'Show.S01E04-02.mkv' }).episode.value).toEqual({ season: 1, episode: 4 })
+})

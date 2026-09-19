@@ -46,8 +46,8 @@ export function parseStreamMetadata(input: unknown) {
     return values.length ? values : null
   }
   const episode = extract(text => {
-    const match = text.match(/\bS(\d{1,3})[ ._-]*E(\d{1,4})(?:[ ._-]*E(\d{1,4}))?/i) ?? text.match(/\b(\d{1,3})x(\d{1,4})\b/i)
-    return match ? { season: Number(match[1]), episode: Number(match[2]), ...(match[3] ? {lastEpisode:Number(match[3])} : {}) } : null
+    const match = text.match(/\bS(\d{1,3})[ ._-]*E(\d{1,4})(?:[ ._-]*E(\d{1,4})|[ ._]*-[ ._]*(\d{1,4}))?/i) ?? text.match(/\b(\d{1,3})x(\d{1,4})\b/i)
+    return match ? { season: Number(match[1]), episode: Number(match[2]), ...((match[3] ?? match[4]) && Number(match[3] ?? match[4]) > Number(match[2]) ? {lastEpisode:Number(match[3] ?? match[4])} : {}) } : null
   })
   return {
     resolution: structured(raw.resolution ?? raw.quality, resolution, () => extract(resolution)),
@@ -55,7 +55,7 @@ export function parseStreamMetadata(input: unknown) {
     sourceQuality: extract(text => /\bremux\b/i.test(text) ? 'REMUX' : /\b(?:blu[ ._-]?ray|b[dr]rip)\b/i.test(text) ? 'BluRay' : /\bweb[ ._-]?dl\b/i.test(text) ? 'WEB-DL' : /\bwebrip\b/i.test(text) ? 'WEBRip' : /\bhdtv\b/i.test(text) ? 'HDTV' : /\b(?:hdcam|camrip|telesync)\b/i.test(text) ? 'CAM' : null),
     hdr: extract(text => /\b(?:dolby[ ._-]?vision|dovi|dv)\b/i.test(text) ? 'Dolby Vision' : /\bhdr10\+/i.test(text) ? 'HDR10+' : /\bhdr10\b/i.test(text) ? 'HDR10' : /\bhlg\b/i.test(text) ? 'HLG' : /\bhdr\b/i.test(text) ? 'HDR' : /\bsdr\b/i.test(text) ? 'SDR' : null),
     audio: extract(text => /\batmos\b/i.test(text) ? 'Atmos' : /\btruehd\b/i.test(text) ? 'TrueHD' : /\bdts[ ._-]?hd\b/i.test(text) ? 'DTS-HD' : /\bdts\b/i.test(text) ? 'DTS' : /\b(?:e[ ._-]?ac[ ._-]?3|ddp)(?=\d|\b)/i.test(text) ? 'EAC3' : /\bac[ ._-]?3\b/i.test(text) ? 'AC3' : /\baac\b/i.test(text) ? 'AAC' : null),
-    audioChannels: extract(text => text.match(/\b([257]\.1|2\.0)\b/)?.[1] ?? null),
+    audioChannels: extract(text => text.match(/(?:\b|\b(?:ddp|aac|ac3|eac3))([257]\.1|2\.0)\b/i)?.[1] ?? null),
     languages: structured(raw.language, text => /^[a-z]{2,3}(?:-[a-z]{2})?$/i.test(text) ? [text.toLowerCase()] : languages(text), () => extract(languages)),
     sizeBytes: hints?.videoSize ? {value:hints.videoSize,source:'structured' satisfies 'structured'} : extract(text => {
       const match=text.match(/\b(\d+(?:\.\d+)?)\s*(GiB|MiB|GB|MB)\b/i)
