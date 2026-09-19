@@ -17,7 +17,7 @@ export function NewEpisodesSection({ onOpenMedia }: { onOpenMedia: (media: Media
   return <section className={contentSection}>
     <div className={sectionHeading}>
       <h2 className="m-0 tracking-normal">New episodes</h2>
-      <div className="flex shrink-0 items-center gap-1">{visible.length > 6 && <Button variant="ghost" onClick={() => setExpanded(!expanded)}>{expanded ? 'Show fewer' : 'See all'}</Button>}{preferences.showCalendar && <Button variant={showCalendar ? 'secondary' : 'ghost'} className="shrink-0" onClick={() => setCalendar(!calendar)}><CalendarDays className="size-4" />{showCalendar ? 'Recent' : 'Calendar'}</Button>}</div>
+      <div className="flex shrink-0 items-center gap-1">{visible.length > 6 && <Button variant="ghost" onClick={() => setExpanded(!expanded)}>{expanded ? 'Show fewer' : 'See all'}</Button>}{preferences.showCalendar && <Button variant={showCalendar ? 'secondary' : 'ghost'} className="shrink-0" onClick={() => setCalendar(!calendar)}><CalendarDays className="size-4" />{showCalendar ? 'Recent' : 'Upcoming'}</Button>}</div>
     </div>
     <p className="text-sm text-muted-foreground">{showCalendar ? 'Coming in the next seven days' : `Unwatched releases · Last ${preferences.days} days`}</p>
     {!visible.length && <div className="rounded-xl border border-border p-6 text-sm text-muted-foreground">{loading ? 'Checking episode releases…' : showCalendar ? 'No confirmed upcoming dates for shows in your lists.' : 'You’re caught up. Add shows to your lists to follow their releases.'}</div>}
