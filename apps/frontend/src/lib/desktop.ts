@@ -1,6 +1,9 @@
 export type DesktopUpdate = { kind: 'idle' } | { kind: 'checking' } | { kind: 'available'; version: string } | { kind: 'error'; message: string }
 export type DesktopBridge = {
   appVersion: () => Promise<string>
+  getStartFullscreen: () => Promise<boolean>
+  setStartFullscreen: (value: boolean) => Promise<boolean>
+  onStartFullscreenChanged: (callback: (value: boolean) => void) => () => void
   updateState: () => Promise<DesktopUpdate>
   checkUpdates: () => Promise<DesktopUpdate>
   downloadUpdate: () => Promise<void>

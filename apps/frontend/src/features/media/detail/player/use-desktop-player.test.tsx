@@ -31,7 +31,7 @@ it('keeps the conversion session on pause, resume, buffered seek and speed chang
     return { id: input.id, url: 'http://127.0.0.1/session/index.m3u8', offset: input.position, duration: 180, mode: 'audio', hasVideo: true, hasAudio: true, audioTracks: [], selectedAudioTrackId: null }
   })
   window.wadiDesktop = {
-    appVersion: async () => '0.1.0', updateState: async () => ({ kind: 'idle' }), checkUpdates: async () => ({ kind: 'idle' }), downloadUpdate: async () => {}, onUpdate: () => () => {},
+    getStartFullscreen: async () => false, setStartFullscreen: async value => value, onStartFullscreenChanged: () => () => {}, appVersion: async () => '0.1.0', updateState: async () => ({ kind: 'idle' }), checkUpdates: async () => ({ kind: 'idle' }), downloadUpdate: async () => {}, onUpdate: () => () => {},
     media, onOpenSettings: () => () => {}, openPage: async () => {}, session: async () => true,
     signIn: async () => true, request: async () => ({ status: 200, body: null }), openExternal: async () => {},
   }

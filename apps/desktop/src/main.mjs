@@ -22,12 +22,21 @@ protocol.registerSchemesAsPrivileged([{ scheme: 'wadi', privileges: { standard: 
 const desktopSettingsFile = join(app.getPath('userData'), 'desktop-settings.json');
 let startFullscreen = false;
 try { startFullscreen = JSON.parse(await readFile(desktopSettingsFile, 'utf8')).startFullscreen === true; } catch { /* First launch. */ }
-async function saveStartFullscreen(value) {
-  await mkdir(app.getPath('userData'), { recursive: true });
-  await writeFile(desktopSettingsFile, JSON.stringify({ startFullscreen: value }));
-  startFullscreen = value;
+let settingsWrite = Promise.resolve();
+function saveStartFullscreen(value) {
+  const save = settingsWrite.then(async () => {
+    await mkdir(app.getPath('userData'), { recursive: true });
+    await writeFile(desktopSettingsFile, JSON.stringify({ startFullscreen: value }));
+    startFullscreen = value;
+    const item = Menu.getApplicationMenu()?.getMenuItemById('start-fullscreen');
+    if (item) item.checked = value;
+    if (window && !window.isDestroyed()) window.webContents.send('start-fullscreen-changed', value);
+    return value;
+  });
+  settingsWrite = save.catch(() => {});
+  return save;
 }
-const fullscreenPreference = () => ({ label: 'Start in Fullscreen', type: 'checkbox', checked: startFullscreen, click: item => { void saveStartFullscreen(item.checked).catch(error => dialog.showErrorBox('Could not save desktop settings', error.message)); } });
+const fullscreenPreference = () => ({ id: 'start-fullscreen', label: 'Start in Fullscreen', type: 'checkbox', checked: startFullscreen, click: item => { void saveStartFullscreen(item.checked).catch(error => { item.checked = startFullscreen; dialog.showErrorBox('Could not save desktop settings', error.message); }); } });
 let updates;
 let window, media, token = null, authServer = null, cancelSignIn = null;
 const tokenFile = () => join(app.getPath('userData'), 'session.enc');
@@ -129,6 +138,8 @@ media = await createMediaService({ directory: join(app.getPath('userData'), 'med
 for (const [name, handler] of Object.entries({
   'open-page': path => shell.openExternal(new URL(z.enum(['/terms','/privacy']).parse(path), origin).href),
   'app-version': () => app.getVersion(),
+  'start-fullscreen-get': () => startFullscreen,
+  'start-fullscreen-set': value => saveStartFullscreen(z.boolean().parse(value)),
   'update-state': () => updates?.state() ?? { kind: 'idle' },
   'update-check': () => updates.check(true),
   'update-download': () => updates.download(),

@@ -10,7 +10,7 @@ it('hides idle state, offers a download only after an available update', async (
   const checkUpdates = vi.fn(async (): Promise<DesktopUpdate> => ({ kind: 'idle' }))
   const unsubscribe = vi.fn()
   window.wadiDesktop = {
-    appVersion: async () => '0.1.0', updateState: async () => ({ kind: 'idle' }), onUpdate: callback => { notify = callback; return unsubscribe }, downloadUpdate, checkUpdates,
+    getStartFullscreen: async () => false, setStartFullscreen: async value => value, onStartFullscreenChanged: () => () => {}, appVersion: async () => '0.1.0', updateState: async () => ({ kind: 'idle' }), onUpdate: callback => { notify = callback; return unsubscribe }, downloadUpdate, checkUpdates,
     onOpenSettings: () => () => {}, openPage: async () => {}, session: async () => true, signIn: async () => true,
     request: async () => ({ status: 200, body: null }), media: async () => null, openExternal: async () => {},
   }
