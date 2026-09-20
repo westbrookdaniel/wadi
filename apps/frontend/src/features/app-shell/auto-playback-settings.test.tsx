@@ -53,3 +53,13 @@ it('allows disabling auto-pick even after clearing an unfinished cached rule', (
   fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
   expect(useAutoPlayback.getState().settings.enabled).toBe(false)
 })
+
+it('saves timing rules independently of auto-pick', () => {
+  showSettings()
+  fireEvent.change(screen.getByRole('slider', { name: /^Start countdown before/ }), { target: { value: '120' } })
+  fireEvent.change(screen.getByRole('slider', { name: /^Count as started/ }), { target: { value: '15' } })
+  fireEvent.change(screen.getByRole('slider', { name: /^Count as finished/ }), { target: { value: '90' } })
+  expect(useAutoPlayback.getState().settings.nextEpisodeLeadSeconds).toBe(0)
+  fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+  expect(useAutoPlayback.getState().settings).toMatchObject({ enabled: false, nextEpisodeLeadSeconds: 120, ignoreStartSeconds: 15, finishRemainingSeconds: 90 })
+})

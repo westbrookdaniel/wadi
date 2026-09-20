@@ -47,6 +47,24 @@ test('Node API preserves auth, profile isolation, lists, progress, addons withou
  assert.equal((await request(`/api/lists/${saved.id}/items`)).items.length,1);
  await request('/api/watch-progress','PUT',{media_type:'movie',media_id:'test:film',position_seconds:12,duration_seconds:60});
  assert.equal((await request('/api/continue-watching')).items[0].position_seconds,12);
+ const timing = {media_type:'series',media_id:'timing:test',video_id:'ep:1',duration_seconds:3600,ignore_start_seconds:15,finish_remaining_seconds:120};
+ const timingProgress = position_seconds => request('/api/watch-progress','PUT',{...timing,position_seconds});
+ assert.equal((await timingProgress(14)).position_seconds,0);
+ assert.equal((await request('/api/continue-watching')).items.length,1);
+ assert.equal((await timingProgress(15)).position_seconds,15);
+ assert.equal((await request('/api/continue-watching')).items.length,2);
+ assert.equal((await timingProgress(3479)).watched,false);
+ assert.equal((await timingProgress(3480)).watched,true);
+ assert.equal((await request('/api/continue-watching')).items.length,1);
+ assert.equal((await timingProgress(100)).watched,true, 'later saves preserve completed status');
+ const short = {...timing,video_id:'short',duration_seconds:60};
+ assert.equal((await request('/api/watch-progress','PUT',{...short,position_seconds:29})).watched,false);
+ assert.equal((await request('/api/watch-progress','PUT',{...short,position_seconds:30})).watched,true);
+ const unknown = {...timing,video_id:'unknown',duration_seconds:null};
+ assert.equal((await request('/api/watch-progress','PUT',{...unknown,position_seconds:14})).watched,false);
+ assert.equal((await request('/api/watch-progress','PUT',{...unknown,position_seconds:14})).position_seconds,0);
+ await request('/api/watch-progress','PUT',{...timing,position_seconds:5,finish_remaining_seconds:601},400);
+
  const profile=await request('/api/profiles','POST',{name:'Second'},201);
  await request('/api/profiles/select','POST',{profile_id:profile.id});
  await request(`/api/lists/${saved.id}/items`,'GET',undefined,404);
