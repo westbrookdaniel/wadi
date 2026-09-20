@@ -1,6 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('wadiDesktop', {
   appVersion: () => ipcRenderer.invoke('app-version'),
+  getStartFullscreen: () => ipcRenderer.invoke('start-fullscreen-get'),
+  setStartFullscreen: value => ipcRenderer.invoke('start-fullscreen-set', value),
+  onStartFullscreenChanged: callback => { const listener = (_event, value) => callback(value); ipcRenderer.on('start-fullscreen-changed', listener); return () => ipcRenderer.removeListener('start-fullscreen-changed', listener); },
   updateState: () => ipcRenderer.invoke('update-state'),
   checkUpdates: () => ipcRenderer.invoke('update-check'),
   downloadUpdate: () => ipcRenderer.invoke('update-download'),

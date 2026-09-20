@@ -68,3 +68,5 @@ Existing files are backed up once with a `.before-wadi-setup` suffix. Restore th
 - AirPlay: run `systemctl --user disable --now uxplay`, remove or restore `~/.config/systemd/user/uxplay.service`, then `systemctl --user daemon-reload`.
 
 The script respects `XDG_DATA_HOME` and `XDG_CONFIG_HOME` when set. It does not alter system power settings, enable automatic login, change sudo permissions or install packages itself.
+
+Desktop Settings → This device → Always start in fullscreen saves the same installation-local preference as View → Start in Fullscreen. It applies on the next launch and does not change other devices.

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { desktopBridge } from '@/lib/desktop'
+import { desktopBridge, type DesktopBridge } from '@/lib/desktop'
 import { useDeviceStore } from '@/store/device-store'
 import { SettingsSelect } from '@/components/ui/settings-select'
 import { ChevronDown, FlaskConical } from 'lucide-react'
@@ -19,6 +19,7 @@ export function DeviceSettings() {
       </SettingsSelect>
     </div>
 
+    {desktop ? <FullscreenStartupSetting desktop={desktop} /> : null}
     {desktop ? <div className="grid gap-2">
       <label htmlFor="conversion" className="text-sm font-medium">Audio and video conversion</label>
       <SettingsSelect id="conversion" aria-describedby="conversion-description" className="max-w-sm" value={device.conversionEnabled ? 'on' : 'off'} onValueChange={value => { if (value === 'on' || value === 'off') device.setConversionEnabled(value === 'on') }}>
@@ -38,4 +39,41 @@ export function ExperimentalSettings() {
     <label className="flex items-start justify-between gap-6"><span><span className="block text-sm font-medium">TV navigation</span><span className="mt-1 block text-sm text-muted-foreground">Arrow keys or controller to move, Enter / A to select, Escape / B to go back.</span></span><input className="mt-1 size-5 shrink-0 accent-primary" type="checkbox" aria-label="TV navigation" checked={device.tvMode} onChange={event => device.setTvMode(event.target.checked)} /></label>
     </div>
   </details>
+}
+
+function FullscreenStartupSetting({ desktop }: { desktop: DesktopBridge }) {
+  const [value, setValue] = useState<boolean | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let active = true
+    let changed = false
+    const unsubscribe = desktop.onStartFullscreenChanged(next => {
+      changed = true
+      if (active) setValue(next)
+    })
+    void desktop.getStartFullscreen().then(next => {
+      if (active && !changed) setValue(next)
+    }).catch(() => {
+      if (active) setError('Could not load the fullscreen setting. Reopen settings to try again.')
+    })
+    return () => { active = false; unsubscribe() }
+  }, [desktop])
+
+  async function save(next: boolean) {
+    setSaving(true)
+    setError('')
+    try { setValue(await desktop.setStartFullscreen(next)) }
+    catch { setError('Could not save the fullscreen setting. Please try again.') }
+    finally { setSaving(false) }
+  }
+
+  return <div className="grid gap-2">
+    <label className="flex items-start justify-between gap-6">
+      <span><span className="block text-sm font-medium">Always start in fullscreen</span><span id="fullscreen-startup-description" className="mt-1 block text-sm text-muted-foreground">Opens the desktop app in fullscreen on this device. Applies the next time Wadi starts.</span></span>
+      <input type="checkbox" aria-label="Always start in fullscreen" aria-describedby="fullscreen-startup-description" className="mt-1 size-5 shrink-0 accent-primary" checked={value === true} disabled={value === null || saving} onChange={event => void save(event.target.checked)} />
+    </label>
+    {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
+  </div>
 }
