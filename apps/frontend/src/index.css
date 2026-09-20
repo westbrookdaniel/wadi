@@ -343,8 +343,6 @@ select {
 .player-chrome:has(:focus-visible) { opacity: 1; transform: none; }
 .player-chrome:has(:focus-visible) * { pointer-events: auto !important; }
 
-.player-viewport:has(.player-loading) .player-bottom-controls { visibility: hidden; }
-
 /* Shared browsing geometry and quiet motion. */
 .app-page { --page-gutter: clamp(18px, 4vw, 56px); }
 .media-row-bleed { width: calc(100% + 2 * var(--page-gutter, 0px)); margin-inline: calc(-1 * var(--page-gutter, 0px)); padding-inline: var(--page-gutter, 0px); scroll-padding-inline: var(--page-gutter, 0px); }

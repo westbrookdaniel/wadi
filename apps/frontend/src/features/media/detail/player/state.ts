@@ -1,5 +1,10 @@
 export type PlayerStatus = 'idle' | 'loading' | 'ready' | 'error'
 
+// A desktop seek rebuilds the buffer but keeps the timeline and controls usable.
+export function canControlPlayback({ status, duration }: Pick<PlayerState, 'status' | 'duration'>) {
+  return status === 'ready' || (status === 'loading' && duration > 0)
+}
+
 export type PlayerState = {
   status: PlayerStatus
   warning: string | null

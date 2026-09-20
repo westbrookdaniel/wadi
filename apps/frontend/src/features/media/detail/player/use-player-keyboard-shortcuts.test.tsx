@@ -23,3 +23,22 @@ it('handles playback keys without intercepting typing, dialogs or app/browser mo
   expect(handlers.onTogglePlay).toHaveBeenCalledOnce()
   unmount()
 })
+
+it('allows playback shortcuts during a seek but waits for metadata on initial loading', () => {
+  const handlers = { onTogglePlay: vi.fn(), onSeek: vi.fn(), onToggleMute: vi.fn(), onVolumeChange: vi.fn(), onChangeSpeed: vi.fn(), onToggleFullscreen: vi.fn() }
+  const { rerender, unmount } = renderHook(({ duration }) => usePlayerKeyboardShortcuts({ status: 'loading', currentTime: 20, duration, playbackSpeed: 1, volume: 0.5 }, handlers), { initialProps: { duration: 120 } })
+  fireEvent.keyDown(window, { key: 'k', code: 'KeyK' })
+  fireEvent.keyDown(window, { key: 'l', code: 'KeyL' })
+  fireEvent.keyDown(window, { key: 'm', code: 'KeyM' })
+  fireEvent.keyDown(window, { key: 'f', code: 'KeyF' })
+  expect(handlers.onTogglePlay).toHaveBeenCalledOnce()
+  expect(handlers.onSeek).toHaveBeenCalledWith(30)
+  expect(handlers.onToggleMute).toHaveBeenCalledOnce()
+  expect(handlers.onToggleFullscreen).toHaveBeenCalledOnce()
+  rerender({ duration: 0 })
+  fireEvent.keyDown(window, { key: 'k', code: 'KeyK' })
+  fireEvent.keyDown(window, { key: 'l', code: 'KeyL' })
+  expect(handlers.onTogglePlay).toHaveBeenCalledOnce()
+  expect(handlers.onSeek).toHaveBeenCalledOnce()
+  unmount()
+})

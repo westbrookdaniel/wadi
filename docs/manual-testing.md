@@ -17,6 +17,8 @@ The desktop development build and sign-in window were opened, and the web login 
 - Try H.264/AAC, H.264/DTS or AC-3, and a source needing video conversion.
 - Confirm initial playback starts before the source finishes downloading. Observe audio-only conversion copying video.
 - Seek well ahead and back, change audio tracks, change playback rate, pause for several minutes, then resume.
+- While an unbuffered seek is loading, wait past the controls' auto-hide delay. Confirm Back, episode selection, the timeline and toolbar remain visible above the loading screen at desktop and phone widths.
+- During that loading state, pause/resume, seek again, mute, and use playback keyboard shortcuts. Confirm the latest seek wins and a pause remains paused when the new buffer is ready. Initial loading without duration should keep seeking disabled.
 - Check A/V synchronization, duration, saved position and subtitles after each change.
 - Try rapid seeks/back navigation while the first session is preparing. Confirm no orphan FFmpeg processes remain after closing the app.
 - Try a source requiring provider headers. Verify no app bearer token reaches the provider.

@@ -63,3 +63,58 @@ it('keeps the conversion session on pause, resume, buffered seek and speed chang
   unmount()
   expect(media.mock.calls.filter(([action]) => action === 'stop')).toHaveLength(2)
 })
+
+it('honors pause, resume and a newer seek while an earlier conversion is still loading', async () => {
+  const video = document.createElement('video')
+  let paused = true
+  Object.defineProperty(video, 'paused', { get: () => paused })
+  vi.spyOn(video, 'play').mockImplementation(async () => { paused = false; video.dispatchEvent(new Event('play')) })
+  vi.spyOn(video, 'pause').mockImplementation(() => { paused = true; video.dispatchEvent(new Event('pause')) })
+  vi.spyOn(video, 'load').mockImplementation(() => {})
+  const pending: Array<{ id: string; position: number; resolve: (value: unknown) => void; reject: (reason: Error) => void }> = []
+  const media = vi.fn<DesktopBridge['media']>(async (action, payload) => {
+    if (action !== 'start') return { error: null }
+    const input = z.object({ id: z.string(), position: z.number() }).parse(payload)
+    return new Promise((resolve, reject) => pending.push({ ...input, resolve, reject }))
+  })
+  const finish = (index: number) => {
+    const request = pending[index]
+    request.resolve({ id: request.id, url: 'http://127.0.0.1/session/index.m3u8', offset: request.position, duration: 180, mode: 'audio', hasVideo: true, hasAudio: true, audioTracks: [], selectedAudioTrackId: null })
+  }
+  window.wadiDesktop = {
+    getStartFullscreen: async () => false, setStartFullscreen: async value => value, onStartFullscreenChanged: () => () => {}, appVersion: async () => '0.1.0', updateState: async () => ({ kind: 'idle' }), checkUpdates: async () => ({ kind: 'idle' }), downloadUpdate: async () => {}, onUpdate: () => () => {},
+    media, onOpenSettings: () => () => {}, openPage: async () => {}, session: async () => true,
+    signIn: async () => true, request: async () => ({ status: 200, body: null }), openExternal: async () => {},
+  }
+  const videoRef = { current: video }
+  const { result, rerender, unmount } = renderHook(({ source }) => useDesktopPlayer({ videoRef, source, hints: {}, savedPosition: 0, watched: false, onProgressCommit: () => {} }), { initialProps: { source: 'https://example.com/movie.mkv' } })
+  await act(async () => finish(0))
+  await waitFor(() => expect(result.current.state.playing).toBe(true))
+  await act(() => result.current.seek(90))
+  expect(result.current.state).toMatchObject({ status: 'loading', currentTime: 90, duration: 180, playing: true })
+  act(() => result.current.toggle())
+  expect(result.current.state.playing).toBe(false)
+  act(() => result.current.toggle())
+  expect(result.current.state.playing).toBe(true)
+  expect(pending).toHaveLength(2)
+  act(() => result.current.toggle())
+  await act(() => result.current.seek(120))
+  expect(pending).toHaveLength(3)
+  expect(result.current.state).toMatchObject({ status: 'loading', currentTime: 120, playing: false })
+  await act(async () => finish(1))
+  expect(result.current.state).toMatchObject({ status: 'loading', currentTime: 120, playing: false })
+  expect(media).toHaveBeenCalledWith('stop', pending[1].id)
+  await act(async () => finish(2))
+  await waitFor(() => expect(result.current.state.status).toBe('ready'))
+  expect(result.current.state.currentTime).toBe(120)
+  expect(result.current.state.playing).toBe(false)
+  expect(video.paused).toBe(true)
+  await act(() => result.current.play())
+  expect(result.current.state.playing).toBe(true)
+  await act(() => result.current.seek(150))
+  await act(async () => pending[3].reject(new Error('Provider unavailable')))
+  expect(result.current.state).toMatchObject({ status: 'error', playing: false, error: 'Provider unavailable' })
+  rerender({ source: 'https://example.com/other-movie.mkv' })
+  expect(result.current.state).toMatchObject({ status: 'loading', duration: 0, hasAudio: false, audioTracks: [] })
+  unmount()
+})
