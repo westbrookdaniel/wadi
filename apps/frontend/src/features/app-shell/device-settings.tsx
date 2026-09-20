@@ -12,7 +12,7 @@ export function DeviceSettings() {
   const [checking, setChecking] = useState(false)
   const [updateError, setUpdateError] = useState('')
   return <section className="settings-panel grid gap-5" aria-label="This device">
-    <label className="flex items-center justify-between gap-4 text-sm">Ask who is watching when Wadi opens<input type="checkbox" className="size-5" checked={device.askForProfile} onChange={event => device.setAskForProfile(event.target.checked)} /></label>
+    <label className="flex items-center justify-between gap-4 text-sm">Ask who is watching when Wadi opens<input type="checkbox" className="size-5 shrink-0 accent-primary" checked={device.askForProfile} onChange={event => device.setAskForProfile(event.target.checked)} /></label>
     <div className="grid max-w-sm gap-2"><label htmlFor="appearance" className="text-sm font-medium">Appearance</label>
       <SettingsSelect id="appearance" value={device.theme} onValueChange={value => { if (value === 'light' || value === 'dark' || value === 'system') device.setTheme(value) }}>
         <option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option>
