@@ -1,5 +1,6 @@
 import { NewEpisodesSection } from './new-episodes'
 import { Link } from '@tanstack/react-router'
+import { ArrowRight } from 'lucide-react'
 import { discoverSearchForRow } from './discover'
 import { useQuery } from '@tanstack/react-query'
 
@@ -7,7 +8,7 @@ import { metaQuery } from '@/api/queries'
 import type { ContinueWatchingItem, ListItem, MediaPreview } from '@/api/types'
 import { MediaRow } from '@/components/media-row'
 import { MediaCard } from '@/features/media/media-card'
-import { contentSection, sectionHeading } from '@/lib/styles'
+import { contentSection, sectionAction, sectionHeading } from '@/lib/styles'
 
 import type { BrowseRowCandidate } from './browse-layout'
 import { CatalogSection } from './catalog-section'
@@ -78,7 +79,7 @@ export function BrowseSections({
                 <div>
                   <h2 className="m-0 tracking-normal">{row.list.name}</h2>
                 </div>
-                <Link to="/discover" search={discoverSearchForRow(row)} aria-label={`See all ${row.list.name}`} className="shrink-0 whitespace-nowrap rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">See all</Link>
+                <Link to="/discover" search={discoverSearchForRow(row)} aria-label={`See all ${row.list.name}`} className={sectionAction}>See all<ArrowRight className="size-3.5" aria-hidden="true" /></Link>
               </div>
               <MediaRow>
                 {items.map((item) => {

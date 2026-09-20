@@ -9,6 +9,9 @@ export const contentSection = "grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3.5";
 export const sectionHeading =
   "flex min-w-0 items-center justify-between gap-3 [&>div]:min-w-0 [&_h2]:break-words";
 
+export const sectionAction =
+  "inline-flex h-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 text-sm font-normal text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring";
+
 export const pageHeader =
   "flex min-h-[72px] items-end justify-between gap-[18px] max-[800px]:flex-col max-[800px]:items-stretch";
 

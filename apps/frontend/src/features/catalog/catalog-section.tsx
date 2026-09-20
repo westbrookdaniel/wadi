@@ -1,4 +1,5 @@
 import { Link } from '@tanstack/react-router'
+import { ArrowRight } from 'lucide-react'
 import type { DiscoverSearch } from './discover'
 import { useEffect, useRef, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
@@ -8,7 +9,7 @@ import type { CatalogEntry, MediaPreview } from "@/api/types";
 import { EmptyState, ErrorState, PosterSkeletonRow } from "@/components/status";
 
 import { MediaCard } from "@/features/media/media-card";
-import { contentSection, mutedText, sectionHeading } from "@/lib/styles";
+import { contentSection, mutedText, sectionAction, sectionHeading } from "@/lib/styles";
 import { MediaRow } from "@/components/media-row";
 
 export function CatalogSection({
@@ -59,7 +60,7 @@ export function CatalogSection({
           </h2>
           <p className={mutedText}>{entry.addon_name}</p>
         </div>
-        {seeAll ? <Link to="/discover" search={seeAll} aria-label={`See all ${title} from ${entry.addon_name}`} className="shrink-0 shrink-0 whitespace-nowrap rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">See all</Link> : null}
+        {seeAll ? <Link to="/discover" search={seeAll} aria-label={`See all ${title} from ${entry.addon_name}`} className={sectionAction}>See all<ArrowRight className="size-3.5" aria-hidden="true" /></Link> : null}
       </div>
 
       {!catalog.data.length && (!nearViewport || catalog.isLoading) ? <PosterSkeletonRow /> : null}

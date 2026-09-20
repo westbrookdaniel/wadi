@@ -17,3 +17,12 @@ it('allows immediate playback and clears timers when cancelled/unmounted', () =>
   render(<NextEpisodePrompt episode={episode} seconds={10} onContinue={next} onCancel={cancel} />)
   fireEvent.click(screen.getByRole('button', { name: 'Play now' })); act(() => vi.advanceTimersByTime(15000)); expect(next).toHaveBeenCalledOnce()
 })
+
+it('holds an early countdown while paused or buffering, then resumes', () => {
+  vi.useFakeTimers(); const next = vi.fn()
+  const view = render(<NextEpisodePrompt episode={episode} seconds={3} paused onContinue={next} onCancel={() => {}} />)
+  act(() => vi.advanceTimersByTime(10000)); expect(next).not.toHaveBeenCalled()
+  expect(screen.getByRole('status')).toHaveTextContent('Countdown paused')
+  view.rerender(<NextEpisodePrompt episode={episode} seconds={3} onContinue={next} onCancel={() => {}} />)
+  act(() => vi.advanceTimersByTime(3000)); expect(next).toHaveBeenCalledOnce()
+})

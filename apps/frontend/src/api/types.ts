@@ -207,6 +207,8 @@ export type WatchProgressRequest = {
   media_type: string
   media_id: string
   video_id?: string | null
+  ignore_start_seconds?: number
+  finish_remaining_seconds?: number
   position_seconds: number
   duration_seconds?: number | null
 }

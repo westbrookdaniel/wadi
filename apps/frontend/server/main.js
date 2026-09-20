@@ -167,10 +167,12 @@ export function createApp({ database = process.env.DATABASE_URL, sessionDays = 3
     for (const route of ['watch-state', 'watch-progress'])
         app.put(`/api/${route}`, async (req, res) => {
             const common = z.object({ media_type: identity, media_id: identity, video_id: identity.nullable().optional() });
-            const b = (route === 'watch-state' ? common.extend({ watched: z.boolean() }) : common.extend({ position_seconds: z.number().int().nonnegative(), duration_seconds: z.number().int().positive().nullable().optional() })).parse(req.body);
+            const b = (route === 'watch-state' ? common.extend({ watched: z.boolean() }) : common.extend({ position_seconds: z.number().int().nonnegative(), duration_seconds: z.number().int().positive().nullable().optional(), ignore_start_seconds: z.number().int().min(0).max(300).default(0), finish_remaining_seconds: z.number().int().min(0).max(600).default(0) })).parse(req.body);
             const previous = (await watch(req, b.media_type, b.media_id, b.video_id));
-            const position = b.position_seconds ?? previous.position_seconds, duration = b.duration_seconds ?? previous.duration_seconds;
-            const watched = b.watched ?? (duration && position >= duration ? true : previous.watched);
+            const rawPosition = b.position_seconds ?? previous.position_seconds, duration = b.duration_seconds ?? previous.duration_seconds;
+            const finished = duration && rawPosition >= Math.max(duration / 2, duration - (b.finish_remaining_seconds ?? 0));
+            const position = route === 'watch-progress' && !finished && rawPosition < (b.ignore_start_seconds ?? 0) ? 0 : rawPosition;
+            const watched = b.watched ?? (finished ? true : previous.watched);
             if (!previous.id)
                 (await run('INSERT INTO watch_states(id,user_id,profile_id,media_type,media_id,video_id) VALUES(?,?,?,?,?,?) ON CONFLICT DO NOTHING', randomUUID(), req.user.id, req.user.profile_id, b.media_type, b.media_id, b.video_id ?? null));
             (await run("UPDATE watch_states SET watched=?,position_seconds=?,duration_seconds=?,updated_at=? WHERE user_id=? AND profile_id=? AND media_type=? AND media_id=? AND COALESCE(video_id,'')=?", Number(watched), position, duration, now(), req.user.id, req.user.profile_id, b.media_type, b.media_id, b.video_id ?? ''));

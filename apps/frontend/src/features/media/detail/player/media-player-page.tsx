@@ -1,3 +1,4 @@
+import { useEpisodeAutoplay } from './use-episode-autoplay'
 import { useAutoPlayback } from '@/store/auto-playback'
 import { nextReleasedEpisode, rankStreams, isDirectStream } from '../auto-pick'
 import { NextEpisodePrompt } from './next-episode-prompt'
@@ -194,6 +195,8 @@ export function MediaPlayerPage({
         media_type: activeTarget.mediaType,
         media_id: activeTarget.mediaId,
         video_id: activeTarget.videoId,
+        ignore_start_seconds: autoSettings.ignoreStartSeconds,
+        finish_remaining_seconds: autoSettings.finishRemainingSeconds,
         position_seconds: Math.max(0, Math.floor(payload.position)),
         duration_seconds: payload.duration ? Math.floor(payload.duration) : null,
       }),
@@ -229,11 +232,10 @@ export function MediaPlayerPage({
     progressMutateRef.current?.({ position, duration: finiteDuration(duration) })
   }, [activeTarget])
 
-  const onEnded = useCallback(() => {
-    if (!autoSettings.autoplayNext || castConnected || externalPreferences.data?.stream_action !== 'internal') return
-    const next = nextReleasedEpisode(releaseCatalog.data?.items ?? activeTarget.seriesEpisodes ?? [], activeTarget.videoId)
-    if (next) setUpNext(next)
-  }, [autoSettings.autoplayNext, castConnected, externalPreferences.data, releaseCatalog.data, activeTarget])
+  const nextEpisode = nextReleasedEpisode(releaseCatalog.data?.items ?? activeTarget.seriesEpisodes ?? [], activeTarget.videoId)
+  const promptNextEpisode = useCallback(() => { if (nextEpisode) setUpNext(nextEpisode) }, [nextEpisode])
+  const endedRef = useRef<(() => void) | null>(null)
+  const onEnded = useCallback(() => endedRef.current?.(), [])
   const webPlayer = useMediabunnyPlayer({
     canvasRef,
     url: proxiedStreamUrl,
@@ -249,6 +251,16 @@ export function MediaPlayerPage({
 
   const desktopPlayer = useDesktopPlayer({ videoRef, source: desktop && !watchData.isLoading ? streamUrl : undefined, hints: activeStream.behaviorHints, savedPosition: readPlaybackPosition(activeTarget) ?? watchState.position_seconds, watched: watchState.watched, onProgressCommit: saveProgress, onEnded })
   const player = desktop ? desktopPlayer : webPlayer
+  const triggerNextEpisode = useEpisodeAutoplay({
+    episodeKey: `${activeTarget.mediaType}:${activeTarget.mediaId}:${activeTarget.videoId}`,
+    enabled: autoSettings.autoplayNext && !!nextEpisode && !castConnected && externalPreferences.data?.stream_action === 'internal',
+    playing: player.state.status === 'ready' && player.state.playing,
+    currentTime: player.state.currentTime,
+    duration: player.state.duration,
+    leadSeconds: autoSettings.nextEpisodeLeadSeconds,
+    onPrompt: promptNextEpisode,
+  })
+  useEffect(() => { endedRef.current = triggerNextEpisode }, [triggerNextEpisode])
 
   const [controlsVisible, setControlsVisible] = useState(true)
   const hideControlsTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -763,7 +775,7 @@ export function MediaPlayerPage({
             </div>
           ) : null}
 
-          {upNext && autoSettings.autoplayNext && externalPreferences.data?.stream_action === 'internal' ? <NextEpisodePrompt key={upNext.id} episode={upNext} seconds={autoSettings.countdownSeconds} onCancel={() => setUpNext(null)} onContinue={() => { setPendingEpisode(upNext); setUpNext(null); setEpisodeSheetOpen(true) }} /> : null}
+          {upNext && autoSettings.autoplayNext && externalPreferences.data?.stream_action === 'internal' ? <NextEpisodePrompt key={upNext.id} episode={upNext} seconds={autoSettings.countdownSeconds} paused={autoSettings.nextEpisodeLeadSeconds > 0 && player.state.currentTime < player.state.duration - 2 && (!player.state.playing || player.state.status !== 'ready')} onCancel={() => setUpNext(null)} onContinue={() => { setPendingEpisode(upNext); setUpNext(null); setEpisodeSheetOpen(true) }} /> : null}
           <Dialog open={episodeSheetOpen} onOpenChange={open => { setEpisodeSheetOpen(open); if (!open) setPendingEpisode(null) }}>
             <DialogContent
               showCloseButton
