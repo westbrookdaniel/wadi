@@ -1,7 +1,7 @@
 import { isShortcutBlocked } from '@/lib/keyboard'
 import { useEffect, useRef } from 'react'
 
-import type { PlayerStatus } from './state'
+import { canControlPlayback, type PlayerStatus } from './state'
 
 type KeyboardState = {
   status: PlayerStatus
@@ -39,7 +39,7 @@ export function usePlayerKeyboardShortcuts(state: KeyboardState, handlers: Keybo
       if (event.code === 'Space' && event.target instanceof Element && event.target.closest('button, a')) return
 
       const snapshot = stateRef.current
-      if (snapshot.status !== 'ready') {
+      if (!canControlPlayback(snapshot)) {
         return
       }
       const currentHandlers = handlersRef.current

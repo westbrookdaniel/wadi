@@ -30,12 +30,20 @@ export function useDesktopPlayer({ videoRef, source, hints, savedPosition, watch
   const parsed=hintsSchema.safeParse(hints)
   const headers=JSON.stringify(parsed.success?parsed.data.proxyHeaders?.request??{}:{})
   useEffect(()=>{commit.current=onProgressCommit},[onProgressCommit])
-  const update=useCallback((patch:Partial<PlayerState>)=>{stateRef.current={...stateRef.current,...patch};setState(stateRef.current)},[])
+  const update=useCallback((patch:Partial<PlayerState>)=>{
+    stateRef.current={...stateRef.current,...patch}
+    if(patch.status==='error'){
+      playing.current=false
+      stateRef.current.playing=false
+    }
+    setState(stateRef.current)
+  },[])
   useEffect(()=>{
     const desktop=desktopBridge(),video=videoRef.current
     if(!desktop||!source||!video)return
     const sourceKey=JSON.stringify([source,headers])
-    if(activeSource.current!==sourceKey){activeSource.current=sourceKey;started.current=false;playing.current=true;audio.current=null;forceVideo.current=false}
+    const sourceChanged=activeSource.current!==sourceKey
+    if(sourceChanged){activeSource.current=sourceKey;started.current=false;playing.current=true;audio.current=null;forceVideo.current=false}
     if(!started.current){position.current=restore.current;started.current=true}
     let cancelled=false,hls:Hls|null=null
     const id=crypto.randomUUID()
@@ -52,7 +60,7 @@ export function useDesktopPlayer({ videoRef, source, hints, savedPosition, watch
         if(result.error)update({status:'error',error:result.error,playing:false})
       }).catch(()=>{if(!cancelled)update({status:'error',error:'Local media service disconnected'})})
     }
-    update({status:'loading',error:null,playing:false,currentTime:position.current})
+    update({status:'loading',error:null,playing:playing.current,currentTime:position.current,...(sourceChanged?{duration:0,hasVideo:false,hasAudio:false,audioTracks:[],selectedAudioTrackId:null}:{})})
     const sync=()=>{
       if(!playable)return
       position.current=offset+video.currentTime
@@ -105,6 +113,7 @@ export function useDesktopPlayer({ videoRef, source, hints, savedPosition, watch
   },[videoRef,update])
   const play=useCallback(async()=>{
     playing.current=true
+    if(stateRef.current.status==='loading')update({playing:true})
     if(job.current && stateRef.current.status==='ready' && videoRef.current){
       try {await videoRef.current.play()} catch {playing.current=false;update({playing:false})}
     } else if(stateRef.current.status!=='loading') restart(n=>n+1)

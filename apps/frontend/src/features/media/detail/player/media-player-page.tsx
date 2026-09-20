@@ -81,7 +81,7 @@ import { readSubtitleChoice, saveSubtitleChoice, readPlaybackPosition, savePlayb
 import { defaultSubtitleForAudio, languageName, normalizeLanguage, mergeSubtitleTracks, parseSubtitleText, type SubtitleCue } from './subtitle-utils'
 import { usePlayerKeyboardShortcuts } from './use-player-keyboard-shortcuts'
 import { usePlayerPreferences } from './use-player-preferences'
-import { initialPlayerState, type CastStateData, type PlayerState } from './state'
+import { canControlPlayback, initialPlayerState, type CastStateData, type PlayerState } from './state'
 
 export function MediaPlayerPage({
   media,
@@ -795,7 +795,7 @@ export function MediaPlayerPage({
   )
 }
 
-function PlayerChrome({
+export function PlayerChrome({
   playerRef,
   mediaName,
   state,
@@ -888,7 +888,7 @@ function PlayerChrome({
   onToggleMute: () => void
   onSelectAudioTrack: (id: string | null) => void
 }) {
-  const disabled = state.status !== 'ready'
+  const disabled = !canControlPlayback(state)
   const actualVolume = state.muted ? 0 : state.volume
   const VolumeIcon = state.muted || state.volume === 0 ? VolumeX : state.volume < 0.5 ? Volume1 : Volume2
   const [audioMenuOpen, setAudioMenuOpen] = useState(false)
@@ -900,7 +900,7 @@ function PlayerChrome({
     state.audioTracks.find((track) => track.id === state.selectedAudioTrackId) ?? null
   const audioLabel = selectedAudioTrack ? languageName(selectedAudioTrack.language) : 'Audio'
   const speedLabel = `${formatSpeedLabel(playbackSpeed)}x`
-  const controlsPinnedOpen = forceVisible || audioMenuOpen || speedMenuOpen || subtitleMenuOpen || subtitleSettingsOpen
+  const controlsPinnedOpen = state.status === 'loading' || state.status === 'idle' || forceVisible || audioMenuOpen || speedMenuOpen || subtitleMenuOpen || subtitleSettingsOpen
 
   useEffect(() => {
     if (!audioMenuOpen && !speedMenuOpen && !subtitleMenuOpen) {
