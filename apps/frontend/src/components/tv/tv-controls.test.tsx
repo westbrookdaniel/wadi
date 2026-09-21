@@ -215,3 +215,26 @@ it('gives playback controls a fresh idle timeout after closing a picker', async 
   act(() => { vi.advanceTimersByTime(4000) })
   expect(screen.queryByRole('button', { name: 'Pause' })).not.toBeInTheDocument()
 })
+
+it('keeps a skip action visible after auto-hide and supports remote activation', () => {
+  vi.useFakeTimers()
+  const props = playerProps()
+  const view = render(<TvPlayerChrome {...props} />)
+  act(() => { vi.advanceTimersByTime(4100) })
+  view.rerender(<TvPlayerChrome {...props} skipSegment={{ type: 'recap', start: 40, end: 80 }} />)
+  const skip = screen.getByRole('button', { name: 'Skip recap' })
+  skip.focus()
+  fireEvent.keyDown(skip, { key: 'Enter' })
+  expect(props.onSeek).toHaveBeenCalledWith(80)
+  expect(props.onTogglePlay).not.toHaveBeenCalled()
+})
+
+it('lets Back hide a pinned skip prompt before leaving playback', () => {
+  const props = playerProps()
+  render(<TvPlayerChrome {...props} skipSegment={{ type: 'outro', start: 40, end: 80 }} />)
+  fireEvent.keyDown(document.activeElement!, { key: 'Escape' })
+  expect(screen.queryByRole('button', { name: 'Skip outro' })).not.toBeInTheDocument()
+  expect(props.onBack).not.toHaveBeenCalled()
+  fireEvent.keyDown(document.activeElement!, { key: 'Escape' })
+  expect(props.onBack).toHaveBeenCalledOnce()
+})

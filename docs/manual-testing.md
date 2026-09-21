@@ -41,3 +41,12 @@ The desktop development build and sign-in window were opened, and the web login 
 - Verify browser sign-in callbacks on each OS, native FFmpeg availability, OS keyring behavior and app shutdown.
 - Configure signing/notarization and verify installed trust before publishing.
 - Test an upgrade between two signed GitHub release builds. Confirm background download progress, retry after a network failure, explicit restart, playback interruption confirmation, and retained sign-in and preferences. Publish installers and `latest*.yml` metadata together after reviewing the draft release.
+
+## IntroDB skip segments
+
+- Play an IMDb-backed episode with IntroDB coverage. Check that Skip recap, Skip intro and Skip outro appear only inside their segments and seek to the reported end, preserving pause/play state. Repeat on web, desktop conversion and TV navigation.
+- In TV mode, reach the skip button with arrows and activate it with OK/Enter. Check the button stays available when the ordinary auto-hide timer expires.
+- Seek backwards into a segment, change episodes and switch sources. Confirm no timestamps from the previous episode appear.
+- Confirm an outro ending before a post-credits scene stops at that end, without forcing the next episode. Existing next-episode autoplay settings still apply.
+- Try a title without IMDb identity, an uncovered episode, an unavailable IntroDB endpoint and a stream shorter than the segment end. Playback must work without skip buttons or metadata errors.
+- Check phone-width controls and a fullscreen player. External players do not receive Wadi skip controls.

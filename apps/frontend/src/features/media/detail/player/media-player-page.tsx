@@ -1,3 +1,4 @@
+import { activeSegment, skipLabels, skipSegmentsQuery, type SkipSegment } from './skip-segments'
 import { TvPlayerChrome } from '@/components/tv/tv-player'
 import type { ComponentProps } from 'react'
 import { useEpisodeAutoplay } from './use-episode-autoplay'
@@ -107,6 +108,7 @@ export function MediaPlayerPage({
   const queryClient = useQueryClient()
   const [activeStream, setActiveStream] = useState(stream)
   const [activeTarget, setActiveTarget] = useState(target)
+  const segments = useQuery(skipSegmentsQuery(activeTarget))
   const streamUrl = activeStream.url
   const token = useAppStore((state) => state.token)
   const externalPreferences = useQuery(playbackPreferencesQuery)
@@ -669,6 +671,7 @@ export function MediaPlayerPage({
           ) : null}
 
           <PlayerChrome
+            skipSegment={effectiveState.status === 'ready' ? activeSegment(segments.data ?? [], effectiveState.currentTime, effectiveState.duration) : undefined}
             playerRef={playerRef}
             mediaName={media.name}
             state={effectiveState}
@@ -817,6 +820,7 @@ export function PlayerChrome(props: ComponentProps<typeof DesktopPlayerChrome>) 
 }
 
 function DesktopPlayerChrome({
+  skipSegment,
   playerRef,
   mediaName,
   state,
@@ -863,6 +867,7 @@ function DesktopPlayerChrome({
   onToggleMute,
   onSelectAudioTrack,
 }: {
+  skipSegment?: SkipSegment
   playerRef: RefObject<HTMLDivElement | null>
   mediaName: string
   state: PlayerState
@@ -921,7 +926,7 @@ function DesktopPlayerChrome({
     state.audioTracks.find((track) => track.id === state.selectedAudioTrackId) ?? null
   const audioLabel = selectedAudioTrack ? languageName(selectedAudioTrack.language) : 'Audio'
   const speedLabel = `${formatSpeedLabel(playbackSpeed)}x`
-  const controlsPinnedOpen = state.status === 'loading' || state.status === 'idle' || forceVisible || audioMenuOpen || speedMenuOpen || subtitleMenuOpen || subtitleSettingsOpen
+  const controlsPinnedOpen = state.status === 'loading' || state.status === 'idle' || forceVisible || Boolean(skipSegment) || audioMenuOpen || speedMenuOpen || subtitleMenuOpen || subtitleSettingsOpen
 
   useEffect(() => {
     if (!audioMenuOpen && !speedMenuOpen && !subtitleMenuOpen) {
@@ -986,6 +991,7 @@ function DesktopPlayerChrome({
       </div>
 
       <div className="player-bottom-controls pointer-events-auto grid gap-1 px-4 pb-4 sm:px-6 sm:pb-6">
+        {skipSegment ? <Button className="mb-3 justify-self-end bg-white text-black hover:bg-white/90" onClick={() => onSeek(skipSegment.end)}>{skipLabels[skipSegment.type]}</Button> : null}
         <ProgressScrubber
           label={`Seek ${mediaName}`}
           value={state.currentTime}
