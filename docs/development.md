@@ -67,7 +67,7 @@ WADI_WEB_ORIGIN=https://watchwadi.com pnpm desktop:package
 
 On Windows PowerShell set `$env:WADI_WEB_ORIGIN` before invoking pnpm. Build on each target OS/architecture so Electron and FFmpeg binaries match. Outputs are under `apps/desktop/release`: macOS DMG/ZIP, Windows NSIS installer, Linux AppImage/DEB. React assets and binaries are generated during packaging; they are not committed.
 
-Manual workflow runs upload installer artifacts. Matching version tags build all platforms and create a draft GitHub release. No signing secrets are needed. FFmpeg license and build notices are copied into the packages by the preparation script.
+Manual workflow runs upload installer artifacts. Set the optional `release_tag` input to the matching desktop version (for example `v0.1.6`) to build all platforms and fill a draft release before publishing. Matching version tag pushes also build all platforms and create a draft GitHub release. No signing secrets are needed. FFmpeg license and build notices are copied into the packages by the preparation script.
 
 Updates use GitHub Releases; see Desktop updates below. Desktop cannot run the shared account API offline; temporary connection failures should be retried without discarding the stored desktop session.
 
