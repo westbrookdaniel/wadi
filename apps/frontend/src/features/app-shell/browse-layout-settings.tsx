@@ -1,3 +1,4 @@
+import { useDeviceStore } from '@/store/device-store'
 import {
   DndContext,
   KeyboardSensor,
@@ -36,6 +37,7 @@ import {
 } from '../catalog/browse-layout'
 
 export function BrowseLayoutSettings() {
+  const tvMode = useDeviceStore(state => state.tvMode)
   const queryClient = useQueryClient()
   const catalogs = useQuery(catalogsQuery)
   const lists = useQuery(listsQuery)
@@ -145,7 +147,7 @@ export function BrowseLayoutSettings() {
       <fieldset className="grid gap-4 rounded-lg bg-muted/40 p-4" disabled={isLoading || Boolean(hasError)}>
         <legend className="px-1 text-sm font-medium">Featured hero</legend>
         <label className="flex items-center justify-between gap-3 text-sm">Show hero<input type="checkbox" className="size-5 shrink-0 accent-primary" checked={!activeLayout.hero?.hidden} onChange={event => setDraftLayout({ ...activeLayout, hero: { source: 'auto', rotate: true, ...activeLayout.hero, hidden: !event.target.checked } })} /></label>
-        <label className="grid gap-2 text-sm sm:grid-cols-[minmax(0,1fr)_minmax(180px,260px)] sm:items-center">Hero content<SettingsSelect disabled={activeLayout.hero?.hidden} value={activeLayout.hero?.source ?? 'auto'} onValueChange={source => setDraftLayout({ ...activeLayout, hero: { hidden: false, rotate: true, ...activeLayout.hero, source } })}>
+        <label className="grid gap-2 text-sm sm:grid-cols-[minmax(0,1fr)_minmax(180px,260px)] sm:items-center">Hero content<SettingsSelect aria-label="Hero content" disabled={activeLayout.hero?.hidden} value={activeLayout.hero?.source ?? 'auto'} onValueChange={source => setDraftLayout({ ...activeLayout, hero: { hidden: false, rotate: true, ...activeLayout.hero, source } })}>
           <option value="auto">First available catalog</option>
           {candidates.filter(row => row.kind === 'catalog' || row.kind === 'watchlist').map(row => <option key={row.key} value={row.key}>{row.title}</option>)}
         </SettingsSelect></label>
@@ -154,8 +156,8 @@ export function BrowseLayoutSettings() {
       <fieldset className="grid gap-4 rounded-lg bg-muted/40 p-4" disabled={isLoading || Boolean(hasError)}>
         <legend className="px-1 text-sm font-medium">New episodes</legend>
         <p className="text-xs text-muted-foreground">Follow releases for shows in your lists. These choices follow this profile.</p>
-        <label className="grid gap-2 text-sm sm:grid-cols-2 sm:items-center">Follow shows from<SettingsSelect value={releasePreferences.listId || 'all'} onValueChange={value => setDraftLayout({ ...activeLayout, newEpisodes: { ...releasePreferences, listId: value === 'all' ? '' : value } })}><option value="all">All lists</option>{lists.data?.map(list => <option key={list.id} value={list.id}>{list.name}</option>)}</SettingsSelect></label>
-        <label className="grid gap-2 text-sm sm:grid-cols-2 sm:items-center">Count releases from<SettingsSelect value={String(releasePreferences.days)} onValueChange={value => setDraftLayout({ ...activeLayout, newEpisodes: { ...releasePreferences, days: Number(value) } })}>{[7,14,30,90].map(days => <option key={days} value={days}>Last {days} days</option>)}</SettingsSelect></label>
+        <label className="grid gap-2 text-sm sm:grid-cols-2 sm:items-center">Follow shows from<SettingsSelect aria-label="Follow shows from" value={releasePreferences.listId || 'all'} onValueChange={value => setDraftLayout({ ...activeLayout, newEpisodes: { ...releasePreferences, listId: value === 'all' ? '' : value } })}><option value="all">All lists</option>{lists.data?.map(list => <option key={list.id} value={list.id}>{list.name}</option>)}</SettingsSelect></label>
+        <label className="grid gap-2 text-sm sm:grid-cols-2 sm:items-center">Count releases from<SettingsSelect aria-label="Count releases from" value={String(releasePreferences.days)} onValueChange={value => setDraftLayout({ ...activeLayout, newEpisodes: { ...releasePreferences, days: Number(value) } })}>{[7,14,30,90].map(days => <option key={days} value={days}>Last {days} days</option>)}</SettingsSelect></label>
         {([{ key: 'showBadges', label: 'Show +X badges on show cards' }, { key: 'showCalendar', label: 'Show upcoming episodes' }, { key: 'includeSpecials', label: 'Include specials' }] as const).map(({ key, label }) => <label key={key} className="flex items-center justify-between gap-3 text-sm">{label}<input type="checkbox" className="size-5 shrink-0 accent-primary" checked={releasePreferences[key]} onChange={event => setDraftLayout({ ...activeLayout, newEpisodes: { ...releasePreferences, [key]: event.target.checked } })} /></label>)}
       </fieldset>
       {isLoading ? <LoadingState label="Loading browse layout" /> : null}
@@ -168,7 +170,7 @@ export function BrowseLayoutSettings() {
         <EmptyState title="No rows to customize" body="Install addons or create watchlists to populate browse sections." />
       ) : null}
 
-      <div><h4 className="text-sm font-medium">Home rows</h4><p className="mt-1 text-xs text-muted-foreground">Drag to reorder. Use the eye to show or hide a row.</p></div>
+      <div><h4 className="text-sm font-medium">Home rows</h4><p className="mt-1 text-xs text-muted-foreground">{tvMode ? 'Use Move up or Move down to reorder. Use the eye to show or hide a row.' : 'Drag to reorder. Use the eye to show or hide a row.'}</p></div>
       {!isLoading && !hasError && orderedRows.length ? (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
           <SortableContext items={orderedRows.filter(row => row.kind !== 'continue').map((row) => row.key)} strategy={verticalListSortingStrategy}>
@@ -179,6 +181,16 @@ export function BrowseLayoutSettings() {
                   <SortableLayoutRow
                     key={row.key}
                     row={row}
+                    onMove={direction => {
+                      const keys = orderedRows.filter(item => item.kind !== 'continue').map(item => item.key)
+                      const index = keys.indexOf(row.key)
+                      const to = index + direction
+                      if (index < 0 || to < 0 || to >= keys.length) return
+                      setDraftLayout(current => {
+                        const next = current ?? savedLayout
+                        return { ...next, pages: { ...next.pages, [activePage]: { ...next.pages[activePage], order: arrayMove(keys, index, to) } } }
+                      })
+                    }}
                     mode={activeLayout.pages[activePage].catalogModes?.[row.key] ?? 'combined'}
                     onModeChange={mode => setDraftLayout(current => {
                       const next = current ?? savedLayout;
@@ -212,13 +224,16 @@ function SortableLayoutRow({
   onModeChange,
   hidden,
   onToggleHidden,
+  onMove,
 }: {
   row: BrowseRowCandidate
   mode: "combined" | "movie" | "series"
   onModeChange: (mode: "combined" | "movie" | "series") => void
   hidden: boolean
   onToggleHidden: () => void
+  onMove: (direction: number) => void
 }) {
+  const tvMode = useDeviceStore(state => state.tvMode)
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: row.key, disabled: row.kind === 'continue' })
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -234,7 +249,7 @@ function SortableLayoutRow({
         isDragging && 'shadow-lg',
       )}
     >
-      {row.kind !== 'continue' ? <button
+      {row.kind !== 'continue' && tvMode ? <div className="tv-reorder"><button type="button" aria-label={`Move ${row.title} up`} onClick={() => onMove(-1)}>↑</button><button type="button" aria-label={`Move ${row.title} down`} onClick={() => onMove(1)}>↓</button></div> : row.kind !== 'continue' ? <button
         type="button"
         className="grid size-8 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-muted"
         aria-label={`Drag ${row.title}`}

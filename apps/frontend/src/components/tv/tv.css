@@ -1,0 +1,84 @@
+/* TV presentation tokens use CSS pixels and work in ordinary browser windows. */
+html.tv-mode { font-size: clamp(16px, 1.25vw, 24px); scroll-padding: 2rem; color-scheme: dark; }
+.tv-mode :is(button, a, input, textarea, summary, [tabindex]):focus { outline: 3px solid #fff; outline-offset: 5px; box-shadow: 0 0 0 8px #111a; }
+.tv-mode :is(button, input:not([type=checkbox]):not([type=radio]), summary, [role=combobox]) { min-height: 3rem; }
+.tv-mode :is(button, a, input, textarea) { scroll-margin: 2rem; }
+.tv-mode :is(.text-xs, .text-sm) { font-size: .95rem; line-height: 1.5; }
+.tv-mode [hidden] { display: none !important; }
+.tv-mode button:disabled { opacity: .45; }
+.tv-mode input:is([type=checkbox], [type=radio]) { width: 1.4rem; height: 1.4rem; }
+.tv-shell { min-height: 100dvh; color: #f4f4f7; background: #101115; }
+.tv-rail { position: fixed; inset: 0 auto 0 0; width: 10rem; padding: 1.5rem 1rem; display: flex; flex-direction: column; gap: .6rem; background: #17181d; border-right: 1px solid #ffffff12; z-index: 20; overflow-y: auto; }
+.tv-wordmark { font-size: 2rem; font-weight: 800; letter-spacing: -.08em; margin: 0 .6rem 1rem; }
+.tv-rail button { display: flex; align-items: center; gap: .6rem; text-align: left; border-radius: .5rem; padding: .6rem; font-size: .85rem; }
+.tv-rail svg { width: 1.2rem; height: 1.2rem; flex-shrink: 0; }
+.tv-rail [aria-current=page] { background: #fff; color: #111; }
+.tv-rail .tv-exit { margin-top: auto; font-size: .8rem; }
+.tv-hint { font-size: .7rem !important; color: #a5a7b2; line-height: 1.6; }
+.tv-main { margin-left: 10rem; padding: 2rem 2.4rem; min-height: 100dvh; min-width: 0; }
+.tv-main-player { margin: 0; padding: 0; }
+.tv-home { display: grid; gap: 2rem; }
+.tv-home h1 { font-size: 2.4rem; line-height: 1.15; letter-spacing: -.04em; }
+.tv-eyebrow { color: #a7a9b5; margin-bottom: .5rem; }
+.tv-mode h2 { font-size: 1.5rem; }
+.tv-mode .media-row-bleed { grid-auto-columns: clamp(160px, 15vw, 290px); gap: 1.2rem; padding: .6rem .5rem 1rem; margin: 0 -.5rem; }
+.tv-mode .media-grid { grid-template-columns: repeat(auto-fill, minmax(clamp(150px, 14vw, 270px), 1fr)); gap: 1.2rem; }
+.tv-mode .media-card-item h3 { font-size: 1rem; }
+.tv-mode .media-card-item p { font-size: .8rem; }
+.tv-mode .media-card-item > button { transition: transform 140ms ease; }
+.tv-mode .media-card-item > button:focus { transform: scale(1.025); }
+.tv-detail { display: grid; gap: 2rem; }
+.tv-detail-hero { position: relative; isolation: isolate; padding: 1rem; min-height: 20rem; display: grid; align-content: space-between; gap: 3rem; }
+.tv-detail-hero > button { justify-self: start; }
+.tv-detail-art { position: absolute; inset: -2rem -2.4rem; z-index: -1; opacity: .4; mask-image: linear-gradient(#000, transparent); }
+.tv-detail-description { max-width: 44rem; display: grid; gap: .8rem; }
+.tv-detail-description h1 { font-size: 2.6rem; line-height: 1.1; }
+.tv-detail-description > p { font-size: 1rem; color: #c7c8d0; }
+.tv-detail-content { display: grid; gap: 1rem; }
+.tv-detail-content > div { max-height: none; overflow: visible; }
+.tv-mode .settings-area { max-width: none; }
+.tv-settings > div { grid-template-columns: 12rem minmax(0, 1fr); }
+.tv-settings nav { display: flex; flex-direction: column; gap: .6rem; }
+.tv-settings nav a { min-height: 3rem; padding: .6rem; }
+.tv-settings .settings-panel { padding: 1.2rem; }
+.tv-mode [data-slot=dialog-content] { width: min(42rem, 90vw); max-width: 90vw; max-height: 88dvh; padding: 1.6rem; font-size: 1rem; }
+.tv-mode [data-slot=dialog-title] { font-size: 1.6rem; padding-right: 2rem; }
+.tv-mode [data-slot=select-content] { font-size: 1rem; min-width: 16rem; }
+.tv-mode [data-slot=select-item] { min-height: 3rem; font-size: 1rem; padding: .7rem 2rem .7rem 1rem; }
+.tv-choice { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 1rem; text-align: left; }
+.tv-choice, .tv-options button, .tv-keyboard button, .tv-player button, .tv-detail-hero > button { border: 1px solid #ffffff30; background: #272932; color: #fff; border-radius: .5rem; padding: .6rem 1rem; }
+.tv-options { display: grid; gap: .6rem; overflow-y: auto; max-height: 58dvh; padding: .4rem; }
+.tv-options button { display: flex; justify-content: space-between; text-align: left; }
+.tv-options [aria-pressed=true] { border-color: #fff; background: #414551; }
+.tv-keyboard input { border: 1px solid #ffffff55; border-radius: .4rem; padding: .6rem; width: 100%; }
+.tv-keyboard-keys { display: grid; gap: .5rem; }
+.tv-keyboard-row { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: .4rem; }
+.tv-keyboard-row button { padding: .4rem 0; }
+.tv-keyboard-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; }
+.tv-keyboard-actions button { flex: 1; }
+.tv-primary { background: #fff !important; color: #101115 !important; font-weight: 650; }
+.tv-player { position: absolute; inset: 0; z-index: 5; outline: none !important; box-shadow: none !important; }
+.tv-player-controls { height: 100%; display: flex; flex-direction: column; justify-content: space-between; background: linear-gradient(#000a, transparent 35%, #000e); }
+.tv-player header { display: flex; align-items: center; gap: 1rem; padding: 1.5rem 2rem; }
+.tv-player h1 { font-size: 1.4rem; }
+.tv-player-bottom { padding: 1.5rem 2rem; display: grid; gap: .8rem; }
+.tv-player-actions { display: flex; flex-wrap: wrap; gap: .6rem; }
+.tv-player-actions .tv-choice { width: auto; max-width: 17rem; font-size: .8rem; }
+.tv-timeline { width: 100%; display: grid; gap: .5rem; text-align: right; }
+.tv-timeline-track { height: .3rem; border-radius: 1rem; background: #fff4; overflow: hidden; }
+.tv-timeline-track > span { display: block; height: 100%; background: white; }
+.tv-seeking { display: grid; gap: .5rem; }
+.tv-seeking > div { display: flex; gap: .5rem; }
+@media (prefers-reduced-motion: reduce) { .tv-mode * { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }
+@media (max-width: 800px) { .tv-rail { width: 8rem; } .tv-main { margin-left: 8rem; padding: 1.4rem; } .tv-main-player { margin: 0; padding: 0; } .tv-settings > div { grid-template-columns: 1fr; } .tv-home h1 { font-size: 1.8rem; } }
+.tv-choice-label { display: block; font-size: .65rem; color: #bfc1ce; }
+.tv-mode .player-sheet { min-width: min(38rem, 90vw); }
+.tv-mode .tv-detail-content button[data-tv-focus-key^="episode:"] { grid-template-columns: 8rem 1fr; gap: 1rem; padding: .5rem; }
+.tv-mode .tv-detail-content button[data-tv-focus-key^="episode:"] > div:first-child { width: 8rem; height: 4.5rem; }
+/* Portals attach to body, so TV colors must also live above the dedicated shell. */
+html.tv-mode { --background: #101115; --foreground: #f4f4f7; --card: #1b1d24; --card-foreground: #f4f4f7; --popover: #1b1d24; --popover-foreground: #f4f4f7; --muted: #292c35; --muted-foreground: #bfc1ce; --accent: #363b47; --accent-foreground: #fff; --input: #ffffff40; --border: #ffffff26; --secondary: #30343e; --secondary-foreground: #fff; }
+.tv-mode .settings-area, .tv-mode .settings-area h3, .tv-mode .settings-area input { font-size: 1rem; }
+.tv-reorder { display: flex; gap: .3rem; }
+.tv-reorder button { min-width: 2.6rem; }
+.tv-mode .player-viewport:has([data-tv-player]) { --player-caption-bottom: max(6vh, 28px); }
+.tv-mode .player-viewport:has(.tv-player-controls) { --player-caption-bottom: 32vh; }

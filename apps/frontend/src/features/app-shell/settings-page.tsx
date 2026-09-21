@@ -1,3 +1,4 @@
+import { useDeviceStore } from '@/store/device-store'
 import { AutoPlaybackSettings } from './auto-playback-settings'
 import { AccountControls } from './account-controls'
 import { externalPlayers, validCustomTemplate } from '@/features/media/detail/external-players'
@@ -93,10 +94,12 @@ const profileSchema = z.object({
 const settingsSections = [['profiles', 'Profiles'], ['home', 'Home'], ['playback', 'Playback on this device'], ['auto-pick', 'Auto-pick & autoplay'], ['plugins', 'Plugins'], ['account', 'Account'], ['experimental', 'Experimental']];
 
 export function ProfileSettingsPage() {
+  const tvMode = useDeviceStore(state => state.tvMode);
   const profileId = useAppStore(state => state.activeProfileId);
   const navigate = useNavigate();
   const [activeSection, setActiveSection] = useState('profiles');
   useEffect(() => {
+    if (tvMode) return;
     const update = () => {
       const sections = settingsSections.flatMap(([id]) => {
         const element = document.getElementById(id);
@@ -109,21 +112,21 @@ export function ProfileSettingsPage() {
     window.addEventListener('scroll', update, true);
     window.addEventListener('resize', update);
     return () => { window.removeEventListener('scroll', update, true); window.removeEventListener('resize', update); };
-  }, []);
-  return <div className={cn(pageStack, "settings-area max-w-[1120px] gap-8")}>
+  }, [tvMode]);
+  return <div className={cn(pageStack, "settings-area max-w-[1120px] gap-8", tvMode && "tv-settings")}>
     <header><h1 className="text-3xl font-medium tracking-tight">Settings</h1></header>
     <div className="grid gap-8 md:grid-cols-[180px_minmax(0,1fr)]">
       <nav aria-label="Settings sections" className="flex flex-wrap content-start gap-1 md:sticky md:top-6 md:flex-col md:self-start">
-        {settingsSections.map(([id,label]) => <a key={id} href={'#'+id} onClick={() => setActiveSection(id)} aria-current={activeSection === id ? 'location' : undefined} className={cn("rounded-lg px-3 py-2.5 text-sm transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring", activeSection === id ? "bg-primary/15 font-medium text-foreground" : "text-muted-foreground")}>{label}</a>)}
+        {settingsSections.map(([id,label]) => <a key={id} href={'#'+id} onClick={event => { if (tvMode) event.preventDefault(); setActiveSection(id) }} aria-current={activeSection === id ? 'location' : undefined} className={cn("rounded-lg px-3 py-2.5 text-sm transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring", activeSection === id ? "bg-primary/15 font-medium text-foreground" : "text-muted-foreground")}>{label}</a>)}
       </nav>
       <div className="grid min-w-0 gap-8">
-        <section id="profiles" className="scroll-mt-6 rounded-xl border border-border bg-card/60 p-5"><h2 className="mb-4 text-lg font-medium">Profiles</h2><ProfileManager /></section>
-        <section id="home" className="scroll-mt-6"><BrowseLayoutSettings key={profileId} /></section>
-        <section id="playback" className="grid scroll-mt-6 gap-5"><h2 className="text-xl font-medium">Playback on this device</h2><ExternalPlaybackSettingsSection /><DeviceSettings /></section>
-        <section id="auto-pick" className="scroll-mt-6"><AutoPlaybackSettings /></section>
-        <section id="plugins" className="scroll-mt-6"><button type="button" onClick={() => navigate({ to: '/settings/plugins' })} className="flex w-full items-center gap-4 rounded-xl border border-border bg-card/60 p-5 text-left hover:bg-muted/50"><span className="grid flex-1 gap-1"><span className="text-lg font-medium">Plugins</span><span className="text-sm text-muted-foreground">Manage your Stremio-compatible addons.</span></span><ArrowRight className="size-5 shrink-0" /></button></section>
-        <section id="account" className="scroll-mt-6"><button type="button" onClick={() => navigate({ to: '/settings/account' })} className="flex w-full items-center gap-4 rounded-xl border border-border bg-card/60 p-5 text-left hover:bg-muted/50"><span className="grid flex-1 gap-1"><span className="text-lg font-medium">Account details</span><span className="text-sm text-muted-foreground">Manage your email, password, and account.</span></span><ArrowRight className="size-5 shrink-0" /></button></section>
-        <section id="experimental" className="scroll-mt-6"><ExperimentalSettings /></section>
+        <section hidden={tvMode && activeSection !== 'profiles'} id="profiles" className="scroll-mt-6 rounded-xl border border-border bg-card/60 p-5"><h2 className="mb-4 text-lg font-medium">Profiles</h2><ProfileManager /></section>
+        <section hidden={tvMode && activeSection !== 'home'} id="home" className="scroll-mt-6"><BrowseLayoutSettings key={profileId} /></section>
+        <section hidden={tvMode && activeSection !== 'playback'} id="playback" className="grid scroll-mt-6 gap-5"><h2 className="text-xl font-medium">Playback on this device</h2>{!tvMode ? <ExternalPlaybackSettingsSection /> : <p>TV mode plays inside Wadi. Use your TV or computer to adjust volume.</p>}<DeviceSettings /></section>
+        <section hidden={tvMode && activeSection !== 'auto-pick'} id="auto-pick" className="scroll-mt-6"><AutoPlaybackSettings /></section>
+        <section hidden={tvMode && activeSection !== 'plugins'} id="plugins" className="scroll-mt-6"><button type="button" onClick={() => navigate({ to: '/settings/plugins' })} className="flex w-full items-center gap-4 rounded-xl border border-border bg-card/60 p-5 text-left hover:bg-muted/50"><span className="grid flex-1 gap-1"><span className="text-lg font-medium">Plugins</span><span className="text-sm text-muted-foreground">Manage your Stremio-compatible addons.</span></span><ArrowRight className="size-5 shrink-0" /></button></section>
+        <section hidden={tvMode && activeSection !== 'account'} id="account" className="scroll-mt-6"><button type="button" onClick={() => navigate({ to: '/settings/account' })} className="flex w-full items-center gap-4 rounded-xl border border-border bg-card/60 p-5 text-left hover:bg-muted/50"><span className="grid flex-1 gap-1"><span className="text-lg font-medium">Account details</span><span className="text-sm text-muted-foreground">Manage your email, password, and account.</span></span><ArrowRight className="size-5 shrink-0" /></button></section>
+        <section hidden={tvMode && activeSection !== 'experimental'} id="experimental" className="scroll-mt-6"><ExperimentalSettings /></section>
       </div>
     </div>
   </div>;
@@ -332,6 +335,12 @@ export function AccountSettingsPage({ user, view = "account" }: { user: User; vi
                 addon={addon}
                 key={addon.id}
                 dragDisabled={Boolean(search.trim()) || reorderMutation.isPending}
+                onMove={direction => {
+                  const all = addons.data ?? [];
+                  const index = all.findIndex(item => item.id === addon.id);
+                  const to = index + direction;
+                  if (index >= 0 && to >= 0 && to < all.length) reorderMutation.mutate(arrayMove(all, index, to).map(item => item.id));
+                }}
                 onDelete={() => deleteMutation.mutate(addon.id)}
               />
             ))}
@@ -906,12 +915,15 @@ export function AddAddonPage() {
 function AddonCard({
   addon,
   dragDisabled,
+  onMove,
   onDelete,
 }: {
   addon: AddonRecord;
   dragDisabled: boolean;
+  onMove: (direction: number) => void;
   onDelete: () => void;
 }) {
+  const tvMode = useDeviceStore(state => state.tvMode);
   const { setNodeRef, transform, transition, isDragging, attributes, listeners } = useSortable({ id: addon.id, disabled: dragDisabled });
   const queryClient = useQueryClient();
   const { openDialog } = useDialogManager();
@@ -934,7 +946,7 @@ function AddonCard({
     <Card size="sm" className="rounded-xl border-border bg-card/60 shadow-none">
       <CardHeader className="gap-3">
         <CardTitle className="flex min-w-0 items-center gap-2 text-sm font-medium">
-          <button type="button" aria-label={`Reorder ${title}`} disabled={dragDisabled} {...attributes} {...listeners} className="touch-none cursor-grab rounded-md p-1 text-muted-foreground hover:bg-muted disabled:opacity-30"><GripVertical className="size-4" /></button>
+          {tvMode ? <div className="tv-reorder"><button type="button" aria-label={`Move ${title} up`} disabled={dragDisabled} onClick={() => onMove(-1)}>↑</button><button type="button" aria-label={`Move ${title} down`} disabled={dragDisabled} onClick={() => onMove(1)}>↓</button></div> : <button type="button" aria-label={`Reorder ${title}`} disabled={dragDisabled} {...attributes} {...listeners} className="touch-none cursor-grab rounded-md p-1 text-muted-foreground hover:bg-muted disabled:opacity-30"><GripVertical className="size-4" /></button>}
           <AddonAvatar
             manifest={addon.manifest}
             sourceUrl={addon.source_url}

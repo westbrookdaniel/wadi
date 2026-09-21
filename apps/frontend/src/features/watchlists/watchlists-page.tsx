@@ -1,6 +1,7 @@
+import { useTvPageState } from '@/components/tv/use-tv-page-state'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Settings, Search, Bookmark, X } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useRef } from 'react'
 
 import { createList, deleteList, listItemsQuery, listsQuery, queryKeys, updateList } from '@/api/queries'
 import type { ListItem, MediaPreview } from '@/api/types'
@@ -27,10 +28,10 @@ export function WatchlistsPage({ onOpenMedia }: { onOpenMedia: (media: MediaPrev
   const activeList = (lists.data ?? []).find((list) => list.id === activeListId) ?? null
   const items = useQuery(listItemsQuery(activeListId))
 
-  const [filter, setFilter] = useState('')
-  const [searchExpanded, setSearchExpanded] = useState(false)
+  const [filter, setFilter] = useTvPageState('watchlist-filter', '')
+  const [searchExpanded, setSearchExpanded] = useTvPageState('watchlist-search-expanded', false)
   const searchInput = useRef<HTMLInputElement>(null)
-  const [sort, setSort] = useState('recent')
+  const [sort, setSort] = useTvPageState('watchlist-sort', 'recent')
 
   const createMutation = useMutation({
     mutationFn: ({ name }: { name: string }) => createList(name),
@@ -86,7 +87,7 @@ export function WatchlistsPage({ onOpenMedia }: { onOpenMedia: (media: MediaPrev
   const mutationError = createMutation.error ?? renameMutation.error ?? deleteListMutation.error
 
   return (
-    <div className={cn(pageStack, 'gap-5 max-[800px]:gap-3')}>
+    <div className={cn(pageStack, 'gap-5 max-[800px]:gap-3')} data-tv-loading={items.isLoading || lists.isLoading ? '' : undefined}>
       <header className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="m-0 text-2xl font-medium tracking-tight">Watchlists</h1>
         <Button size="sm" className="rounded-lg" onClick={() => void openCreateListDialog()} disabled={createMutation.isPending}><Plus aria-hidden="true" />New list</Button>

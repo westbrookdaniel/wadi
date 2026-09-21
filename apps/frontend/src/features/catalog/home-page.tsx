@@ -1,3 +1,4 @@
+import { useDeviceStore } from '@/store/device-store'
 import { useQueries, useQuery } from '@tanstack/react-query'
 
 import { browseLayoutQuery, catalogsQuery, continueWatchingQuery, listItemsQuery, listsQuery } from '@/api/queries'
@@ -19,6 +20,7 @@ export function HomePage({
   onOpenMedia: (media: MediaPreview, preferredVideoId?: string | null) => void
   onOpenSettings: () => void
 }) {
+  const tvMode = useDeviceStore(state => state.tvMode)
   const catalogs = useQuery(catalogsQuery)
   const continueWatching = useQuery(continueWatchingQuery(12))
   const lists = useQuery(listsQuery)
@@ -54,6 +56,14 @@ export function HomePage({
     browseLayout.isLoading ||
     listItems.some((query) => query.isLoading)
   const showSetup = !isLoading && !hasContinueWatching && !hasCatalogs && !hasWatchlistContent
+
+  if (tvMode) return <div className="tv-home">
+    <header><p className="tv-eyebrow">Your next watch</p><h1>Make yourself comfortable.</h1></header>
+    {catalogs.error || continueWatching.error || lists.error || browseLayout.error || listItemsError ? <ErrorState error={catalogs.error ?? continueWatching.error ?? lists.error ?? browseLayout.error ?? listItemsError} /> : null}
+    {isLoading ? <div data-tv-loading role="status"><PosterSkeletonRow /><p>Loading your library…</p></div> : null}
+    {showSetup ? <EmptyState title="Your library starts here" body="Add a catalog in Settings to start browsing." action={<Button onClick={onOpenSettings}>Open Settings</Button>} /> : null}
+    {!isLoading && !showSetup ? <BrowseSections rows={[...rows.filter(row => row.kind === 'continue'), ...rows.filter(row => row.kind !== 'continue')]} continueItems={continueItems} listItemsByListId={listItemsByListId} onOpenMedia={onOpenMedia} /> : null}
+  </div>
 
   return (
     <div className={pageStack}>

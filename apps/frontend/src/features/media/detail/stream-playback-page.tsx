@@ -1,3 +1,4 @@
+import { useDeviceStore } from '@/store/device-store'
 import { lazy, Suspense, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { playbackPreferencesQuery } from '@/api/queries'
@@ -28,8 +29,10 @@ function ExternalPlaybackPage({ media, stream, target, onBack }: {
   </Dialog>
 }
 export function StreamPlaybackPage(props: Parameters<typeof ExternalPlaybackPage>[0]) {
+  const tvMode = useDeviceStore(state => state.tvMode)
   const prefs = useQuery(playbackPreferencesQuery)
   if (prefs.isLoading) return <div className="p-8">Loading playback preferences…</div>
-  if (prefs.data?.stream_action !== 'internal') return <ExternalPlaybackPage {...props} />
+  if (!tvMode && prefs.data?.stream_action !== 'internal') return <ExternalPlaybackPage {...props} />
+  if (tvMode && (!props.stream.url || !/^https?:\/\//i.test(props.stream.url))) return <div className="p-8"><h1>This stream cannot play inside Wadi</h1><p>Choose a directly playable stream.</p><Button data-tv-default onClick={props.onBack}>Back to streams</Button></div>
   return props.stream.url && /^https?:\/\//i.test(props.stream.url) ? <Suspense fallback={<div className="fixed inset-0 z-50 grid place-items-center bg-black text-white" role="status">Opening player…</div>}><MediaPlayerPage key={`${props.target.videoId ?? props.target.mediaId}:${props.stream.url}`} {...props} /></Suspense> : <ExternalPlaybackPage {...props} />
 }

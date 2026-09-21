@@ -1,3 +1,5 @@
+import { TvShell } from '@/components/tv/tv-shell'
+import { useDeviceStore } from '@/store/device-store'
 import { ReleaseProvider } from '../catalog/release-provider'
 import { WebFullscreen } from '@/components/web-fullscreen'
 import { DesktopDownload } from '@/components/desktop-download'
@@ -35,12 +37,17 @@ export function AppShell({
   label: string;
   onNavigate: (path: NavPath) => void;
 }) {
+  const tvMode = useDeviceStore(state => state.tvMode);
   const location = useLocation();
   const backdrop = useDynamicBackdropColor(location.pathname);
   const token = useAppStore((state) => state.token);
   const activeProfileId = useAppStore((state) => state.activeProfileId);
   const profiles = useQuery({ ...profilesQuery, enabled: Boolean(token) });
   const activeProfile = (profiles.data ?? []).find((value) => value.id === activeProfileId) ?? null;
+
+  if (tvMode) return <TvShell activePath={activePath} pageKey={String(activeProfileId) + ':' + location.pathname + (hideNavigation ? ':player' : '')} label={label} hideNavigation={hideNavigation} onNavigate={onNavigate}>
+    <ReleaseProvider key={activeProfileId} enabled={['/home', '/discover', '/watchlists', '/search'].includes(location.pathname)}>{children}</ReleaseProvider>
+  </TvShell>
 
   return (
     <div

@@ -1,3 +1,4 @@
+import { useDeviceStore } from '@/store/device-store'
 import { useAutoPlayback } from '@/store/auto-playback'
 /* eslint-disable react-refresh/only-export-components */
 import {
@@ -310,7 +311,7 @@ function MediaRoute() {
     if (!playbackPrefs.data) {
       setLaunchFailure({ stream, message: 'Playback preferences are not ready. Choose a player below or try again.' }); return
     }
-    if (playbackPrefs.data.stream_action === 'external') {
+    if (!useDeviceStore.getState().tvMode && playbackPrefs.data.stream_action === 'external') {
       const url = getStreamUrl(stream)
       if (!url) { setLaunchFailure({ stream, message: 'This stream has no playable link.' }); return }
       void openExternalPlayback(url, playbackPrefs.data).catch(error => setLaunchFailure({ stream, message: error instanceof Error ? error.message : 'Could not open player.' }))

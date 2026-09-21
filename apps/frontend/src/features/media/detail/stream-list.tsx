@@ -1,3 +1,4 @@
+import { useDeviceStore } from '@/store/device-store'
 import { useAutoPlayback } from '@/store/auto-playback'
 import { rankStreams } from './auto-pick'
 import { playbackPreferencesQuery } from '@/api/queries'
@@ -39,6 +40,7 @@ export function StreamList({
   isLoading: boolean
   onPlay: (stream: PlayableStream) => void
 }) {
+  const tvMode = useDeviceStore(state => state.tvMode)
   const settings = useAutoPlayback(state => state.settings)
   const playback = useQuery(playbackPreferencesQuery)
   const ranked = useMemo(() => rankStreams(streams, settings), [streams, settings])
@@ -46,10 +48,10 @@ export function StreamList({
   const orderedStreams = settings.enabled ? ranked.map(row => row.stream) : streams
   const attempted = useRef<string | null>(null)
   useEffect(() => {
-    if (!selectionKey || !autoPickAllowed || !settings.enabled || !settings.skipSelection || isLoading || playback.data?.stream_action !== 'internal' || !recommendation || attempted.current === selectionKey) return
+    if (!selectionKey || !autoPickAllowed || !settings.enabled || !settings.skipSelection || isLoading || (!tvMode && playback.data?.stream_action !== 'internal') || !recommendation || attempted.current === selectionKey) return
     attempted.current = selectionKey
     onPlay(recommendation.stream)
-  }, [selectionKey, autoPickAllowed, settings.enabled, settings.skipSelection, isLoading, playback.data, recommendation, onPlay])
+  }, [selectionKey, autoPickAllowed, settings.enabled, settings.skipSelection, isLoading, playback.data, recommendation, onPlay, tvMode])
   const addons = useQuery(addonsQuery)
   const sourceLabelsById = useMemo(() => {
     const map = new Map<string, string>()
@@ -118,6 +120,8 @@ export function StreamList({
               className="grid min-w-0 h-fit cursor-pointer content-between gap-1 rounded-lg border border-border bg-card/80 p-2.5 text-xs leading-relaxed text-left text-card-foreground hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/30 focus-visible:outline-none [&_small]:text-[0.76rem] [&_small]:text-primary [&_span]:text-muted-foreground"
               type="button"
               key={`${i}-${stream.addon_id}-${stream.title ?? stream.name ?? index}`}
+              data-tv-default={stream === recommendation?.stream || !recommendation && i === 0 ? '' : undefined}
+              data-tv-focus-key={`stream:${stream.addon_id}:${stream.title ?? stream.name ?? index}`}
               onClick={() => onPlay(stream)}
             >
               {stream === recommendation?.stream ? <span className="!text-primary text-xs font-medium">Recommended{recommendation.reasons.length ? ' · ' + recommendation.reasons.join(' · ') : ''}</span> : null}
@@ -137,7 +141,7 @@ export function StreamListSkeleton({ count = 5 }: { count?: number }) {
     <div
       className={cn("flex min-h-0 flex-col gap-2 overflow-y-auto pr-1 [scrollbar-width:thin]", bottomPagePadding)}
       role="status"
-      aria-label="Loading streams"
+      data-tv-loading aria-label="Loading streams"
     >
       {Array.from({ length: count }).map((_, index) => (
         <div className="grid gap-2.5 rounded-lg border border-border bg-card/70 p-3.5" key={index}>
