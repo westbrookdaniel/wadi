@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { ThemeSync } from '../../frontend/src/components/theme-sync'
 import WadiApp from '../../frontend/src/wadi-app'
 import '../../frontend/src/index.css'
+import '../../frontend/src/components/tv/tv.css'
 import { useAppStore } from '../../frontend/src/store/app-store'
 document.documentElement.classList.add('desktop-app')
 window.wadiDesktop?.onOpenSettings(() => { void router.navigate({ to: '/settings' }) })
