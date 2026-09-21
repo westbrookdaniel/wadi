@@ -9,7 +9,16 @@ export function parseSegments(body) {
     }).sort((a, b) => a.start - b.start);
 }
 
-export function addIntroDbRoutes(app, { fetchImpl = fetch, now = Date.now } = {}) {
+export function addIntroDbRoutes(app, { db, fetchImpl = fetch, now = Date.now }) {
+    const readEnabled = async userId => (await db.get('SELECT introdb_enabled FROM users WHERE id=?', userId))?.introdb_enabled === true;
+    app.get('/api/settings/introdb', async (req, res) => {
+        res.json({ enabled: await readEnabled(req.user.id) });
+    });
+    app.put('/api/settings/introdb', async (req, res) => {
+        if (typeof req.body?.enabled !== 'boolean') return res.status(400).json({ error: 'Enabled must be a boolean' });
+        await db.run('UPDATE users SET introdb_enabled=? WHERE id=?', req.body.enabled, req.user.id);
+        res.json({ enabled: req.body.enabled });
+    });
     const cache = new Map();
     const pending = new Map();
     app.get('/api/skip-segments', async (req, res) => {
@@ -21,6 +30,8 @@ export function addIntroDbRoutes(app, { fetchImpl = fetch, now = Date.now } = {}
                 : !integer(season) || !integer(episode) || Number(episode) < 1)) {
             return res.status(400).json({ error: 'Provide an IMDb ID and valid episode numbers, or is_movie=true' });
         }
+        // Check the current account before returning shared cache entries or calling IntroDB.
+        if (!await readEnabled(req.user.id)) return res.json({ items: [] });
         const params = new URLSearchParams({ imdb_id, ...(is_movie === 'true'
             ? { is_movie: 'true' } : { season: String(Number(season)), episode: String(Number(episode)) }) });
         const key = params.toString();

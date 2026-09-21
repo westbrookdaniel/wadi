@@ -86,7 +86,7 @@ export function createApp({ database = process.env.DATABASE_URL, sessionDays = 3
         next();
     });
     addAccountRoutes(app, db);
-    addIntroDbRoutes(app);
+    addIntroDbRoutes(app, { db });
     app.get('/api/server-capabilities', (_req, res) => res.json({ conversion: false }));
     app.get('/api/auth/me', async (req, res) => {
         // Renew active sessions near expiry without writing on every request.

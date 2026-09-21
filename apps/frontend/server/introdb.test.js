@@ -15,7 +15,8 @@ test('validates untrusted timestamps and preserves seconds and segment ends', ()
 test('route validates IDs, caches requests, contains failures and forwards no credentials', async t => {
   const calls = []; let clock = 0; let response = { ok: true, json: async () => ({ intro: { start_sec: 2, end_sec: 40 } }) };
   const app = express();
-  addIntroDbRoutes(app, { now: () => clock, fetchImpl: async (...args) => { calls.push(args); if (response instanceof Error) throw response; return response; } });
+  app.use((req, _res, next) => { req.user = { id: 'test-user' }; next(); });
+  addIntroDbRoutes(app, { db: { get: async () => ({ introdb_enabled: true }) }, now: () => clock, fetchImpl: async (...args) => { calls.push(args); if (response instanceof Error) throw response; return response; } });
   const server = createServer(app); server.listen(0, '127.0.0.1'); await once(server, 'listening');
   t.after(() => { server.closeAllConnections(); server.close(); });
   const base = `http://127.0.0.1:${server.address().port}/api/skip-segments?`;
@@ -34,4 +35,32 @@ test('route validates IDs, caches requests, contains failures and forwards no cr
     assert.deepEqual(await (await get(query)).json(), { items: [] });
     const count = calls.length; await get(query); assert.equal(calls.length, count);
   }
+});
+
+test('account opt-in defaults off, persists across devices, isolates users and gates cached segments', async t => {
+  const enabled = new Map(); let calls = 0;
+  const db = {
+    get: async (_sql, id) => ({ introdb_enabled: enabled.get(id) ?? false }),
+    run: async (_sql, value, id) => { enabled.set(id, value); },
+  };
+  const app = express(); app.use(express.json());
+  // Authenticated identity normally comes from main.js's session middleware.
+  app.use((req, res, next) => { if (!req.headers['x-test-user']) return res.sendStatus(401); req.user = { id: req.headers['x-test-user'] }; next(); });
+  addIntroDbRoutes(app, { db, fetchImpl: async () => { calls++; return { ok: true, json: async () => ({ intro: { start_sec: 1, end_sec: 40 } }) }; } });
+  const server = createServer(app); server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const request = (path, user = 'alice', value) => fetch(base + path, { method: value === undefined ? 'GET' : 'PUT', headers: { 'Content-Type': 'application/json', ...(user ? { 'x-test-user': user } : {}) }, body: value === undefined ? undefined : JSON.stringify(value) });
+  const settings = '/api/settings/introdb', segments = '/api/skip-segments?imdb_id=tt0903747&season=1&episode=1';
+  assert.equal((await request(settings, null)).status, 401);
+  assert.deepEqual(await (await request(settings)).json(), { enabled: false });
+  assert.deepEqual(await (await request(segments)).json(), { items: [] }); assert.equal(calls, 0);
+  assert.equal((await request(settings, 'alice', { enabled: 'true' })).status, 400);
+  assert.deepEqual(await (await request(settings, 'alice', { enabled: true, user_id: 'bob' })).json(), { enabled: true });
+  assert.deepEqual(await (await request(settings)).json(), { enabled: true }, 'new request/device reads persisted preference');
+  assert.deepEqual(await (await request(settings, 'bob')).json(), { enabled: false });
+  assert.equal((await (await request(segments)).json()).items.length, 1); assert.equal(calls, 1);
+  assert.deepEqual(await (await request(segments, 'bob')).json(), { items: [] }, 'another user cannot receive shared cached results while off');
+  await request(settings, 'alice', { enabled: false });
+  assert.deepEqual(await (await request(segments)).json(), { items: [] }); assert.equal(calls, 1);
 });

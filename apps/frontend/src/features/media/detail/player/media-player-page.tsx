@@ -1,3 +1,4 @@
+import { introDbPreferencesQuery } from '@/api/introdb'
 import { activeSegment, skipLabels, skipSegmentsQuery, type SkipSegment } from './skip-segments'
 import { TvPlayerChrome } from '@/components/tv/tv-player'
 import type { ComponentProps } from 'react'
@@ -108,7 +109,10 @@ export function MediaPlayerPage({
   const queryClient = useQueryClient()
   const [activeStream, setActiveStream] = useState(stream)
   const [activeTarget, setActiveTarget] = useState(target)
-  const segments = useQuery(skipSegmentsQuery(activeTarget))
+  const accountRevision = useAppStore(state => state.authRevision)
+  const introDbPreferences = useQuery(introDbPreferencesQuery(accountRevision))
+  const introDbEnabled = !introDbPreferences.isError && introDbPreferences.data?.enabled === true
+  const segments = useQuery(skipSegmentsQuery(activeTarget, introDbEnabled, accountRevision))
   const streamUrl = activeStream.url
   const token = useAppStore((state) => state.token)
   const externalPreferences = useQuery(playbackPreferencesQuery)
@@ -671,7 +675,7 @@ export function MediaPlayerPage({
           ) : null}
 
           <PlayerChrome
-            skipSegment={effectiveState.status === 'ready' ? activeSegment(segments.data ?? [], effectiveState.currentTime, effectiveState.duration) : undefined}
+            skipSegment={introDbEnabled && effectiveState.status === 'ready' ? activeSegment(segments.data ?? [], effectiveState.currentTime, effectiveState.duration) : undefined}
             playerRef={playerRef}
             mediaName={media.name}
             state={effectiveState}

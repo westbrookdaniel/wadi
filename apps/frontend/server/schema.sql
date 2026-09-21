@@ -140,3 +140,6 @@ CREATE TABLE IF NOT EXISTS episode_catalogs (
   fetched_at TEXT NOT NULL,
   PRIMARY KEY(user_id, addon_id, media_type, media_id)
 );
+
+-- Account-wide opt-in, shared by all profiles and devices.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS introdb_enabled BOOLEAN NOT NULL DEFAULT FALSE;

@@ -20,11 +20,11 @@ export function segmentParams(target: PlaybackTarget): string | null {
   return params.toString()
 }
 
-export function skipSegmentsQuery(target: PlaybackTarget) {
+export function skipSegmentsQuery(target: PlaybackTarget, enabled = false, accountRevision = 0) {
   const params = segmentParams(target)
   return queryOptions({
-    queryKey: ['skip-segments', params],
-    enabled: params !== null,
+    queryKey: ['skip-segments', accountRevision, params],
+    enabled: enabled && params !== null,
     queryFn: async ({ signal }) => (await apiRequest<{ items: SkipSegment[] }>(`/api/skip-segments?${params}`, { signal })).items,
     staleTime: 60 * 60 * 1000,
     retry: false,
