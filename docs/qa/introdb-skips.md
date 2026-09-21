@@ -6,7 +6,7 @@ IntroDB is on by default. Settings → Skip segments → Show skip buttons contr
 
 ## Verified
 
-- All 165 frontend tests pass; targeted tests cover title/episode identity, specials, segment boundaries, invalid durations, no coverage, provider outages, stale episode results, desktop controls, TV activation and Back behavior.
+- All 167 frontend tests pass; targeted tests cover title/episode identity, specials, segment boundaries, invalid durations, no coverage, provider outages, stale episode results, desktop controls, TV activation and Back behavior.
 - All 13 API tests pass against disposable local PostgreSQL 18, including separate user/session/profile preference persistence, default-on behavior, invalid writes and account export.
 - Isolated HTTP tests for query validation, movie queries, caching, expired entries, malformed JSON, 404/429/network failures, and excluding Wadi authorization from the upstream request.
 - ESLint, TypeScript, Next.js production build and desktop Vite renderer build.
@@ -22,3 +22,10 @@ IntroDB is on by default. Settings → Skip segments → Show skip buttons contr
 - The disposable database was stopped after QA; production data and the installed app were not modified.
 - Run `pnpm db:migrate` to add the default-true `users.introdb_enabled` column before deploying. The hosted API needs this route deployed before a desktop build can obtain timestamps. The installed Wadi app has not been replaced by this PR.
 - Coverage depends on IntroDB and the source edit. Unknown/non-IMDb addon identifiers are skipped; segment ends beyond the current stream duration are suppressed.
+
+## Release review — v0.1.7
+
+- Fixed end-of-runtime seeks so skipping the final outro finishes playback and notifies existing autoplay instead of opening an empty desktop conversion or leaving the web player stopped without an end event. Desktop Play can restart from zero afterward.
+- Empty timestamp responses expire after one minute in the client, allowing a later playback visit to recover from temporary provider failures.
+- TV Back dismisses only the current visit to a segment; seeking away and back offers the skip again.
+- Regression coverage includes exact-end desktop seeks, shorter empty-result cache lifetime and TV re-entry. All seven desktop service/updater tests pass after preparing the bundled media binaries.

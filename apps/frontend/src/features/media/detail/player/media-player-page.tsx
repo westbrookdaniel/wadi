@@ -1768,6 +1768,11 @@ function useMediabunnyPlayer({
 
     playbackTimeAtStartRef.current = nextTime
     updateState({ currentTime: nextTime })
+    if (durationRef.current > 0 && nextTime >= durationRef.current) {
+      onProgressCommitRef.current(nextTime, durationRef.current)
+      endedCallback.current?.()
+      return
+    }
     await startVideoIterator()
 
     if (commit) {

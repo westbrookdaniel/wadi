@@ -26,7 +26,8 @@ export function skipSegmentsQuery(target: PlaybackTarget, enabled = false, accou
     queryKey: ['skip-segments', accountRevision, params],
     enabled: enabled && params !== null,
     queryFn: async ({ signal }) => (await apiRequest<{ items: SkipSegment[] }>(`/api/skip-segments?${params}`, { signal })).items,
-    staleTime: 60 * 60 * 1000,
+    // Empty results may represent a temporary provider outage; retry on a later mount.
+    staleTime: query => query.state.data?.length ? 60 * 60 * 1000 : 60_000,
     retry: false,
     refetchOnWindowFocus: false,
   })

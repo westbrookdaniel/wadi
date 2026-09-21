@@ -18,6 +18,12 @@ type Props = {
 export function TvPlayerChrome(props: Props) {
   const { state } = props
   const [dismissedSkip, setDismissedSkip] = useState<SkipSegment | undefined>(undefined)
+  const [previousSkip, setPreviousSkip] = useState(props.skipSegment)
+  // Dismiss only this visit to a segment, so seeking back can offer it again.
+  if (previousSkip !== props.skipSegment) {
+    setPreviousSkip(props.skipSegment)
+    setDismissedSkip(undefined)
+  }
   const skipVisible = Boolean(props.skipSegment && props.skipSegment !== dismissedSkip)
   const [visible, setVisible] = useState(true)
   const controlsVisible = visible || skipVisible

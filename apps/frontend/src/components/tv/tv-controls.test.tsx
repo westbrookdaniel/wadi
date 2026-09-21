@@ -238,3 +238,15 @@ it('lets Back hide a pinned skip prompt before leaving playback', () => {
   fireEvent.keyDown(document.activeElement!, { key: 'Escape' })
   expect(props.onBack).toHaveBeenCalledOnce()
 })
+
+
+it('offers a dismissed skip again after leaving and seeking back into its segment', () => {
+  const props = playerProps()
+  const segment = { type: 'intro' as const, start: 40, end: 80 }
+  const view = render(<TvPlayerChrome {...props} skipSegment={segment} />)
+  fireEvent.keyDown(document.activeElement!, { key: 'Escape' })
+  expect(screen.queryByRole('button', { name: 'Skip intro' })).not.toBeInTheDocument()
+  view.rerender(<TvPlayerChrome {...props} />)
+  view.rerender(<TvPlayerChrome {...props} skipSegment={segment} />)
+  expect(screen.getByRole('button', { name: 'Skip intro' })).toBeInTheDocument()
+})

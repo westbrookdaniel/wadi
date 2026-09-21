@@ -38,3 +38,21 @@ it('does not request segments by default and keeps account query caches separate
   expect(skipSegmentsQuery(target, false).enabled).toBe(false)
   expect(skipSegmentsQuery(target, true, 1).queryKey).not.toEqual(skipSegmentsQuery(target, true, 2).queryKey)
 })
+
+
+it('expires empty provider results sooner than successful timestamps', async () => {
+  let now = Date.now()
+  const clock = vi.spyOn(Date, 'now').mockImplementation(() => now)
+  const client = new QueryClient()
+  const options = skipSegmentsQuery({ mediaType: 'movie', mediaId: 'tt0371746', videoId: null }, true)
+  vi.mocked(apiRequest).mockResolvedValueOnce({ items: [] })
+    .mockResolvedValue({ items: [{ type: 'intro', start: 5, end: 30 }] })
+  try {
+    await client.fetchQuery(options)
+    now += 61_000
+    expect(await client.fetchQuery(options)).toEqual([{ type: 'intro', start: 5, end: 30 }])
+    now += 61_000
+    await client.fetchQuery(options)
+    expect(apiRequest).toHaveBeenCalledTimes(2)
+  } finally { clock.mockRestore(); client.clear() }
+})
