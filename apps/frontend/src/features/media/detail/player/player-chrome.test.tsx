@@ -50,3 +50,14 @@ it('keeps navigation visible on initial load but waits for metadata before enabl
   expect(screen.getByRole('button', { name: 'Play' })).toBeDisabled()
   expect(screen.getByRole('slider', { name: 'Seek Test film' })).toHaveAttribute('aria-disabled', 'true')
 })
+
+it('pins skip controls and seeks to the segment end without toggling playback', () => {
+  const input = props()
+  const view = render(<TooltipProvider><PlayerChrome {...input} state={{ ...input.state, status: 'ready' }} skipSegment={{ type: 'intro', start: 0, end: 95 }} /></TooltipProvider>)
+  expect(view.container.querySelector('.player-chrome')).toHaveAttribute('data-visible', 'true')
+  fireEvent.click(screen.getByRole('button', { name: 'Skip intro' }))
+  expect(input.onSeek).toHaveBeenCalledWith(95)
+  expect(input.onTogglePlay).not.toHaveBeenCalled()
+  view.rerender(<TooltipProvider><PlayerChrome {...input} /></TooltipProvider>)
+  expect(screen.queryByRole('button', { name: 'Skip intro' })).not.toBeInTheDocument()
+})

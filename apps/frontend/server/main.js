@@ -1,3 +1,4 @@
+import { addIntroDbRoutes } from './introdb.js';
 import { addEpisodeRoutes } from './episodes.js';
 import { emailVerification } from './email-verification.js';
 import { fetchAddonJson } from './addon-fetch.js';
@@ -85,6 +86,7 @@ export function createApp({ database = process.env.DATABASE_URL, sessionDays = 3
         next();
     });
     addAccountRoutes(app, db);
+    addIntroDbRoutes(app, { db });
     app.get('/api/server-capabilities', (_req, res) => res.json({ conversion: false }));
     app.get('/api/auth/me', async (req, res) => {
         // Renew active sessions near expiry without writing on every request.

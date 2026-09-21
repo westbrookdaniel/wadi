@@ -123,3 +123,15 @@ macOS releases use explicit ad-hoc signing (`identity: "-"`) without Apple certi
 ## iOS home-screen app
 
 Open watchwadi.com in Safari, choose Share, then Add to Home Screen. The manifest and Apple touch icon launch Wadi in standalone mode with safe-area spacing. The app requires a network connection; account data and video are not cached for offline use.
+
+### IntroDB timestamps
+
+IntroDB is on by default. Settings → Skip segments stores the signed-in user’s preference in `users.introdb_enabled`, shared across their profiles and devices. Apply the normal `pnpm db:migrate` schema update before deploying the API. `/api/settings/introdb` reads/writes only the authenticated user’s row; the segment endpoint checks this preference before reading its cache or calling IntroDB. Account export includes the preference.
+
+When enabled, the built-in player requests `/api/skip-segments` through the normal authenticated API client. The server calls `https://api.introdb.app/segments` with an IMDb ID and season/episode, or `is_movie=true`. Only title identifiers are forwarded: no account credentials or stream URLs. A server route is required because IntroDB's CORS response does not allow the Wadi web origin.
+
+Successful lookups and missing entries are cached for one hour in a bounded process-local cache; upstream failures are cached for one minute. Requests time out after five seconds and identical in-flight lookups are shared. The optional metadata never blocks playback. Timestamps are seconds, validated before use, and hidden when they exceed the current stream duration. Unknown addon IDs are not guessed or resolved via extra services.
+
+Skip buttons use the existing player seek handler (including desktop conversion and web casting), preserving pause state and progress handling. Skipping is manual; the outro button seeks to the segment end rather than forcing the next episode. The hosted API must be deployed alongside this frontend feature for desktop lookups to work.
+
+Run `node --test apps/frontend/server/introdb.test.js` for the isolated proxy checks and the frontend test suite for segment identity, boundaries and desktop/TV controls.

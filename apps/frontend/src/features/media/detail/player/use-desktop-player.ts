@@ -113,6 +113,12 @@ export function useDesktopPlayer({ videoRef, source, hints, savedPosition, watch
   },[videoRef,update])
   const play=useCallback(async()=>{
     playing.current=true
+    if(stateRef.current.duration>0 && position.current>=stateRef.current.duration){
+      position.current=0
+      update({currentTime:0,playing:true})
+      restart(n=>n+1)
+      return
+    }
     if(stateRef.current.status==='loading')update({playing:true})
     if(job.current && stateRef.current.status==='ready' && videoRef.current){
       try {await videoRef.current.play()} catch {playing.current=false;update({playing:false})}
@@ -122,6 +128,16 @@ export function useDesktopPlayer({ videoRef, source, hints, savedPosition, watch
     void _commit
     const target=Math.max(0,Math.min(seconds,stateRef.current.duration||seconds))
     const video=videoRef.current, current=session.current
+    // An outro can end at the exact runtime. Do not start an empty conversion.
+    if(stateRef.current.duration>0 && target>=stateRef.current.duration){
+      playing.current=false
+      video?.pause()
+      position.current=target
+      update({currentTime:target,playing:false})
+      commit.current(target,stateRef.current.duration)
+      endedCallback.current?.()
+      return
+    }
     position.current=target
     update({currentTime:target})
     commit.current(target,stateRef.current.duration)

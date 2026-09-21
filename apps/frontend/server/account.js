@@ -16,7 +16,7 @@ export function addAccountRoutes(app, db) {
   app.get('/api/account/export', async (req, res) => {
     const data = await db.transaction(async tx => {
       await tx.run('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
-      const result = { version: 1, exported_at: new Date().toISOString(), account: await tx.get('SELECT id,email,created_at FROM users WHERE id=?', req.user.id) };
+      const result = { version: 1, exported_at: new Date().toISOString(), account: await tx.get('SELECT id,email,created_at,introdb_enabled FROM users WHERE id=?', req.user.id) };
       for (const table of ['profiles','addons','lists','list_items','watch_states','user_settings']) result[table] = await tx.all(`SELECT * FROM ${table} WHERE user_id=?`, req.user.id);
       result.player_settings = await tx.all('SELECT player_settings.* FROM player_settings JOIN profiles ON profiles.id=player_settings.profile_id WHERE profiles.user_id=?', req.user.id);
       return result;

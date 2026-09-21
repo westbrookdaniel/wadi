@@ -1,9 +1,11 @@
+import { skipLabels, type SkipSegment } from '@/features/media/detail/player/skip-segments'
 import { useEffect, useRef, useState } from 'react'
 import { nearestTarget } from '@/components/tv-spatial'
 import { canControlPlayback, type PlayerState } from '@/features/media/detail/player/state'
 import { TvPicker } from './tv-picker'
 
 type Props = {
+  skipSegment?: SkipSegment
   mediaName: string; state: PlayerState; warning: string | null; hasEpisodeSwapper: boolean
   onBack: () => void; onTogglePlay: () => void; onSeek: (value: number) => void; onOpenEpisodeSwapper: () => void
   subtitleTracks: { id: string; language: string; source: string }[]; selectedSubtitleId: string | null
@@ -15,7 +17,16 @@ type Props = {
 
 export function TvPlayerChrome(props: Props) {
   const { state } = props
+  const [dismissedSkip, setDismissedSkip] = useState<SkipSegment | undefined>(undefined)
+  const [previousSkip, setPreviousSkip] = useState(props.skipSegment)
+  // Dismiss only this visit to a segment, so seeking back can offer it again.
+  if (previousSkip !== props.skipSegment) {
+    setPreviousSkip(props.skipSegment)
+    setDismissedSkip(undefined)
+  }
+  const skipVisible = Boolean(props.skipSegment && props.skipSegment !== dismissedSkip)
   const [visible, setVisible] = useState(true)
+  const controlsVisible = visible || skipVisible
   const [seek, setSeek] = useState<number | null>(null)
   const [activity, setActivity] = useState(0)
   const root = useRef<HTMLDivElement>(null)
@@ -26,18 +37,18 @@ export function TvPlayerChrome(props: Props) {
   useEffect(() => { latest.current = props }, [props])
   const disabled = !canControlPlayback(state)
   useEffect(() => {
-    if (!visible || !state.playing || seek !== null || disabled) return
+    if (!visible || skipVisible || !state.playing || seek !== null || disabled) return
     const timer = window.setInterval(() => {
       if (document.querySelector('[role="dialog"], [role="alertdialog"]')) return
       setVisible(false)
     }, 4000)
     return () => window.clearInterval(timer)
-  }, [visible, state.playing, seek, activity, disabled])
+  }, [visible, skipVisible, state.playing, seek, activity, disabled])
   useEffect(() => {
     if (document.querySelector('[role="dialog"]')) return
-    if (visible) (seeking ? timeline : play).current?.focus()
+    if (controlsVisible) (seeking ? timeline : play).current?.focus()
     else root.current?.focus()
-  }, [visible, seeking])
+  }, [controlsVisible, seeking])
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.ctrlKey || event.altKey || event.metaKey || document.querySelector('[role="dialog"], [role="alertdialog"], [role="listbox"], [role="menu"]')) return
@@ -54,9 +65,9 @@ export function TvPlayerChrome(props: Props) {
         else if (horizontal) setSeek(value => Math.max(0, Math.min(current.state.duration, (value ?? current.state.currentTime) + (event.key === 'ArrowLeft' ? -10 : 10))))
         return
       }
-      if (back) { if (visible) setVisible(false); else current.onBack(); return }
+      if (back) { if (controlsVisible) { setVisible(false); setDismissedSkip(current.skipSegment) } else current.onBack(); return }
       if (event.key === ' ' || event.key === 'MediaPlayPause') { if (!event.repeat && canControlPlayback(current.state)) { current.onTogglePlay(); setVisible(true) } return }
-      if (!visible) {
+      if (!controlsVisible) {
         setVisible(true)
         if (horizontal && canControlPlayback(current.state)) setSeek(Math.max(0, Math.min(current.state.duration, current.state.currentTime + (event.key === 'ArrowLeft' ? -10 : 10))))
         return
@@ -72,13 +83,13 @@ export function TvPlayerChrome(props: Props) {
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [visible, seek])
+  }, [controlsVisible, seek])
   if (state.error) return null
   const position = seek ?? state.currentTime
   return <div ref={root} data-tv-player tabIndex={0} aria-label="Video player" className="tv-player"
     onFocusCapture={() => setActivity(count => count + 1)}
     onPointerMove={() => { setVisible(true); setActivity(count => count + 1) }}>
-    {visible ? <div className="tv-player-controls">
+    {controlsVisible ? <div className="tv-player-controls">
       <header><button type="button" onClick={props.onBack}>← Back</button><h1>{props.mediaName}</h1></header>
       <div className="tv-player-bottom">
         {props.warning ? <p role="status">{props.warning}</p> : null}
@@ -91,6 +102,7 @@ export function TvPlayerChrome(props: Props) {
           <div><button type="button" onClick={() => setSeek(Math.max(0, seek - 10))}>−10 seconds</button><button type="button" onClick={() => { props.onSeek(seek); setSeek(null) }}>Apply seek</button><button type="button" onClick={() => setSeek(Math.min(state.duration, seek + 10))}>+10 seconds</button><button type="button" onClick={() => setSeek(null)}>Cancel</button></div>
         </div> : <div className="tv-player-actions">
           <button ref={play} type="button" data-tv-default className="tv-primary" disabled={disabled} onClick={props.onTogglePlay}>{state.playing ? 'Pause' : 'Play'}</button>
+          {props.skipSegment ? <button type="button" onClick={() => props.onSeek(props.skipSegment!.end)}>{skipLabels[props.skipSegment.type]}</button> : null}
           {props.hasEpisodeSwapper ? <button type="button" onClick={props.onOpenEpisodeSwapper}>Episodes</button> : null}
           <TvPicker label="Audio" value={state.selectedAudioTrackId ?? ''} disabled={!state.audioTracks.length} options={state.audioTracks.map(track => ({ value: track.id, label: track.label || track.language }))} onChange={props.onSelectAudioTrack} />
           <TvPicker label="Subtitles" value={props.selectedSubtitleId ?? '__off'} options={[{ value: '__off', label: 'Subtitles off' }, ...props.subtitleTracks.map(track => ({ value: track.id, label: `${track.language} · ${track.source}` }))]} onChange={value => props.onSelectSubtitle(value === '__off' ? null : value)} />
