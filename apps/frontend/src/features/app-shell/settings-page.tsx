@@ -64,6 +64,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -628,6 +629,16 @@ function ProfileActionsMenu({
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  const tvMode = useDeviceStore(state => state.tvMode);
+  if (tvMode) return <Dialog open={open} onOpenChange={next => { if (next !== open) onToggle(); }}>
+      <DialogTrigger asChild><Button variant="ghost" type="button" aria-label="Profile actions"><Ellipsis aria-hidden="true" /></Button></DialogTrigger>
+      <DialogContent>
+        <DialogTitle>Profile actions</DialogTitle>
+        <DialogDescription>Choose an action. Back cancels.</DialogDescription>
+        <Button type="button" onClick={onEdit}><Pencil aria-hidden="true" />Edit</Button>
+        <Button type="button" onClick={onDelete}><Trash2 aria-hidden="true" />Delete</Button>
+      </DialogContent>
+    </Dialog>;
   return (
     <div className="relative grid justify-items-center">
       <Button

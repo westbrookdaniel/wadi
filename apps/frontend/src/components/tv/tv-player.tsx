@@ -46,6 +46,7 @@ export function TvPlayerChrome(props: Props) {
       const back = event.key === 'Escape' || event.key === 'BrowserBack'
       const horizontal = event.key === 'ArrowLeft' || event.key === 'ArrowRight'
       event.preventDefault(); event.stopImmediatePropagation()
+      if (event.repeat && !event.key.startsWith('Arrow')) return
       setActivity(count => count + 1)
       if (seek !== null) {
         if (back) setSeek(null)
@@ -75,6 +76,7 @@ export function TvPlayerChrome(props: Props) {
   if (state.error) return null
   const position = seek ?? state.currentTime
   return <div ref={root} data-tv-player tabIndex={0} aria-label="Video player" className="tv-player"
+    onFocusCapture={() => setActivity(count => count + 1)}
     onPointerMove={() => { setVisible(true); setActivity(count => count + 1) }}>
     {visible ? <div className="tv-player-controls">
       <header><button type="button" onClick={props.onBack}>← Back</button><h1>{props.mediaName}</h1></header>

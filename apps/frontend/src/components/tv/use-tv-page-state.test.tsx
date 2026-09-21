@@ -19,3 +19,10 @@ it('restores TV browsing state after unmount without leaking it to another profi
   act(() => useDeviceStore.setState({ tvMode: false }))
   expect(second.result.current[0]).toBe('')
 })
+
+it.each([true, false])('composes batched functional state updates in TV mode %s', tvMode => {
+  useDeviceStore.setState({ tvMode })
+  const state = renderHook(() => useTvPageState(`batch-${tvMode}`, 0))
+  act(() => { state.result.current[1](value => value + 1); state.result.current[1](value => value + 1) })
+  expect(state.result.current[0]).toBe(2)
+})

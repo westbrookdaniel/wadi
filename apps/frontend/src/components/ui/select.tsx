@@ -23,9 +23,13 @@ function Select({
     })
     visit(props.children)
     const trigger = elements.find(element => element.type === SelectTrigger)
+    const display = elements.find(element => element.type === SelectValue)
     return <TvPicker label={String(trigger?.props['aria-label'] ?? 'Choose an option')}
+      id={trigger?.props.id as string | undefined} className={trigger?.props.className as string | undefined}
+      describedBy={trigger?.props['aria-describedby'] as string | undefined}
+      placeholder={display?.props.placeholder as React.ReactNode} displayValue={display?.props.children as React.ReactNode}
       value={props.value ?? localValue} disabled={props.disabled || Boolean(trigger?.props.disabled)}
-      options={elements.filter(element => element.type === SelectItem).map(element => ({ value: String(element.props.value), label: React.Children.toArray(element.props.children as React.ReactNode).join(''), disabled: Boolean(element.props.disabled) }))}
+      options={elements.filter(element => element.type === SelectItem).map(element => ({ value: String(element.props.value), label: element.props.children as React.ReactNode, disabled: Boolean(element.props.disabled) }))}
       onChange={value => { setLocalValue(value); props.onValueChange?.(value) }} />
   }
   return <SelectPrimitive.Root data-slot="select" {...props} />

@@ -5,6 +5,8 @@ import { useDeviceStore } from '@/store/device-store'
 import { SettingsSelect } from '@/components/ui/settings-select'
 import { TvNavigation } from '@/components/tv-navigation'
 import { TvPlayerChrome } from './tv-player'
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { initialPlayerState } from '@/features/media/detail/player/state'
 
 beforeEach(() => {
@@ -122,4 +124,94 @@ it('keeps the native desktop select when TV mode is disabled', () => {
   useDeviceStore.setState({ tvMode: false })
   render(<SettingsSelect aria-label="Season" value="1" onValueChange={() => {}}><option value="1">Season 1</option></SettingsSelect>)
   expect(screen.getByRole('combobox', { name: 'Season' }).tagName).toBe('SELECT')
+})
+
+
+it('preserves rich option labels, placeholders and trigger associations in TV selects', () => {
+  render(<><TvNavigation /><Select defaultValue="">
+    <SelectTrigger id="saved-list" aria-label="Watchlist" aria-describedby="list-help"><SelectValue placeholder="Add to list" /></SelectTrigger>
+    <SelectContent><SelectItem value="weekend"><span>Weekend</span><span aria-hidden="true">★</span></SelectItem></SelectContent>
+  </Select><p id="list-help">Save for later</p></>)
+  const trigger = screen.getByRole('button', { name: 'Watchlist' })
+  expect(trigger).toHaveTextContent('Add to list')
+  expect(trigger).toHaveAttribute('id', 'saved-list')
+  expect(trigger).toHaveAccessibleDescription('Save for later')
+  fireEvent.click(trigger)
+  fireEvent.click(screen.getByRole('button', { name: 'Weekend' }))
+  expect(trigger).toHaveTextContent('Weekend')
+  expect(trigger).not.toHaveTextContent('[object Object]')
+})
+
+it('keeps focus recovery inside an overlay when its focused action disappears', async () => {
+  const view = render(<><TvNavigation /><section data-tv-region="background"><button>Background</button></section></>)
+  screen.getByText('Background').focus()
+  view.rerender(<><TvNavigation /><section data-tv-region="background"><button>Background</button></section><div role="dialog" aria-label="Actions"><button>Remove me</button><button>Stay here</button></div></>)
+  screen.getByText('Remove me').focus()
+  view.rerender(<><TvNavigation /><section data-tv-region="background"><button>Background</button></section><div role="dialog" aria-label="Actions"><button>Stay here</button></div></>)
+  await waitFor(() => expect(screen.getByText('Stay here')).toHaveFocus())
+})
+
+it('ignores held OK and Back so one press cannot commit or dismiss multiple player states', () => {
+  const props = playerProps()
+  render(<><TvNavigation /><TvPlayerChrome {...props} /></>)
+  fireEvent.click(screen.getByRole('button', { name: 'Seek' }))
+  fireEvent.keyDown(document.activeElement!, { key: 'Enter', repeat: true })
+  expect(props.onSeek).not.toHaveBeenCalled()
+  fireEvent.keyDown(document.activeElement!, { key: 'Escape' })
+  fireEvent.keyDown(document.activeElement!, { key: 'Escape', repeat: true })
+  expect(screen.getByRole('button', { name: 'Pause' })).toBeInTheDocument()
+  fireEvent.keyDown(document.activeElement!, { key: 'Escape' })
+  fireEvent.keyDown(document.activeElement!, { key: 'Escape', repeat: true })
+  expect(props.onBack).not.toHaveBeenCalled()
+})
+
+it('validates numeric constraints without applying a draft and accepts typing on Done', async () => {
+  const change = vi.fn()
+  render(<><TvNavigation /><input type="number" aria-label="Delay" defaultValue="2" min={1} max={5} step={1} onChange={change} /></>)
+  const input = screen.getByRole('spinbutton', { name: 'Delay' })
+  fireEvent.click(input)
+  fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+  const done = screen.getByRole('button', { name: 'Done' })
+  done.focus()
+  fireEvent.keyDown(done, { key: '9' })
+  fireEvent.click(done)
+  expect(screen.getByRole('alert')).toBeInTheDocument()
+  expect(input).toHaveValue(2)
+  expect(change).not.toHaveBeenCalled()
+  fireEvent.keyDown(done, { key: 'Backspace' })
+  fireEvent.keyDown(done, { key: '3' })
+  fireEvent.click(done)
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  expect(screen.getByRole('spinbutton', { name: 'Delay' })).toHaveValue(3)
+  expect(change).toHaveBeenCalledTimes(1)
+})
+
+it('finishes slider adjustment before dismissing its parent dialog', async () => {
+  function Modal() {
+    const [open, setOpen] = useState(true)
+    return <><TvNavigation /><Dialog open={open} onOpenChange={setOpen}><DialogContent><DialogTitle>Preferences</DialogTitle><DialogDescription>Adjust settings</DialogDescription><input type="range" aria-label="Countdown" defaultValue={5} min={0} max={10} /></DialogContent></Dialog></>
+  }
+  render(<Modal />)
+  const slider = screen.getByRole('slider')
+  slider.focus()
+  fireEvent.keyDown(slider, { key: 'Enter' })
+  fireEvent.keyDown(slider, { key: 'ArrowRight' })
+  expect(slider).toHaveValue('6')
+  fireEvent.keyDown(slider, { key: 'Escape' })
+  expect(screen.getByRole('dialog')).toBeInTheDocument()
+  fireEvent.keyDown(slider, { key: 'Escape' })
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+})
+
+it('gives playback controls a fresh idle timeout after closing a picker', async () => {
+  vi.useFakeTimers()
+  render(<><TvNavigation /><TvPlayerChrome {...playerProps()} /></>)
+  fireEvent.click(screen.getByRole('button', { name: 'Playback speed' }))
+  act(() => { vi.advanceTimersByTime(7900) })
+  fireEvent.keyDown(document.activeElement!, { key: 'Escape' })
+  await act(async () => { vi.advanceTimersByTime(0) })
+  act(() => { vi.advanceTimersByTime(200) })
+  expect(screen.getByRole('button', { name: 'Pause' })).toBeInTheDocument()
+  act(() => { vi.advanceTimersByTime(4000) })
+  expect(screen.queryByRole('button', { name: 'Pause' })).not.toBeInTheDocument()
 })

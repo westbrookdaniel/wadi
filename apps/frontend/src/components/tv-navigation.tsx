@@ -57,8 +57,9 @@ export function TvNavigation() {
     let adjusting: HTMLInputElement | null = null
     const remember = (event: FocusEvent) => {
       const element = event.target
-      if (!(element instanceof HTMLElement) || scope() !== document) return
+      if (!(element instanceof HTMLElement)) return
       if (adjusting && element !== adjusting) { adjusting.setAttribute('aria-description', 'OK to adjust.'); adjusting = null }
+      if (scope() !== document) return
       const region = element.closest<HTMLElement>('[data-tv-region]')
       if (region) regionMemory.set(region, element)
       lastRegion = region
@@ -87,7 +88,7 @@ export function TvNavigation() {
         if (next) { arriving = false; focus(next); return }
       }
       if (!(active instanceof HTMLElement) || !items.includes(active)) {
-        const regionItems = lastRegion?.isConnected ? targets(lastRegion) : []
+        const regionItems = lastRegion?.isConnected && (root === document || root.contains(lastRegion)) ? targets(lastRegion).filter(item => items.includes(item)) : []
         focus(regionItems[Math.min(lastIndex, regionItems.length - 1)] ?? items.find(item => item.hasAttribute('data-tv-default')) ?? items[0])
       }
     }
@@ -99,6 +100,10 @@ export function TvNavigation() {
       // Custom Radix menus own arrows only while OPEN, never at their trigger.
       if (['Enter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) arriving = false
       const isBack = event.key === 'Escape' || event.key === 'BrowserBack'
+      if (event.repeat && (isBack || event.key === 'Enter')) { stop(event); return }
+      if (isBack && adjusting === active && adjusting) {
+        adjusting.setAttribute('aria-description', 'OK to adjust.'); adjusting = null; stop(event); return
+      }
       if (isBack && root !== document) {
         if (event.key === 'BrowserBack') {
           stop(event); active?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
@@ -166,7 +171,7 @@ export function TvNavigation() {
     document.addEventListener('focusin', remember)
     let repairFrame = 0
     const observer = new MutationObserver(() => { cancelAnimationFrame(repairFrame); repairFrame = requestAnimationFrame(repair) })
-    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-tv-page', 'data-tv-focus-scope', 'data-tv-loading', 'disabled', 'hidden', 'aria-hidden', 'open'] })
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-tv-page', 'data-tv-focus-scope', 'data-tv-loading', 'disabled', 'aria-disabled', 'hidden', 'aria-hidden', 'data-state', 'open'] })
     repair()
     let frame = 0, previous = '', nextRepeat = 0
     const poll = (time: number) => {

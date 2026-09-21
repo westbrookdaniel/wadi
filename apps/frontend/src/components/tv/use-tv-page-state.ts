@@ -17,8 +17,10 @@ export function useTvPageState<T>(name: string, initial: T): [T, (next: SetState
   const [local, setLocal] = useState(initial)
   const value = tvMode ? remembered ?? initial : local
   return [value, next => {
-    const result = typeof next === 'function' ? (next as (previous: T) => T)(value) : next
-    if (tvMode) useBrowseMemory.getState().save(key, result)
-    else setLocal(result)
+    if (tvMode) {
+      const previous = (useBrowseMemory.getState().values[key] as T | undefined) ?? initial
+      const result = typeof next === 'function' ? (next as (previous: T) => T)(previous) : next
+      useBrowseMemory.getState().save(key, result)
+    } else setLocal(next)
   }]
 }
