@@ -1,5 +1,8 @@
 "use client"
 
+import { useDeviceStore } from '@/store/device-store'
+import { TvPicker } from '@/components/tv/tv-picker'
+
 import * as React from "react"
 import { Select as SelectPrimitive } from "radix-ui"
 
@@ -9,6 +12,26 @@ import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react"
 function Select({
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Root>) {
+  const tvMode = useDeviceStore(state => state.tvMode)
+  const [localValue, setLocalValue] = React.useState(props.defaultValue ?? '')
+  if (tvMode) {
+    const elements: React.ReactElement<Record<string, unknown>>[] = []
+    const visit = (children: React.ReactNode) => React.Children.forEach(children, child => {
+      if (!React.isValidElement<Record<string, unknown>>(child)) return
+      elements.push(child)
+      visit(child.props.children as React.ReactNode)
+    })
+    visit(props.children)
+    const trigger = elements.find(element => element.type === SelectTrigger)
+    const display = elements.find(element => element.type === SelectValue)
+    return <TvPicker label={String(trigger?.props['aria-label'] ?? 'Choose an option')}
+      id={trigger?.props.id as string | undefined} className={trigger?.props.className as string | undefined}
+      describedBy={trigger?.props['aria-describedby'] as string | undefined}
+      placeholder={display?.props.placeholder as React.ReactNode} displayValue={display?.props.children as React.ReactNode}
+      value={props.value ?? localValue} disabled={props.disabled || Boolean(trigger?.props.disabled)}
+      options={elements.filter(element => element.type === SelectItem).map(element => ({ value: String(element.props.value), label: element.props.children as React.ReactNode, disabled: Boolean(element.props.disabled) }))}
+      onChange={value => { setLocalValue(value); props.onValueChange?.(value) }} />
+  }
   return <SelectPrimitive.Root data-slot="select" {...props} />
 }
 

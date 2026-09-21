@@ -135,6 +135,7 @@ export function SeriesDetailPage({
         step === "streams" && selectedEpisode ? (
           <div className="flex min-h-0 flex-1 flex-col gap-3">
             <Button
+              data-tv-back
               className="w-fit"
               type="button"
               size="sm"
@@ -305,6 +306,8 @@ function EpisodeButton({
       <button
         className="grid flex-1 min-w-0 cursor-pointer grid-cols-[80px_1fr] gap-2 text-left"
         type="button"
+        data-tv-focus-key={`episode:${episode.id}`}
+        data-tv-default={!watchState?.watched ? '' : undefined}
         onClick={onClick}
       >
         <Artwork src={episode.thumbnail} className="h-16 w-20 rounded-l-lg" />

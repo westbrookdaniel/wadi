@@ -34,6 +34,7 @@ export function MediaCard({
         aria-label={`Open ${title}`}
         type="button"
         onClick={onOpen}
+        data-tv-focus-key={`${'type' in media ? media.type : media.media_type}:${'name' in media ? media.id : media.media_id}`}
         data-bg-source="catalog"
         data-has-poster={poster ? 'true' : 'false'}
       >

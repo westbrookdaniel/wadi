@@ -1,3 +1,4 @@
+import { useDeviceStore } from '@/store/device-store'
 import { useEffect, useState } from 'react'
 import { router } from '@/router'
 import { useAppStore } from '@/store/app-store'
@@ -12,6 +13,7 @@ export function AppKeyboardShortcuts() {
   const { toast } = useToast()
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
+      if (useDeviceStore.getState().tvMode) return
       if (isShortcutBlocked(event) || event.repeat || event.altKey) return
       const key = event.key.toLowerCase()
       if (event.shiftKey && key !== '?') return

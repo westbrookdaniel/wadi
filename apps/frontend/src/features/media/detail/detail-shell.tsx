@@ -1,3 +1,5 @@
+import { TvDetail } from '@/components/tv/tv-detail'
+import { useDeviceStore } from '@/store/device-store'
 import { Artwork } from '@/components/artwork'
 import { ArrowLeft } from "lucide-react";
 
@@ -24,6 +26,8 @@ export function DetailShell({
   sideContent: React.ReactNode;
   onBack: () => void;
 }) {
+  const tvMode = useDeviceStore(state => state.tvMode)
+  if (tvMode) return <TvDetail media={media} sideTitle={sideTitle} sideLabel={sideLabel} sideContent={sideContent} onBack={onBack}>{children}</TvDetail>
   return (
     <div className="grid gap-7" aria-label={`${media.name} details`}>
       <div className="grid grid-cols-[minmax(0,1fr)_clamp(320px,30vw,460px)] items-stretch gap-0 max-[800px]:grid-cols-1">
@@ -88,7 +92,7 @@ export function DetailShell({
 
 export function DetailShellSkeleton({ onBack }: { onBack: () => void }) {
   return (
-    <div className="grid gap-7" aria-label="Loading media details" role="status">
+    <div className="grid gap-7" data-tv-loading aria-label="Loading media details" role="status">
       <div className="grid grid-cols-[minmax(0,1fr)_clamp(320px,30vw,460px)] items-stretch gap-0 max-[800px]:grid-cols-1">
         <div className={cn("relative isolate flex min-h-svh min-w-0 flex-col gap-8 overflow-hidden max-[800px]:min-h-[65svh]", pagePadding)}>
           <div>

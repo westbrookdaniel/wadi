@@ -369,15 +369,6 @@ select {
 @media (prefers-reduced-motion: reduce) { .image-reveal { transition: none; filter: none; } }
 
 /* TV focus applies to portal menus as well as page content. */
-.tv-mode :is(button, a, input, select, textarea, [tabindex]):focus {
-  outline: 3px solid var(--primary) !important;
-  outline-offset: 3px;
-  box-shadow: 0 0 0 6px #0009;
-}
-.tv-mode :is(button, input:not([type=checkbox]):not([type=radio]), select) { min-height: 44px; }
-.tv-mode { scroll-padding: 16px; }
-.tv-mode .player-controls { opacity: 1; }
-
 /* Shared golden accent in either appearance. */
 :root, .dark {
   --primary: #eabf48;

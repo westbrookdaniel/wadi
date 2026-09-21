@@ -1,8 +1,10 @@
+import { useDeviceStore } from '@/store/device-store'
 import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
 function Input({ className, type, ...props }: React.ComponentProps<"input">) {
+  const tvMode = useDeviceStore(state => state.tvMode)
   return (
     <input
       type={type}
@@ -12,6 +14,7 @@ function Input({ className, type, ...props }: React.ComponentProps<"input">) {
         className
       )}
       {...props}
+      inputMode={tvMode ? "none" : props.inputMode}
     />
   )
 }

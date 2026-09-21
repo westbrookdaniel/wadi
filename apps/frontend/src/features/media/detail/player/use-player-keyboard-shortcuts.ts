@@ -1,3 +1,4 @@
+import { useDeviceStore } from '@/store/device-store'
 import { isShortcutBlocked } from '@/lib/keyboard'
 import { useEffect, useRef } from 'react'
 
@@ -34,6 +35,7 @@ export function usePlayerKeyboardShortcuts(state: KeyboardState, handlers: Keybo
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (useDeviceStore.getState().tvMode) return
       if (isShortcutBlocked(event) || event.metaKey || event.ctrlKey || event.altKey) return
       if (event.repeat && !event.code.startsWith('Arrow')) return
       if (event.code === 'Space' && event.target instanceof Element && event.target.closest('button, a')) return

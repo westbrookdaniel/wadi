@@ -1,6 +1,7 @@
+import { useTvPageState } from '@/components/tv/use-tv-page-state'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { Search, X } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useRef } from 'react'
 
 import { catalogQuery, catalogsQuery } from '@/api/queries'
 import type { MediaPreview } from '@/api/types'
@@ -16,7 +17,7 @@ import { rankMediaByQuery } from './fuzzy-search'
 
 export function SearchPage({ onOpenMedia }: { onOpenMedia: (media: MediaPreview) => void }) {
   const searchInput = useRef<HTMLInputElement>(null)
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useTvPageState('search-query', '')
   const debouncedQuery = useDebouncedValue(query.trim())
   const catalogs = useQuery(catalogsQuery)
   const searchable = (catalogs.data ?? []).filter((entry) =>
@@ -30,12 +31,12 @@ export function SearchPage({ onOpenMedia }: { onOpenMedia: (media: MediaPreview)
   })
 
   const media = rankMediaByQuery(results.flatMap((result) => result.data ?? []), debouncedQuery).map(entry => entry.item)
-  const [filter, setFilter] = useState('all')
+  const [filter, setFilter] = useTvPageState('search-filter', 'all')
   const visibleMedia = media.filter(item => filter === 'all' || item.type === filter)
   const isSearching = results.some((result) => result.isLoading)
 
   return (
-    <div className={pageStack}>
+    <div className={pageStack} data-tv-loading={isSearching || catalogs.isLoading ? '' : undefined}>
       <div className="flex min-h-[52px] w-[min(760px,100%)] items-center gap-2.5 rounded-xl border border-border bg-card/60 px-[18px] shadow-sm ring-1 ring-foreground/5">
         <Search className="size-[18px] text-muted-foreground" aria-hidden="true" />
         <Input

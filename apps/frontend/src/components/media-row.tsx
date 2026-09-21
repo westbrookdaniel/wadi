@@ -5,7 +5,7 @@ const mediaRow =
 
 export function MediaRow({ children }: { children: React.ReactNode }) {
   return (
-    <div
+    <div data-tv-region="media-row"
       className={cn(
         mediaRow,
         "media-row-bleed min-w-0 overflow-x-auto overflow-y-hidden no-scrollbar",

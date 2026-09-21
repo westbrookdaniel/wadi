@@ -1,3 +1,5 @@
+import { TvPlayerChrome } from '@/components/tv/tv-player'
+import type { ComponentProps } from 'react'
 import { useEpisodeAutoplay } from './use-episode-autoplay'
 import { useAutoPlayback } from '@/store/auto-playback'
 import { nextReleasedEpisode, rankStreams, isDirectStream } from '../auto-pick'
@@ -253,7 +255,7 @@ export function MediaPlayerPage({
   const player = desktop ? desktopPlayer : webPlayer
   const triggerNextEpisode = useEpisodeAutoplay({
     episodeKey: `${activeTarget.mediaType}:${activeTarget.mediaId}:${activeTarget.videoId}`,
-    enabled: autoSettings.autoplayNext && !!nextEpisode && !castConnected && externalPreferences.data?.stream_action === 'internal',
+    enabled: autoSettings.autoplayNext && !!nextEpisode && !castConnected && (tvMode || externalPreferences.data?.stream_action === 'internal'),
     playing: player.state.status === 'ready' && player.state.playing,
     currentTime: player.state.currentTime,
     duration: player.state.duration,
@@ -287,7 +289,8 @@ export function MediaPlayerPage({
     updatePlaybackState({ subtitlesEnabled: id !== null, selectedSubtitleId: id, preferredSubtitleLanguage: id ? streamSubtitleList.find(track => track.id === id)?.language ?? 'eng' : null })
   }, [activeTarget, player.state.audioTracks, player.state.selectedAudioTrackId, player.state.status, streamSubtitleList, subtitleTracks.isLoading, updatePlaybackState])
 
-  const { setPlaybackSpeed, setAudioTrack, pause: pauseLocal } = player
+  const { setPlaybackSpeed, setAudioTrack, pause: pauseLocal, setVolume } = player
+  useEffect(() => { if (tvMode) setVolume(1) }, [tvMode, setVolume])
   useEffect(() => {
     setPlaybackSpeed(playbackState.playbackSpeed)
   }, [setPlaybackSpeed, playbackState.playbackSpeed])
@@ -503,8 +506,8 @@ export function MediaPlayerPage({
     const next = autoSettings.enabled ? rankStreams(episodeStreams.data, autoSettings).find(row => row.eligible)?.stream : episodeStreams.data.find(isDirectStream)
     // Completing the provider request transitions the external player and its episode state together.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (next && externalPreferences.data?.stream_action === 'internal') changeEpisode(next)
-  }, [pendingEpisode, episodeStreams.data, episodeStreams.isFetching, episodeStreams.error, autoSettings, externalPreferences.data, changeEpisode])
+    if (next && (tvMode || externalPreferences.data?.stream_action === 'internal')) changeEpisode(next)
+  }, [pendingEpisode, episodeStreams.data, episodeStreams.isFetching, episodeStreams.error, autoSettings, externalPreferences.data, changeEpisode, tvMode])
 
   const onTogglePlay = useCallback(() => {
     setUpNext(null)
@@ -601,7 +604,7 @@ export function MediaPlayerPage({
         <div className={cn(stateBlock, 'min-h-dvh bg-black px-6')}>
           <strong>This stream cannot play directly</strong>
           <p>Only direct stream URLs can be played in the browser right now.</p>
-          {stream.externalUrl ? (
+          {!tvMode && stream.externalUrl ? (
             <Button size="sm" asChild>
               <a href={stream.externalUrl} target="_blank" rel="noreferrer">
                 Open external stream
@@ -649,12 +652,13 @@ export function MediaPlayerPage({
           ) : null}
 
           {player.state.error ? (
-            <div className={cn(stateBlock, 'absolute inset-0 min-h-0 bg-black/92 px-6')}>
+            <div className={cn(stateBlock, 'absolute inset-0 min-h-0 bg-black/92 px-6', tvMode && 'z-10')}>
               <strong>Unable to play this stream</strong>
               <p>{player.state.error}</p>
-              {desktop ? <Button onClick={desktopPlayer.retry}>{conversionEnabled ? 'Retry with full conversion' : 'Retry'}</Button> : <><p>Web playback depends on the source and browser. Try the desktop app or an external player.</p><DesktopDownload /></>}
-              {streamUrl && <><Button onClick={() => { void navigator.clipboard.writeText(streamUrl).catch(() => {}) }}>Copy stream link</Button><Button onClick={() => { void openExternalPlayback(streamUrl, normalizePlaybackPreferences(externalPreferences.data)).catch(() => {}) }}>Open external player</Button></>}
-              {stream.externalUrl ? (
+              {tvMode ? <Button data-tv-back onClick={onBack}>Back to streams</Button> : null}
+              {desktop ? <Button onClick={desktopPlayer.retry}>{conversionEnabled ? 'Retry with full conversion' : 'Retry'}</Button> : tvMode ? <p>Try another stream supported by this browser.</p> : <><p>Web playback depends on the source and browser. Try the desktop app or an external player.</p><DesktopDownload /></>}
+              {!tvMode && streamUrl && <><Button onClick={() => { void navigator.clipboard.writeText(streamUrl).catch(() => {}) }}>Copy stream link</Button><Button onClick={() => { void openExternalPlayback(streamUrl, normalizePlaybackPreferences(externalPreferences.data)).catch(() => {}) }}>Open external player</Button></>}
+              {!tvMode && stream.externalUrl ? (
                 <Button size="sm" asChild>
                   <a href={stream.externalUrl} target="_blank" rel="noreferrer">
                     Open external stream
@@ -671,7 +675,7 @@ export function MediaPlayerPage({
             warning={effectiveState.warning}
             episodeContext={activeTarget.episodeContext ?? null}
             hasEpisodeSwapper={Boolean(activeTarget.seriesEpisodes?.length)}
-            forceVisible={tvMode || controlsVisible || !player.state.playing || episodeSheetOpen}
+            forceVisible={controlsVisible || !player.state.playing || episodeSheetOpen}
             onOpenEpisodeSwapper={() => { setUpNext(null); setEpisodeSheetOpen(true) }}
             subtitleTracks={streamSubtitleList}
             selectedSubtitleId={playbackState.selectedSubtitleId}
@@ -775,7 +779,7 @@ export function MediaPlayerPage({
             </div>
           ) : null}
 
-          {upNext && autoSettings.autoplayNext && externalPreferences.data?.stream_action === 'internal' ? <NextEpisodePrompt key={upNext.id} episode={upNext} seconds={autoSettings.countdownSeconds} paused={autoSettings.nextEpisodeLeadSeconds > 0 && player.state.currentTime < player.state.duration - 2 && (!player.state.playing || player.state.status !== 'ready')} onCancel={() => setUpNext(null)} onContinue={() => { setPendingEpisode(upNext); setUpNext(null); setEpisodeSheetOpen(true) }} /> : null}
+          {upNext && autoSettings.autoplayNext && (tvMode || externalPreferences.data?.stream_action === 'internal') ? <NextEpisodePrompt key={upNext.id} episode={upNext} seconds={autoSettings.countdownSeconds} paused={autoSettings.nextEpisodeLeadSeconds > 0 && player.state.currentTime < player.state.duration - 2 && (!player.state.playing || player.state.status !== 'ready')} onCancel={() => setUpNext(null)} onContinue={() => { setPendingEpisode(upNext); setUpNext(null); setEpisodeSheetOpen(true) }} /> : null}
           <Dialog open={episodeSheetOpen} onOpenChange={open => { setEpisodeSheetOpen(open); if (!open) setPendingEpisode(null) }}>
             <DialogContent
               showCloseButton
@@ -807,7 +811,12 @@ export function MediaPlayerPage({
   )
 }
 
-export function PlayerChrome({
+export function PlayerChrome(props: ComponentProps<typeof DesktopPlayerChrome>) {
+  const tvMode = useDeviceStore(state => state.tvMode)
+  return tvMode ? <TvPlayerChrome {...props} /> : <DesktopPlayerChrome {...props} />
+}
+
+function DesktopPlayerChrome({
   playerRef,
   mediaName,
   state,
