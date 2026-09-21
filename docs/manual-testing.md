@@ -44,7 +44,7 @@ The desktop development build and sign-in window were opened, and the web login 
 
 ## IntroDB skip segments
 
-- New and existing accounts default to Off in Settings → Skip segments. Enable Show skip buttons, reopen settings on another device/profile in the same account, and confirm it is On. A different account must remain Off.
+- New and existing accounts default to On in Settings → Skip segments. Reopen settings on another device/profile in the same account, and confirm it is On. Turning it off for one account must not change another account’s preference.
 - Disable it and confirm buttons disappear and no segment requests are made. Test loading/saving failures; they must not silently enable the feature.
 
 - Play an IMDb-backed episode with IntroDB coverage. Check that Skip recap, Skip intro and Skip outro appear only inside their segments and seek to the reported end, preserving pause/play state. Repeat on web, desktop conversion and TV navigation.

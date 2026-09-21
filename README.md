@@ -19,7 +19,7 @@ Wadi is a media browser and player for the web and desktop. Browse catalogs from
 - **Your library:** profiles, watchlists, watch history and Continue Watching, synced through your account.
 - **A Home page you can arrange:** reorder or hide rows and choose which content appears in combined catalogs.
 - **Playback your way:** use the built-in player, an external player preset, a custom player link or a copied stream URL.
-- **Skip segments:** skip intros, recaps and outros in the built-in player using [IntroDB](https://introdb.app) timestamps when available. Opt in under Settings → Skip segments; the preference follows your account across devices. TV remotes are supported.
+- **Skip segments:** skip intros, recaps and outros in the built-in player using [IntroDB](https://introdb.app) timestamps when available. Manage it under Settings → Skip segments; the preference follows your account across devices. TV remotes are supported.
 - **Desktop compatibility:** convert unsupported audio and video locally while watching. Conversion is optional and enabled by default.
 - **Make it yours:** light, dark and system themes, keyboard shortcuts, and device-specific preferences.
 

@@ -12,21 +12,21 @@ function setup() {
   const view = render(<QueryClientProvider client={client}><IntroDbSettings /></QueryClientProvider>)
   return { client, ...view }
 }
-it('defaults off, saves to the account API and removes timestamps on opt-out', async () => {
-  vi.mocked(apiRequest).mockImplementation(async (_path, options) => options?.method === 'PUT' ? options.body : { enabled: false })
+it('shows the default-on preference, saves opt-out and removes cached timestamps', async () => {
+  vi.mocked(apiRequest).mockImplementation(async (_path, options) => options?.method === 'PUT' ? options.body : { enabled: true })
   const user = userEvent.setup(), { client } = setup()
   const toggle = screen.getByRole('switch', { name: 'Show skip buttons' })
   await waitFor(() => expect(toggle).toBeEnabled())
-  expect(toggle).not.toBeChecked()
-  await user.click(toggle)
-  await waitFor(() => expect(toggle).toBeChecked())
-  expect(apiRequest).toHaveBeenCalledWith('/api/settings/introdb', { method: 'PUT', body: { enabled: true } })
+  expect(toggle).toBeChecked()
   const key = ['skip-segments', useAppStore.getState().authRevision, 'episode']
   client.setQueryData(key, [{ type: 'intro', start: 1, end: 30 }])
   await user.click(toggle)
   await waitFor(() => expect(toggle).not.toBeChecked())
+  expect(apiRequest).toHaveBeenCalledWith('/api/settings/introdb', { method: 'PUT', body: { enabled: false } })
   expect(client.getQueryData(key)).toBeUndefined()
   expect(screen.getByRole('status')).toHaveTextContent('Saved to your account.')
+  await user.click(toggle)
+  await waitFor(() => expect(toggle).toBeChecked())
 })
 it('shows a failed save without enabling the feature', async () => {
   vi.mocked(apiRequest).mockResolvedValueOnce({ enabled: false }).mockRejectedValueOnce(new Error('offline'))

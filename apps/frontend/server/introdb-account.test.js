@@ -5,7 +5,7 @@ import { once } from 'node:events';
 import { createApp } from './main.js';
 import { testDatabase } from './test-database.js';
 
-test('IntroDB opt-in persists per account across sessions and profiles', async t => {
+test('IntroDB defaults on and the preference persists per account across sessions and profiles', async t => {
   let code;
   const { app, db } = createApp({ database: await testDatabase(t), sendVerificationEmail: async message => { code = message.code; } });
   const server = createServer(app); server.listen(0, '127.0.0.1'); await once(server, 'listening');
@@ -22,11 +22,14 @@ test('IntroDB opt-in persists per account across sessions and profiles', async t
   const alice = await register('alice@example.com'), bob = await register('bob@example.com');
   const settings = '/api/settings/introdb';
   await request(settings, null, 'GET', undefined, 401);
-  assert.deepEqual(await request(settings, alice.token), { enabled: false });
+  assert.deepEqual(await request(settings, alice.token), { enabled: true });
+  await request(settings, alice.token, 'PUT', { enabled: false });
   assert.deepEqual(await request('/api/skip-segments?imdb_id=tt0903747&season=1&episode=1', alice.token), { items: [] });
   await request(settings, alice.token, 'PUT', { enabled: 'yes' }, 400);
   await request(settings, alice.token, 'PUT', { enabled: true, user_id: bob.user.id });
-  assert.deepEqual(await request(settings, bob.token), { enabled: false });
+  assert.deepEqual(await request(settings, bob.token), { enabled: true });
+  await request(settings, bob.token, 'PUT', { enabled: false });
+  assert.deepEqual(await request(settings, alice.token), { enabled: true });
   const secondSession = await request('/api/auth/login', null, 'POST', { email: 'alice@example.com', password: 'test-password' });
   assert.deepEqual(await request(settings, secondSession.token), { enabled: true });
   const profile = await request('/api/profiles', alice.token, 'POST', { name: 'Other profile' }, 201);

@@ -126,7 +126,7 @@ Open watchwadi.com in Safari, choose Share, then Add to Home Screen. The manifes
 
 ### IntroDB timestamps
 
-IntroDB is off by default. Settings → Skip segments stores the signed-in user’s opt-in in `users.introdb_enabled`, shared across their profiles and devices. Apply the normal `pnpm db:migrate` schema update before deploying the API. `/api/settings/introdb` reads/writes only the authenticated user’s row; the segment endpoint checks this preference before reading its cache or calling IntroDB. Account export includes the preference.
+IntroDB is on by default. Settings → Skip segments stores the signed-in user’s preference in `users.introdb_enabled`, shared across their profiles and devices. Apply the normal `pnpm db:migrate` schema update before deploying the API. `/api/settings/introdb` reads/writes only the authenticated user’s row; the segment endpoint checks this preference before reading its cache or calling IntroDB. Account export includes the preference.
 
 When enabled, the built-in player requests `/api/skip-segments` through the normal authenticated API client. The server calls `https://api.introdb.app/segments` with an IMDb ID and season/episode, or `is_movie=true`. Only title identifiers are forwarded: no account credentials or stream URLs. A server route is required because IntroDB's CORS response does not allow the Wadi web origin.
 

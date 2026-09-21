@@ -37,10 +37,10 @@ test('route validates IDs, caches requests, contains failures and forwards no cr
   }
 });
 
-test('account opt-in defaults off, persists across devices, isolates users and gates cached segments', async t => {
+test('account preference defaults on, persists across devices, isolates users and gates cached segments', async t => {
   const enabled = new Map(); let calls = 0;
   const db = {
-    get: async (_sql, id) => ({ introdb_enabled: enabled.get(id) ?? false }),
+    get: async (_sql, id) => ({ introdb_enabled: enabled.get(id) ?? true }),
     run: async (_sql, value, id) => { enabled.set(id, value); },
   };
   const app = express(); app.use(express.json());
@@ -53,12 +53,14 @@ test('account opt-in defaults off, persists across devices, isolates users and g
   const request = (path, user = 'alice', value) => fetch(base + path, { method: value === undefined ? 'GET' : 'PUT', headers: { 'Content-Type': 'application/json', ...(user ? { 'x-test-user': user } : {}) }, body: value === undefined ? undefined : JSON.stringify(value) });
   const settings = '/api/settings/introdb', segments = '/api/skip-segments?imdb_id=tt0903747&season=1&episode=1';
   assert.equal((await request(settings, null)).status, 401);
-  assert.deepEqual(await (await request(settings)).json(), { enabled: false });
+  assert.deepEqual(await (await request(settings)).json(), { enabled: true });
+  await request(settings, 'alice', { enabled: false });
   assert.deepEqual(await (await request(segments)).json(), { items: [] }); assert.equal(calls, 0);
   assert.equal((await request(settings, 'alice', { enabled: 'true' })).status, 400);
   assert.deepEqual(await (await request(settings, 'alice', { enabled: true, user_id: 'bob' })).json(), { enabled: true });
   assert.deepEqual(await (await request(settings)).json(), { enabled: true }, 'new request/device reads persisted preference');
-  assert.deepEqual(await (await request(settings, 'bob')).json(), { enabled: false });
+  assert.deepEqual(await (await request(settings, 'bob')).json(), { enabled: true });
+  await request(settings, 'bob', { enabled: false });
   assert.equal((await (await request(segments)).json()).items.length, 1); assert.equal(calls, 1);
   assert.deepEqual(await (await request(segments, 'bob')).json(), { items: [] }, 'another user cannot receive shared cached results while off');
   await request(settings, 'alice', { enabled: false });

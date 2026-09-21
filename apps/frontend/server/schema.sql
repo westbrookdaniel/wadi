@@ -141,5 +141,6 @@ CREATE TABLE IF NOT EXISTS episode_catalogs (
   PRIMARY KEY(user_id, addon_id, media_type, media_id)
 );
 
--- Account-wide opt-in, shared by all profiles and devices.
-ALTER TABLE users ADD COLUMN IF NOT EXISTS introdb_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+-- Account-wide preference, shared by all profiles and devices.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS introdb_enabled BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE users ALTER COLUMN introdb_enabled SET DEFAULT TRUE;
