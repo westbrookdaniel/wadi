@@ -144,3 +144,34 @@ CREATE TABLE IF NOT EXISTS episode_catalogs (
 -- Account-wide preference, shared by all profiles and devices.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS introdb_enabled BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE users ALTER COLUMN introdb_enabled SET DEFAULT TRUE;
+
+-- Integrations are account-owned and pinned to one explicitly selected profile.
+CREATE TABLE IF NOT EXISTS integration_clients (
+  id TEXT PRIMARY KEY, name TEXT NOT NULL, redirect_uris TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT wadi_now()
+);
+CREATE TABLE IF NOT EXISTS integration_grants (
+  id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK(kind IN ('api_key','oauth')), name TEXT NOT NULL,
+  scopes TEXT NOT NULL, client_id TEXT REFERENCES integration_clients(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL DEFAULT wadi_now(), expires_at TEXT NOT NULL, last_used_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_integration_grants_user ON integration_grants(user_id);
+CREATE TABLE IF NOT EXISTS integration_tokens (
+  token_hash TEXT PRIMARY KEY, grant_id TEXT NOT NULL REFERENCES integration_grants(id) ON DELETE CASCADE,
+  audience TEXT NOT NULL, expires_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_integration_tokens_grant ON integration_tokens(grant_id);
+CREATE TABLE IF NOT EXISTS integration_codes (
+  code_hash TEXT PRIMARY KEY, grant_id TEXT NOT NULL REFERENCES integration_grants(id) ON DELETE CASCADE,
+  redirect_uri TEXT NOT NULL, challenge TEXT NOT NULL, resource TEXT NOT NULL, expires_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS integration_refresh_tokens (
+  token_hash TEXT PRIMARY KEY, grant_id TEXT NOT NULL REFERENCES integration_grants(id) ON DELETE CASCADE,
+  expires_at TEXT NOT NULL, used_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_integration_refresh_grant ON integration_refresh_tokens(grant_id);
+CREATE TABLE IF NOT EXISTS integration_rate_limits (
+  key TEXT PRIMARY KEY, count INTEGER NOT NULL, expires_at TEXT NOT NULL
+);

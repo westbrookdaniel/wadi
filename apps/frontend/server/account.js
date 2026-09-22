@@ -10,6 +10,7 @@ export function addAccountRoutes(app, db) {
       await tx.run('UPDATE users SET password_hash=? WHERE id=?', await hash(input.newPassword), req.user.id);
       await tx.run('DELETE FROM sessions WHERE user_id=? AND token_hash<>?', req.user.id, req.tokenHash);
       await tx.run('DELETE FROM desktop_codes WHERE user_id=?', req.user.id);
+      await tx.run('DELETE FROM integration_grants WHERE user_id=?', req.user.id);
     });
     res.json({ ok: true });
   });
@@ -18,6 +19,7 @@ export function addAccountRoutes(app, db) {
       await tx.run('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
       const result = { version: 1, exported_at: new Date().toISOString(), account: await tx.get('SELECT id,email,created_at,introdb_enabled FROM users WHERE id=?', req.user.id) };
       for (const table of ['profiles','addons','lists','list_items','watch_states','user_settings']) result[table] = await tx.all(`SELECT * FROM ${table} WHERE user_id=?`, req.user.id);
+      result.integrations = await tx.all('SELECT id,kind,name,profile_id,scopes,created_at,expires_at,last_used_at FROM integration_grants WHERE user_id=?', req.user.id);
       result.player_settings = await tx.all('SELECT player_settings.* FROM player_settings JOIN profiles ON profiles.id=player_settings.profile_id WHERE profiles.user_id=?', req.user.id);
       return result;
     });

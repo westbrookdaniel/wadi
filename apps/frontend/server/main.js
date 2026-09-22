@@ -1,3 +1,4 @@
+import { addIntegrations } from './integrations.js';
 import { addIntroDbRoutes } from './introdb.js';
 import { addEpisodeRoutes } from './episodes.js';
 import { emailVerification } from './email-verification.js';
@@ -23,17 +24,18 @@ const listInput = z.object({ name: z.string().trim().min(1).max(100), descriptio
 const digest = value => createHash('sha256').update(value).digest('hex');
 const fail = (status, message) => { throw Object.assign(new Error(message), { status }); };
 const now = () => new Date().toISOString();
-export function createApp({ database = process.env.DATABASE_URL, sessionDays = 30, allowPrivateAddons = false, sendVerificationEmail } = {}) {
+export function createApp({ database = process.env.DATABASE_URL, sessionDays = 30, allowPrivateAddons = false, publicOrigin = process.env.WADI_PUBLIC_ORIGIN || 'https://watchwadi.com', sendVerificationEmail } = {}) {
     const db = createDatabase(database);
     const { get, all, run } = db;
     const app = express();
     app.disable('x-powered-by');
     app.use((req, res, next) => {
         res.set('Cache-Control', 'private, no-store');
-        if (req.headers.origin === 'wadi://app')
+        if (req.path.startsWith('/api/oauth/') || req.path.startsWith('/.well-known/')) res.set('Access-Control-Allow-Origin', '*');
+        else if (req.headers.origin === 'wadi://app')
             res.set('Access-Control-Allow-Origin', 'wadi://app');
         res.set('Vary', 'Origin');
-        res.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, Range');
+        res.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, Range, MCP-Protocol-Version');
         res.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, PUT, DELETE, OPTIONS');
         res.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges, Content-Type');
         if (req.method === 'OPTIONS')
@@ -74,6 +76,7 @@ export function createApp({ database = process.env.DATABASE_URL, sessionDays = 3
         if (!user.email_verified_at) return res.status(202).json(await verification.begin(req, { email: user.email, passwordHash: user.password_hash, userId: user.id }));
         (await session(user, res));
     });
+    const addIntegrationManagement = addIntegrations(app, { db, publicOrigin, searchMedia: (userId, query, type) => searchIntegrationMedia(userId, query, type) });
     app.use('/api', async (req, _res, next) => {
         const token = req.headers.authorization?.replace(/^Bearer /, '');
         if (!token)
@@ -86,6 +89,7 @@ export function createApp({ database = process.env.DATABASE_URL, sessionDays = 3
         next();
     });
     addAccountRoutes(app, db);
+    addIntegrationManagement();
     addIntroDbRoutes(app, { db });
     app.get('/api/server-capabilities', (_req, res) => res.json({ conversion: false }));
     app.get('/api/auth/me', async (req, res) => {
@@ -269,6 +273,21 @@ export function createApp({ database = process.env.DATABASE_URL, sessionDays = 3
     app.get('/api/addons/:id', async (req, res) => res.json((await ownAddon(req, req.params.id))));
     app.delete('/api/addons/:id', async (req, res) => { (await ownAddon(req, req.params.id)); (await run('DELETE FROM addons WHERE id=?', req.params.id)); res.sendStatus(204); });
     app.post('/api/addons/:id/configure', async (req, res) => { (await ownAddon(req, req.params.id)); (await run("UPDATE addons SET config_json=?,updated_at=wadi_now() WHERE id=?", JSON.stringify(req.body), req.params.id)); res.json((await ownAddon(req, req.params.id))); });
+    async function searchIntegrationMedia(userId, query, type) {
+        const addons = await userAddons({ user: { id: userId } });
+        const catalogs = addons.flatMap(addon => addon.manifest.catalogs.filter(c => c.type === type && Array.isArray(c.extra) && c.extra.some(e => e?.name === 'search')).map(catalog => ({ addon, catalog }))).slice(0, 10);
+        const results = await Promise.allSettled(catalogs.map(async ({ addon, catalog }) => {
+            const url = manifestUrl(addon.source_url);
+            const extras = new URLSearchParams({ search: query });
+            url.pathname = url.pathname.replace(/\/manifest.json$/, '') + '/catalog/' + encodeURIComponent(type) + '/' + encodeURIComponent(catalog.id) + (addon.transport === 'legacy' ? '' : '/' + extras) + '.json';
+            if (addon.transport === 'legacy') url.searchParams.set('search', query);
+            if (addon.config) url.searchParams.set('config', JSON.stringify(addon.config));
+            const response = await fetchJson(url);
+            return Array.isArray(response.metas) ? response.metas.slice(0, 50).flatMap(meta => typeof meta.id === 'string' && typeof meta.name === 'string' ? [{ media_id: meta.id.slice(0,512), media_type: type, title: meta.name.slice(0,512), ...(typeof meta.poster === 'string' && /^https:\/\//.test(meta.poster) ? { poster: meta.poster.slice(0,2048) } : {}), ...(typeof meta.releaseInfo === 'string' ? { release_info: meta.releaseInfo.slice(0,100) } : {}) }] : []) : [];
+        }));
+        const seen = new Set();
+        return { items: results.flatMap(result => result.status === 'fulfilled' ? result.value : []).filter(item => !seen.has(item.media_id) && seen.add(item.media_id)).slice(0,100), unavailable_catalogs: results.filter(r => r.status === 'rejected').length, searched_catalogs: catalogs.length };
+    }
     app.get('/api/catalogs', async (req, res) => res.json({ items: (await userAddons(req)).flatMap(a => a.manifest.catalogs.map(catalog => ({ addon_id: a.id, addon_name: a.manifest.name, catalog }))) }));
     addEpisodeRoutes(app, { db, userAddons, fetchMetadata: async (addon, type, id) => {
         const url = manifestUrl(addon.source_url);
