@@ -15,7 +15,7 @@ function setup() {
 it('shows the default-on preference, saves opt-out and removes cached timestamps', async () => {
   vi.mocked(apiRequest).mockImplementation(async (_path, options) => options?.method === 'PUT' ? options.body : { enabled: true })
   const user = userEvent.setup(), { client } = setup()
-  const toggle = screen.getByRole('switch', { name: 'Show skip buttons' })
+  const toggle = screen.getByRole('checkbox', { name: 'Show skip buttons' })
   await waitFor(() => expect(toggle).toBeEnabled())
   expect(toggle).toBeChecked()
   const key = ['skip-segments', useAppStore.getState().authRevision, 'episode']
@@ -24,13 +24,13 @@ it('shows the default-on preference, saves opt-out and removes cached timestamps
   await waitFor(() => expect(toggle).not.toBeChecked())
   expect(apiRequest).toHaveBeenCalledWith('/api/settings/introdb', { method: 'PUT', body: { enabled: false } })
   expect(client.getQueryData(key)).toBeUndefined()
-  expect(screen.getByRole('status')).toHaveTextContent('Saved to your account.')
+  expect(screen.queryByRole('status')).not.toBeInTheDocument()
   await user.click(toggle)
   await waitFor(() => expect(toggle).toBeChecked())
 })
 it('shows a failed save without enabling the feature', async () => {
   vi.mocked(apiRequest).mockResolvedValueOnce({ enabled: false }).mockRejectedValueOnce(new Error('offline'))
-  setup(); const toggle = screen.getByRole('switch')
+  setup(); const toggle = screen.getByRole('checkbox')
   await waitFor(() => expect(toggle).toBeEnabled())
   await userEvent.click(toggle)
   await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Could not save'))
@@ -40,6 +40,6 @@ it('disables the toggle when loading account preferences fails', async () => {
   vi.mocked(apiRequest).mockRejectedValue(new Error('offline'))
   setup()
   await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Could not load'))
-  expect(screen.getByRole('switch')).toBeDisabled()
-  expect(screen.getByRole('switch')).not.toBeChecked()
+  expect(screen.getByRole('checkbox')).toBeDisabled()
+  expect(screen.getByRole('checkbox')).not.toBeChecked()
 })
