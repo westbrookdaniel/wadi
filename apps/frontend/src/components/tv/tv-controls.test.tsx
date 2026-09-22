@@ -250,3 +250,40 @@ it('offers a dismissed skip again after leaving and seeking back into its segmen
   view.rerender(<TvPlayerChrome {...props} skipSegment={segment} />)
   expect(screen.getByRole('button', { name: 'Skip intro' })).toBeInTheDocument()
 })
+
+
+it('hides ordinary TV controls after four seconds and dismisses the independent prompt at ten', () => {
+  vi.useFakeTimers()
+  const props = playerProps()
+  render(<TvPlayerChrome {...props} skipSegment={{ type: 'intro', start: 40, end: 80 }} />)
+  act(() => vi.advanceTimersByTime(4000))
+  expect(screen.queryByRole('button', { name: 'Pause' })).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Skip intro' })).toHaveFocus()
+  act(() => vi.advanceTimersByTime(6000))
+  expect(screen.queryByRole('button', { name: 'Skip intro' })).not.toBeInTheDocument()
+  expect(screen.getByLabelText('Video player')).toHaveFocus()
+  expect(props.onSeek).not.toHaveBeenCalled()
+})
+
+it('allows remote dismissal while ordinary TV controls are hidden', () => {
+  vi.useFakeTimers()
+  const props = playerProps()
+  render(<TvPlayerChrome {...props} skipSegment={{ type: 'intro', start: 40, end: 80 }} />)
+  act(() => vi.advanceTimersByTime(4000))
+  const dismiss = screen.getByRole('button', { name: 'Dismiss' })
+  dismiss.focus()
+  fireEvent.keyDown(dismiss, { key: 'Enter' })
+  expect(screen.queryByRole('button', { name: 'Skip intro' })).not.toBeInTheDocument()
+  expect(props.onSeek).not.toHaveBeenCalled()
+  expect(props.onBack).not.toHaveBeenCalled()
+})
+
+it('can reveal TV playback controls from the independent skip prompt with Up', () => {
+  vi.useFakeTimers()
+  render(<TvPlayerChrome {...playerProps()} skipSegment={{ type: 'intro', start: 40, end: 80 }} />)
+  act(() => vi.advanceTimersByTime(4000))
+  fireEvent.keyDown(document.activeElement!, { key: 'ArrowUp' })
+  expect(screen.getByRole('button', { name: 'Pause' })).toHaveFocus()
+  act(() => vi.advanceTimersByTime(6000))
+  expect(screen.queryByRole('button', { name: 'Skip intro' })).not.toBeInTheDocument()
+})

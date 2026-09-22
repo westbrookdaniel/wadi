@@ -82,3 +82,6 @@ html.tv-mode { --background: #101115; --foreground: #f4f4f7; --card: #1b1d24; --
 .tv-reorder button { min-width: 2.6rem; }
 .tv-mode .player-viewport:has([data-tv-player]) { --player-caption-bottom: max(6vh, 28px); }
 .tv-mode .player-viewport:has(.tv-player-controls) { --player-caption-bottom: 32vh; }
+
+.tv-skip-prompt { position: absolute; right: 2rem; bottom: 13rem; z-index: 1; display: flex; gap: .6rem; }
+.tv-skip-prompt button { background: #18181be6; }

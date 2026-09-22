@@ -1,9 +1,11 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import type { ComponentProps } from 'react'
-import { expect, it, vi } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { PlayerChrome } from './media-player-page'
 import { initialLocalPlaybackState, initialPlayerState } from './state'
+
+afterEach(() => vi.useRealTimers())
 
 function props(): ComponentProps<typeof PlayerChrome> {
   return {
@@ -51,13 +53,32 @@ it('keeps navigation visible on initial load but waits for metadata before enabl
   expect(screen.getByRole('slider', { name: 'Seek Test film' })).toHaveAttribute('aria-disabled', 'true')
 })
 
-it('pins skip controls and seeks to the segment end without toggling playback', () => {
+it('shows skip controls independently and seeks to the segment end without toggling playback', () => {
   const input = props()
   const view = render(<TooltipProvider><PlayerChrome {...input} state={{ ...input.state, status: 'ready' }} skipSegment={{ type: 'intro', start: 0, end: 95 }} /></TooltipProvider>)
-  expect(view.container.querySelector('.player-chrome')).toHaveAttribute('data-visible', 'true')
+  expect(view.container.querySelector('.player-chrome')).toHaveAttribute('data-visible', 'false')
   fireEvent.click(screen.getByRole('button', { name: 'Skip intro' }))
   expect(input.onSeek).toHaveBeenCalledWith(95)
   expect(input.onTogglePlay).not.toHaveBeenCalled()
   view.rerender(<TooltipProvider><PlayerChrome {...input} /></TooltipProvider>)
+  expect(screen.queryByRole('button', { name: 'Skip intro' })).not.toBeInTheDocument()
+})
+
+
+it('dismisses without seeking and expires after ten seconds despite equivalent rerenders', () => {
+  vi.useFakeTimers()
+  const input = { ...props(), state: { ...props().state, status: 'ready' as const } }
+  const segment = { type: 'intro' as const, start: 0, end: 95 }
+  const view = render(<TooltipProvider><PlayerChrome {...input} skipSegment={segment} /></TooltipProvider>)
+  expect(screen.getByRole('group', { name: 'Skip segment' }).closest('.player-chrome')).toBeNull()
+  act(() => vi.advanceTimersByTime(9000))
+  view.rerender(<TooltipProvider><PlayerChrome {...input} skipSegment={{ ...segment }} /></TooltipProvider>)
+  expect(screen.getByRole('button', { name: 'Dismiss' })).toBeInTheDocument()
+  act(() => vi.advanceTimersByTime(1000))
+  expect(screen.queryByRole('button', { name: 'Skip intro' })).not.toBeInTheDocument()
+  view.rerender(<TooltipProvider><PlayerChrome {...input} /></TooltipProvider>)
+  view.rerender(<TooltipProvider><PlayerChrome {...input} skipSegment={segment} /></TooltipProvider>)
+  fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
+  expect(input.onSeek).not.toHaveBeenCalled()
   expect(screen.queryByRole('button', { name: 'Skip intro' })).not.toBeInTheDocument()
 })

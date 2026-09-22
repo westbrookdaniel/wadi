@@ -1,3 +1,4 @@
+import { useSkipPrompt } from './use-skip-prompt'
 import { introDbPreferencesQuery } from '@/api/introdb'
 import { activeSegment, skipLabels, skipSegmentsQuery, type SkipSegment } from './skip-segments'
 import { TvPlayerChrome } from '@/components/tv/tv-player'
@@ -918,6 +919,7 @@ function DesktopPlayerChrome({
   onToggleMute: () => void
   onSelectAudioTrack: (id: string | null) => void
 }) {
+  const skipPrompt = useSkipPrompt(skipSegment)
   const disabled = !canControlPlayback(state)
   const actualVolume = state.muted ? 0 : state.volume
   const VolumeIcon = state.muted || state.volume === 0 ? VolumeX : state.volume < 0.5 ? Volume1 : Volume2
@@ -930,7 +932,7 @@ function DesktopPlayerChrome({
     state.audioTracks.find((track) => track.id === state.selectedAudioTrackId) ?? null
   const audioLabel = selectedAudioTrack ? languageName(selectedAudioTrack.language) : 'Audio'
   const speedLabel = `${formatSpeedLabel(playbackSpeed)}x`
-  const controlsPinnedOpen = state.status === 'loading' || state.status === 'idle' || forceVisible || Boolean(skipSegment) || audioMenuOpen || speedMenuOpen || subtitleMenuOpen || subtitleSettingsOpen
+  const controlsPinnedOpen = state.status === 'loading' || state.status === 'idle' || forceVisible || audioMenuOpen || speedMenuOpen || subtitleMenuOpen || subtitleSettingsOpen
 
   useEffect(() => {
     if (!audioMenuOpen && !speedMenuOpen && !subtitleMenuOpen) {
@@ -962,6 +964,11 @@ function DesktopPlayerChrome({
   }, [audioMenuOpen, speedMenuOpen, subtitleMenuOpen])
 
   return (
+    <>
+      {skipPrompt.visible && skipSegment ? <div role="group" aria-label="Skip segment" className="absolute bottom-40 right-4 z-[6] flex gap-2 sm:right-6">
+        <Button className="bg-white text-black hover:bg-white/90" onClick={() => { skipPrompt.dismiss(); onSeek(skipSegment.end) }}>{skipLabels[skipSegment.type]}</Button>
+        <Button variant="secondary" className="bg-black/70 text-white hover:bg-black/90" onClick={skipPrompt.dismiss}>Dismiss</Button>
+      </div> : null}
     <div
       ref={controlsLayerRef}
       data-visible={controlsPinnedOpen}
@@ -995,7 +1002,6 @@ function DesktopPlayerChrome({
       </div>
 
       <div className="player-bottom-controls pointer-events-auto grid gap-1 px-4 pb-4 sm:px-6 sm:pb-6">
-        {skipSegment ? <Button className="mb-3 justify-self-end bg-white text-black hover:bg-white/90" onClick={() => onSeek(skipSegment.end)}>{skipLabels[skipSegment.type]}</Button> : null}
         <ProgressScrubber
           label={`Seek ${mediaName}`}
           value={state.currentTime}
@@ -1262,6 +1268,7 @@ function DesktopPlayerChrome({
         </DialogContent>
       </Dialog>
     </div>
+    </>
   )
 }
 

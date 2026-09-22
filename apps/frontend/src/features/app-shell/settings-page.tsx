@@ -1,3 +1,4 @@
+import { SettingsSearch } from './settings-search'
 import { IntroDbSettings } from './introdb-settings'
 import { useDeviceStore } from '@/store/device-store'
 import { AutoPlaybackSettings } from './auto-playback-settings'
@@ -117,7 +118,7 @@ export function ProfileSettingsPage() {
     return () => { window.removeEventListener('scroll', update, true); window.removeEventListener('resize', update); };
   }, [tvMode]);
   return <div className={cn(pageStack, "settings-area max-w-[1120px] gap-8", tvMode && "tv-settings")}>
-    <header><h1 className="text-3xl font-medium tracking-tight">Settings</h1></header>
+    <header className="grid gap-4"><h1 className="text-3xl font-medium tracking-tight">Settings</h1><SettingsSearch sections={settingsSections} onNavigate={section => { if (section === 'account') void navigate({ to: '/settings/account' }); else if (section === 'plugins') void navigate({ to: '/settings/plugins' }); else setActiveSection(section) }} /></header>
     <div className="grid gap-8 md:grid-cols-[180px_minmax(0,1fr)]">
       <nav aria-label="Settings sections" className="flex flex-wrap content-start gap-1 md:sticky md:top-6 md:flex-col md:self-start">
         {settingsSections.map(([id,label]) => <a key={id} href={'#'+id} onClick={event => { if (tvMode) event.preventDefault(); setActiveSection(id) }} aria-current={activeSection === id ? 'location' : undefined} className={cn("rounded-lg px-3 py-2.5 text-sm transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring", activeSection === id ? "bg-primary/15 font-medium text-foreground" : "text-muted-foreground")}>{label}</a>)}
