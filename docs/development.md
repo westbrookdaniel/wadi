@@ -135,3 +135,7 @@ Successful lookups and missing entries are cached for one hour in a bounded proc
 Skip buttons use the existing player seek handler (including desktop conversion and web casting), preserving pause state and progress handling. Skipping is manual; the outro button seeks to the segment end rather than forcing the next episode. The hosted API must be deployed alongside this frontend feature for desktop lookups to work.
 
 Run `node --test apps/frontend/server/introdb.test.js` for the isolated proxy checks and the frontend test suite for segment identity, boundaries and desktop/TV controls.
+
+## API keys and MCP
+
+See [integrations.md](integrations.md) for the REST contract, OAuth setup, scopes, database migration and testing. Apply the additive integration schema before deploying and set `WADI_PUBLIC_ORIGIN` for non-production domains.

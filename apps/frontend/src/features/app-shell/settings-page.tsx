@@ -1,3 +1,4 @@
+import { IntegrationSettings } from './integration-settings'
 import { SettingsSearch } from './settings-search'
 import { IntroDbSettings } from './introdb-settings'
 import { useDeviceStore } from '@/store/device-store'
@@ -130,7 +131,7 @@ export function ProfileSettingsPage() {
         <section hidden={tvMode && activeSection !== 'skip-segments'} id="skip-segments" className="scroll-mt-6"><IntroDbSettings key={accountRevision} /></section>
         <section hidden={tvMode && activeSection !== 'auto-pick'} id="auto-pick" className="scroll-mt-6"><AutoPlaybackSettings /></section>
         <section hidden={tvMode && activeSection !== 'plugins'} id="plugins" className="scroll-mt-6"><button type="button" onClick={() => navigate({ to: '/settings/plugins' })} className="flex w-full items-center gap-4 rounded-xl border border-border bg-card/60 p-5 text-left hover:bg-muted/50"><span className="grid flex-1 gap-1"><span className="text-lg font-medium">Plugins</span><span className="text-sm text-muted-foreground">Manage your Stremio-compatible addons.</span></span><ArrowRight className="size-5 shrink-0" /></button></section>
-        <section hidden={tvMode && activeSection !== 'account'} id="account" className="scroll-mt-6"><button type="button" onClick={() => navigate({ to: '/settings/account' })} className="flex w-full items-center gap-4 rounded-xl border border-border bg-card/60 p-5 text-left hover:bg-muted/50"><span className="grid flex-1 gap-1"><span className="text-lg font-medium">Account details</span><span className="text-sm text-muted-foreground">Manage your email, password, and account.</span></span><ArrowRight className="size-5 shrink-0" /></button></section>
+        <section hidden={tvMode && activeSection !== 'account'} id="account" className="scroll-mt-6"><button type="button" onClick={() => navigate({ to: '/settings/account' })} className="flex w-full items-center gap-4 rounded-xl border border-border bg-card/60 p-5 text-left hover:bg-muted/50"><span className="grid flex-1 gap-1"><span className="text-lg font-medium">Account details</span><span className="text-sm text-muted-foreground">Manage your email, password, API keys and connected apps.</span></span><ArrowRight className="size-5 shrink-0" /></button></section>
         <section hidden={tvMode && activeSection !== 'experimental'} id="experimental" className="scroll-mt-6"><ExperimentalSettings /></section>
       </div>
     </div>
@@ -298,7 +299,7 @@ export function AccountSettingsPage({ user, view = "account" }: { user: User; vi
         </div>
       </header>
 
-      {view === "account" ? <AccountControls email={user.email} /> : null}
+      {view === "account" ? <><AccountControls email={user.email} /><IntegrationSettings /></> : null}
       {view === "plugins" ? <section id="plugins" className="grid scroll-mt-6 gap-4 pt-2 pb-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="m-0 text-[1.05rem] font-[520] tracking-normal">

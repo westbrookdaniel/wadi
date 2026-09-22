@@ -24,7 +24,7 @@ export function AccountControls({ email }: { email: string }) {
       if (dialog === 'password') {
         if (newPassword !== repeatPassword) throw new Error('New passwords do not match.')
         await apiRequest('/api/account/password', { method: 'POST', body: { currentPassword, newPassword } })
-        setMessage('Password changed. Other devices have been signed out.')
+        setMessage('Password changed. Other devices have been signed out and integration access has been revoked.')
       } else {
         await apiRequest('/api/account', { method: 'DELETE', body: { email: confirmation, password: currentPassword } })
         useAppStore.getState().setToken(null); client.clear()
@@ -63,7 +63,7 @@ export function AccountControls({ email }: { email: string }) {
       <button onClick={() => external('https://github.com/westbrookdaniel/wadi')} className="hover:text-foreground">Source code ↗</button>
     </div>
     <Dialog open={dialog !== null} onOpenChange={open => { if (!open && !busy) { setDialog(null); reset() } }}>
-      <DialogContent><DialogHeader><DialogTitle>{dialog === 'delete' ? 'Delete your account?' : 'Change password'}</DialogTitle><DialogDescription>{dialog === 'delete' ? 'This permanently deletes all your profiles, add-ons, lists, settings and watch history. Export your data first if you want a copy.' : 'Use at least 8 characters. Your other devices will be signed out.'}</DialogDescription></DialogHeader>
+      <DialogContent><DialogHeader><DialogTitle>{dialog === 'delete' ? 'Delete your account?' : 'Change password'}</DialogTitle><DialogDescription>{dialog === 'delete' ? 'This permanently deletes all your profiles, add-ons, lists, settings and watch history. Export your data first if you want a copy.' : 'Use at least 8 characters. Your other devices will be signed out and all API keys and connected apps will be revoked.'}</DialogDescription></DialogHeader>
         <form className="grid gap-4" onSubmit={event => { event.preventDefault(); void submit() }}>
           {dialog === 'delete' && <label className="grid gap-2 text-sm">Enter {email} to confirm<Input type="email" required value={confirmation} onChange={event => setConfirmation(event.target.value)} autoComplete="email" /></label>}
           <label className="grid gap-2 text-sm">Current password<Input type="password" required autoComplete="current-password" value={currentPassword} onChange={event => setCurrentPassword(event.target.value)} /></label>
