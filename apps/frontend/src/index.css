@@ -343,6 +343,12 @@ select {
 .player-chrome:has(:focus-visible) { opacity: 1; transform: none; }
 .player-chrome:has(:focus-visible) * { pointer-events: auto !important; }
 
+/* Hide the pointer with the controls; pointer activity restores both. */
+.player-viewport:has(.player-chrome[data-visible="false"]):not(:has(.player-chrome :focus-visible)),
+.player-viewport:has(.player-chrome[data-visible="false"]):not(:has(.player-chrome :focus-visible)) *,
+.tv-player:not(:has(.tv-player-controls)),
+.tv-player:not(:has(.tv-player-controls)) * { cursor: none !important; }
+
 /* Shared browsing geometry and quiet motion. */
 .app-page { --page-gutter: clamp(18px, 4vw, 56px); }
 .media-row-bleed { width: calc(100% + 2 * var(--page-gutter, 0px)); margin-inline: calc(-1 * var(--page-gutter, 0px)); padding-inline: var(--page-gutter, 0px); scroll-padding-inline: var(--page-gutter, 0px); }
