@@ -101,6 +101,8 @@ CREATE OR REPLACE FUNCTION wadi_now() RETURNS text LANGUAGE sql AS $$ SELECT to_
             ON list_items(list_id, media_type, media_id, COALESCE(video_id, ''));
         CREATE INDEX IF NOT EXISTS idx_watch_states_continue
             ON watch_states(user_id, profile_id, watched, position_seconds, updated_at);
+        CREATE INDEX IF NOT EXISTS idx_watch_states_history
+            ON watch_states(user_id, profile_id, updated_at DESC, id DESC);
         CREATE UNIQUE INDEX IF NOT EXISTS idx_watch_states_identity
             ON watch_states(user_id, profile_id, media_type, media_id, COALESCE(video_id, ''));
 
