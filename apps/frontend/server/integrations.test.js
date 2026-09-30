@@ -541,6 +541,60 @@ test("official MCP client can discover and call scoped tools; read-only tools ex
   await request("/api/v1/profile", writable.key, "GET", undefined, 401);
 });
 
+test("watch reads return only the connected profile's stored state without stream URLs", async (t) => {
+  const { base, request, key, alice } = await setup(t);
+  const second = await request("/api/profiles", alice.token, "POST", { name: "Second" }, 201);
+  const firstKey = await key(alice.active_profile_id, "library:read");
+  const secondKey = await key(second.id, "library:read");
+  await request("/api/watch-progress", alice.token, "PUT", {
+    media_type: "series", media_id: "show", video_id: "show:1", position_seconds: 42, duration_seconds: 100,
+  });
+  await request("/api/watch-state", alice.token, "PUT", {
+    media_type: "series", media_id: "show", video_id: "show:2", watched: true,
+  });
+  await request("/api/watch-state", alice.token, "PUT", {
+    media_type: "movie", media_id: "film", watched: true,
+  });
+  await request("/api/profiles/select", alice.token, "POST", { profile_id: second.id });
+  await request("/api/watch-state", alice.token, "PUT", {
+    media_type: "series", media_id: "show", video_id: "show:3", watched: true,
+  });
+  const page = await request("/api/v1/watch-history?limit=1", firstKey.key);
+  assert.equal(page.profile_id, alice.active_profile_id);
+  assert.equal(page.items.length, 1);
+  assert.equal(page.next_offset, 1);
+  const rest = await request("/api/v1/watch-history?limit=2&offset=1", firstKey.key);
+  assert.equal(rest.items.length, 2);
+  assert.equal(rest.next_offset, null);
+  assert.ok(!JSON.stringify([page, rest]).includes("show:3"));
+  const status = await request("/api/v1/watch-status/series/show", firstKey.key);
+  assert.deepEqual(status.items.map(item => item.video_id).sort(), ["show:1", "show:2"]);
+  const statusPage = await request("/api/v1/watch-status/series/show?limit=1", firstKey.key);
+  assert.equal(statusPage.items.length, 1);
+  assert.equal(statusPage.next_offset, 1);
+  assert.equal((await request("/api/v1/watch-status/series/show?limit=1&offset=1", firstKey.key)).next_offset, null);
+  assert.equal(status.items.find(item => item.video_id === "show:1").position_seconds, 42);
+  assert.equal(status.items.find(item => item.video_id === "show:2").watched, true);
+  assert.deepEqual((await request("/api/v1/watch-status/series/missing", firstKey.key)).items, []);
+  await request("/api/v1/watch-status/series/show?media_id=film", firstKey.key, "GET", undefined, 400);
+  assert.deepEqual((await request("/api/v1/watch-status/series/show", secondKey.key)).items.map(item => item.video_id), ["show:3"]);
+  await request("/api/v1/watch-history?profile_id=" + second.id, firstKey.key, "GET", undefined, 400);
+
+  const client = new Client({ name: "watch-test", version: "1.0.0" });
+  await client.connect(new StreamableHTTPClientTransport(new URL(base + "/api/mcp"), {
+    requestInit: { headers: { Authorization: `Bearer ${firstKey.key}` } },
+  }));
+  t.after(() => client.close());
+  const tools = await client.listTools();
+  assert.ok(tools.tools.some(tool => tool.name === "list_watch_history"));
+  assert.ok(tools.tools.some(tool => tool.name === "get_watch_status"));
+  const history = await client.callTool({ name: "list_watch_history", arguments: { limit: 10 } });
+  assert.equal(JSON.parse(history.content[0].text).items.length, 3);
+  const lookup = await client.callTool({ name: "get_watch_status", arguments: { media_type: "series", media_id: "show" } });
+  assert.equal(JSON.parse(lookup.content[0].text).items.length, 2);
+  assert.ok(!JSON.stringify([history, lookup]).includes("stream_url"));
+});
+
 test("integration search uses installed catalogs, validates metadata and isolates other accounts", async (t) => {
   let requests = 0;
   const provider = createServer((req, res) => {

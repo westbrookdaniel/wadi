@@ -30,6 +30,19 @@ export const pageInput = z
     limit: z.coerce.number().int().min(1).max(100).default(50),
   })
   .strict();
+export const watchIdentityInput = z.object({
+  media_type: z.enum(["movie", "series"]),
+  media_id: idInput,
+}).strict();
+const watchView = (row) => ({
+  media_type: row.media_type,
+  media_id: row.media_id,
+  video_id: row.video_id,
+  watched: Boolean(row.watched),
+  position_seconds: row.position_seconds,
+  duration_seconds: row.duration_seconds,
+  updated_at: row.updated_at,
+});
 const itemView = (row) => ({
   id: row.id,
   list_id: row.list_id,
@@ -65,6 +78,26 @@ export function integrationLibrary(db, grant, searchMedia) {
         .strict()
         .parse(input);
       return searchMedia(grant.user_id, query, type);
+    },
+    watchHistory: async (input = {}) => {
+      const { limit, offset } = pageInput.parse(input);
+      const rows = await db.all(
+        "SELECT media_type,media_id,video_id,watched,position_seconds,duration_seconds,updated_at FROM watch_states WHERE user_id=? AND profile_id=? ORDER BY updated_at DESC,id DESC LIMIT ? OFFSET ?",
+        grant.user_id, grant.profile_id, limit + 1, offset,
+      );
+      return {
+        profile_id: grant.profile_id,
+        items: rows.slice(0, limit).map(watchView),
+        next_offset: rows.length > limit ? offset + limit : null,
+      };
+    },
+    watchStatus: async (input) => {
+      const { media_type, media_id, limit, offset } = watchIdentityInput.extend(pageInput.shape).parse(input);
+      const rows = await db.all(
+        "SELECT media_type,media_id,video_id,watched,position_seconds,duration_seconds,updated_at FROM watch_states WHERE user_id=? AND profile_id=? AND media_type=? AND media_id=? ORDER BY updated_at DESC,id DESC LIMIT ? OFFSET ?",
+        grant.user_id, grant.profile_id, media_type, media_id, limit + 1, offset,
+      );
+      return { profile_id: grant.profile_id, media_type, media_id, items: rows.slice(0, limit).map(watchView), next_offset: rows.length > limit ? offset + limit : null };
     },
     lists: async (input = {}) => {
       const { limit, offset } = pageInput.parse(input);

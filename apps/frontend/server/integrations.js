@@ -8,6 +8,7 @@ import {
   itemInput,
   listInput,
   pageInput,
+  watchIdentityInput,
   fail,
 } from "./integration-library.js";
 
@@ -38,6 +39,12 @@ export function addIntegrations(app, options) {
   );
   app.get("/api/v1/search", async (req, res) =>
     res.json(await library(req).search(req.query)),
+  );
+  app.get("/api/v1/watch-history", async (req, res) =>
+    res.json(await library(req).watchHistory(req.query)),
+  );
+  app.get("/api/v1/watch-status/:type/:id", async (req, res) =>
+    res.json(await library(req).watchStatus({ ...pageInput.parse(req.query), media_type: req.params.type, media_id: req.params.id })),
   );
   app.get("/api/v1/lists", async (req, res) =>
     res.json(await library(req).lists(req.query)),
@@ -133,6 +140,22 @@ export function addIntegrations(app, options) {
       false,
       false,
       lib.lists,
+    );
+    tool(
+      "list_watch_history",
+      "List current watch-state records for the connected profile, most recently updated first. Includes watched flags and episode progress; this is not an event log or title catalog. Returns next_offset for pagination.",
+      pageInput,
+      false,
+      false,
+      lib.watchHistory,
+    );
+    tool(
+      "get_watch_status",
+      "Page through stored watch-state records for one movie or series in the connected profile. Series records include video_id for episode-level status. An empty items array means no state is stored.",
+      watchIdentityInput.extend(pageInput.shape).strict(),
+      false,
+      false,
+      lib.watchStatus,
     );
     tool(
       "list_items",

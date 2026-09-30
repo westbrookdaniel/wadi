@@ -6,9 +6,9 @@ Connect automations from **Settings → Account → API keys & connected apps**.
 
 Keys and connected apps belong to your account, but each is pinned to **one explicitly chosen profile**. That is the default and only profile the credential can access. Switching profiles in Wadi does not retarget an integration. Create separate keys/connections for separate profiles. To change profile or permissions, revoke the old credential and create another.
 
-- `library:read`: identify the connected profile, search installed catalogs, read lists and saved items.
+- `library:read`: identify the connected profile, search installed catalogs, read lists and saved items, and read stored watch status and progress.
 - `library:write`: also create lists and add/remove saved movies or shows. Requires `library:read`.
-- No access to account management, addon configuration/secrets, playback URLs, history or other profiles.
+- No access to account management, addon configuration/secrets, playback URLs or other profiles.
 - Keys are shown once, stored only as SHA-256 hashes, and expire after 30/90/365 days in the UI (API accepts 1–365).
 - Account settings shows permissions, profile, expiry and last use (updated at most every five minutes). Revocation takes effect on subsequent requests. Deleting the selected profile revokes its connections, without moving them to a replacement profile. Changing your account password revokes all keys and OAuth connections.
 - Maximum 50 active keys/connections per account. Each credential is limited to 120 requests per minute; handle HTTP 429 with backoff.
@@ -21,13 +21,17 @@ Base URL: `https://watchwadi.com/api/v1`. Send `Authorization: Bearer <API_KEY>`
 | --- | --- | --- |
 | GET | `/profile` | Confirm the profile this key accesses |
 | GET | `/search?query=...&type=series` | Search shows (`series`, default) or `movie` in installed search-capable catalogs |
+| GET | `/watch-history` | Page through the profile's current watch-state records, newest update first |
+| GET | `/watch-status/{type}/{id}` | Read stored movie or series watch-state records, including episode progress |
 | GET | `/lists` | Read lists, including the default Saved list |
 | POST | `/lists` | Create a list: `{ "name": "Weekend", "description": "Optional" }` |
 | GET | `/lists/{list_id}/items` | Read items in a list |
 | POST | `/lists/{list_id}/items` | Add a show/movie |
 | DELETE | `/lists/{list_id}/items/{item_id}` | Remove an item |
 
-List and item reads accept `limit` (1–100, default 50) and `offset` (default 0). Follow `next_offset` until null. IDs of lists/items from another profile or account return 404. A `profile_id` override in a query/body, or `X-Profile-Id` header, is rejected.
+List, item, watch-history and watch-status reads accept `limit` (1–100, default 50) and `offset` (default 0). Follow `next_offset` until null. IDs of lists/items from another profile or account return 404. A `profile_id` override in a query/body, or `X-Profile-Id` header, is rejected. Watch status accepts `movie` or `series` as `{type}`; URL-encode the media ID. An empty `items` array means no watch state is stored. Series results can contain one record per `video_id` and a separate series-level record.
+
+Watch history is a view of Wadi's **current state**, not a play-by-play event log. Each record contains `media_type`, `media_id`, `video_id`, `watched`, `position_seconds`, `duration_seconds` and `updated_at`. It has no title metadata or past viewing events, and playback through external apps may not update it. Use catalog search or your own metadata to resolve IDs to titles. No stream URLs are returned.
 
 Example (set `WADI_API_KEY` securely in your environment):
 
@@ -58,7 +62,7 @@ Server URL: **`https://watchwadi.com/api/mcp`** (Streamable HTTP).
 
 Add the URL to a client that supports OAuth with dynamic client registration. Wadi opens a browser sign-in/consent page. Choose a profile and approve the requested read-only or read/write permissions. The app name is unverified client metadata; inspect the displayed callback origin. Declining issues no credentials. Connections can be revoked in Account settings.
 
-Tools: `get_profile`, `search_media`, `list_lists`, `list_items`, `create_list`, `add_item`, `remove_item`. Read-only connections do not expose mutation tools. Tools use the same profile checks and operations as REST. Results include the selected profile where relevant, and mutation annotations distinguish add/create from removal.
+Tools: `get_profile`, `search_media`, `list_watch_history`, `get_watch_status`, `list_lists`, `list_items`, `create_list`, `add_item`, `remove_item`. Read-only connections do not expose mutation tools. Tools use the same profile checks and operations as REST. Results include the selected profile where relevant, and mutation annotations distinguish add/create from removal. Both watch tools accept `limit` and `offset`; `get_watch_status` also requires `media_type` and `media_id`.
 
 For clients that allow a manual Authorization header, an API key also works at the MCP endpoint. OAuth access tokens are audience-bound to MCP and cannot be reused against REST or the internal account API. Legacy SSE transport is not supported; stateless Streamable HTTP uses JSON responses and does not require server affinity or persistent sessions. Browser-origin MCP/REST requests are restricted to Wadi's configured origin; use server-side or native clients.
 
