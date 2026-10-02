@@ -1,3 +1,4 @@
+import { SubtitleDefaultSettings } from './subtitle-default-settings'
 import { IntegrationSettings } from './integration-settings'
 import { SettingsSearch } from './settings-search'
 import { IntroDbSettings } from './introdb-settings'
@@ -127,7 +128,7 @@ export function ProfileSettingsPage() {
       <div className="grid min-w-0 gap-8">
         <section hidden={tvMode && activeSection !== 'profiles'} id="profiles" className="scroll-mt-6 rounded-xl border border-border bg-card/60 p-5"><h2 className="mb-4 text-lg font-medium">Profiles</h2><ProfileManager /></section>
         <section hidden={tvMode && activeSection !== 'home'} id="home" className="scroll-mt-6"><BrowseLayoutSettings key={profileId} /></section>
-        <section hidden={tvMode && activeSection !== 'playback'} id="playback" className="grid scroll-mt-6 gap-5"><h2 className="text-xl font-medium">Playback on this device</h2>{!tvMode ? <ExternalPlaybackSettingsSection /> : <p>TV mode plays inside Wadi. Use your TV or computer to adjust volume.</p>}<DeviceSettings /></section>
+        <section hidden={tvMode && activeSection !== 'playback'} id="playback" className="grid scroll-mt-6 gap-5"><h2 className="text-xl font-medium">Playback on this device</h2>{!tvMode ? <ExternalPlaybackSettingsSection /> : <p>TV mode plays inside Wadi. Use your TV or computer to adjust volume.</p>}<DeviceSettings /><SubtitleDefaultSettings /></section>
         <section hidden={tvMode && activeSection !== 'skip-segments'} id="skip-segments" className="scroll-mt-6"><IntroDbSettings key={accountRevision} /></section>
         <section hidden={tvMode && activeSection !== 'auto-pick'} id="auto-pick" className="scroll-mt-6"><AutoPlaybackSettings /></section>
         <section hidden={tvMode && activeSection !== 'plugins'} id="plugins" className="scroll-mt-6"><button type="button" onClick={() => navigate({ to: '/settings/plugins' })} className="flex w-full items-center gap-4 rounded-xl border border-border bg-card/60 p-5 text-left hover:bg-muted/50"><span className="grid flex-1 gap-1"><span className="text-lg font-medium">Plugins</span><span className="text-sm text-muted-foreground">Manage your Stremio-compatible addons.</span></span><ArrowRight className="size-5 shrink-0" /></button></section>

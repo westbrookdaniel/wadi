@@ -11,11 +11,13 @@ const playerSchema = z.object({
   subtitle_delay_seconds: z.number().finite(), subtitle_size: z.number().min(0.1).max(5),
   subtitle_position: z.number().finite(), subtitle_text_color: z.string(),
   subtitle_background_color: z.string(), subtitle_background_opacity: z.number().min(0).max(1),
+  subtitle_outline_width: z.number().min(0).max(6).default(1.5),
   subtitle_outline_color: z.string(), subtitle_outline_style: z.string(), subtitle_font_family: z.string(),
   subtitle_offset_x: z.number().finite(), subtitle_offset_y: z.number().finite(),
   playback_speed: z.number().min(0.25).max(4), preferred_audio_language: z.string().nullable(),
   preferred_audio_track_id: z.string().nullable(),
 })
+const overrideSchema = playerSchema.partial().extend({ subtitle_outline_width: z.number().min(0).max(6).optional() })
 const memory = new Map<string, unknown>()
 function read(key: string): unknown {
   try { return JSON.parse(localStorage.getItem(key) ?? 'null') } catch { return memory.get(key) ?? null }
@@ -51,14 +53,19 @@ export async function saveDevicePlayer(key: string, value: PlayerPreferences) {
   const parsed = playerSchema.parse(value); save(key, parsed); return parsed
 }
 export async function deviceOverride(key: string, loadLegacy: () => Promise<PlayerOverride>) {
-  const stored = playerSchema.partial().safeParse(read(key))
+  const stored = overrideSchema.safeParse(read(key))
   if (stored.success) return stored.data
-  const imported = playerSchema.partial().parse(await loadLegacy())
-  const latest = playerSchema.partial().safeParse(read(key))
+  const imported = overrideSchema.parse(await loadLegacy())
+  const latest = overrideSchema.safeParse(read(key))
   if (latest.success) return latest.data
   save(key, imported); return imported
 }
-export async function saveDeviceOverride(key: string, value: PlayerOverride) {
-  const stored = playerSchema.partial().safeParse(read(key))
-  const parsed = playerSchema.partial().parse({ ...(stored.success ? stored.data : {}), ...value }); save(key, parsed); return parsed
+export function saveDeviceOverride(key: string, value: PlayerOverride) {
+  const stored = overrideSchema.safeParse(read(key))
+  const parsed = overrideSchema.parse({ ...(stored.success ? stored.data : {}), ...value }); save(key, parsed); return parsed
+}
+
+export function resetDeviceOverride(key: string) {
+  // Keep a tombstone so the next load cannot re-import the legacy server override.
+  save(key, {}); return {}
 }

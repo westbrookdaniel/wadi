@@ -1,6 +1,6 @@
 import { episodeCatalogSchema } from '@/features/media/detail/episode-catalog'
 import { parseStreamMetadata } from '@/features/media/detail/stream-metadata'
-import { devicePlayback, saveDevicePlayback, devicePlayer, saveDevicePlayer, deviceOverride, saveDeviceOverride } from '@/store/playback-settings'
+import { resetDeviceOverride, devicePlayback, saveDevicePlayback, devicePlayer, saveDevicePlayer, deviceOverride, saveDeviceOverride } from '@/store/playback-settings'
 import { useAppStore } from '@/store/app-store'
 import type { PlayerOverride, PlayerPreferences, SubtitleInfo, WatchProgressRequest } from './types'
 import { queryOptions } from '@tanstack/react-query'
@@ -475,4 +475,8 @@ function normalizeSubtitleQueryContext(context: SubtitleQueryContext | undefined
 
 export async function reorderAddons(ids: string[]) {
   return apiRequest<ApiListResponse<AddonRecord>>('/api/addons/order', { method: 'PUT', body: { ids } })
+}
+
+export function resetPlayerOverride(mediaType: string, mediaId: string, profileId = useAppStore.getState().activeProfileId) {
+  return resetDeviceOverride(deviceOverrideKey(mediaType, mediaId, profileId))
 }

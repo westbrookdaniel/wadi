@@ -17,7 +17,7 @@ function props(): ComponentProps<typeof PlayerChrome> {
     onOpenEpisodeSwapper: vi.fn(), onSelectSubtitle: vi.fn(), onSubtitleDelayChange: vi.fn(),
     onSubtitleSizeChange: vi.fn(), onSubtitlePositionChange: vi.fn(), onSubtitleTextColorChange: vi.fn(),
     onSubtitleBackgroundColorChange: vi.fn(), onSubtitleBackgroundOpacityChange: vi.fn(),
-    onSubtitleOutlineColorChange: vi.fn(), onSubtitleOutlineStyleChange: vi.fn(), onSubtitleFontFamilyChange: vi.fn(),
+    onUseDefaults: vi.fn(), onSubtitleOutlineWidthChange: vi.fn(), onSubtitleOutlineColorChange: vi.fn(), onSubtitleOutlineStyleChange: vi.fn(), onSubtitleFontFamilyChange: vi.fn(),
     onSubtitleOffsetXChange: vi.fn(), onSubtitleOffsetYChange: vi.fn(), onPlaybackSpeedChange: vi.fn(),
     onCastToggle: vi.fn(), onBack: vi.fn(), onTogglePlay: vi.fn(), onSeek: vi.fn(),
     onVolumeChange: vi.fn(), onToggleMute: vi.fn(), onSelectAudioTrack: vi.fn(),
@@ -81,4 +81,16 @@ it('dismisses without seeking and expires after ten seconds despite equivalent r
   fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
   expect(input.onSeek).not.toHaveBeenCalled()
   expect(screen.queryByRole('button', { name: 'Skip intro' })).not.toBeInTheDocument()
+})
+
+it('opens subtitle preview and exposes an explicit title reset alongside outline weight', () => {
+  const input = props()
+  render(<TooltipProvider><PlayerChrome {...input} state={{ ...input.state, status: 'ready' }} /></TooltipProvider>)
+  fireEvent.click(screen.getByRole('button', { name: 'Subtitles' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Subtitle settings' }))
+  expect(screen.getByLabelText('Subtitle preview')).toBeInTheDocument()
+  fireEvent.change(screen.getByRole('spinbutton', { name: 'Outline weight' }), { target: { value: '3' } })
+  expect(input.onSubtitleOutlineWidthChange).toHaveBeenCalledWith(3)
+  fireEvent.click(screen.getByRole('button', { name: 'Use device defaults' }))
+  expect(input.onUseDefaults).toHaveBeenCalledOnce()
 })

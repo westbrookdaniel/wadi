@@ -139,3 +139,32 @@ Run `node --test apps/frontend/server/introdb.test.js` for the isolated proxy ch
 ## API keys and MCP
 
 See [integrations.md](integrations.md) for the REST contract, OAuth setup, scopes, database migration and testing. Apply the additive integration schema before deploying and set `WADI_PUBLIC_ORIGIN` for non-production domains.
+
+## Playback defaults, progress and password admission
+
+New subtitle settings start at **1.15×** (15% larger); existing saved scales are retained. Outline weight defaults to the legacy **1.5px**, ranges from 0–6px, and shares its rendering function with the live preview. Settings → Playback on this device saves subtitle defaults locally. Title overrides keep their complete customized snapshot, including legacy 1.5px borders; **Use device defaults** in desktop/mobile or TV player settings clears the title snapshot and explicit subtitle-track choice. Automatic track selection does not create an override. Local title edits save immediately so closing the player cannot discard a pending debounce.
+
+Local playback checkpoints store position and freshness (plus the local action timestamp used to reconcile acknowledgements). Numeric legacy checkpoints are fallback-only when there is no dated server progress. Both decoders wait for a fresh watch-data request on mount, compare timestamps rather than maximum position, and permit a local fallback after a failed fetch. Writes for one profile/title/episode are serialized; late acknowledgements cannot overwrite a later local rewind. A finished fetch does not interrupt an already-running decoder. Back during initial loading cannot save a zero checkpoint. This uses client clocks for unsynced checkpoints; devices with incorrect clocks can still fall back to server progress (checkpoints over one minute in the future are not preferred).
+
+Login and registration share Postgres-backed admission limits **before Argon2**: 10 attempts per normalized email and 60 per IP/IPv6 /64 in a fixed 15-minute window; registration additionally allows one attempt per email per minute. Successes consume admission too, preventing authenticated traffic from bypassing hash-cost bounds. Blocked requests return 429 with a positive `Retry-After` and do not extend the window. The existing email-delivery limiter remains independent. A short transaction/advisory lock coordinates warm instances using `auth:` keys in the existing `integration_rate_limits` table; expired keys are removed and cardinality is capped at 10,000 (capacity exhaustion fails closed with a 60-second retry). No schema/provider/credential changes are required on the reviewed baseline.
+
+On Vercel, the limiter uses a valid `x-vercel-forwarded-for` address; elsewhere it uses the socket peer and ignores untrusted forwarded headers. This follows the existing ingress assumption and [Vercel's request-header contract](https://vercel.com/docs/headers/request-headers). A custom reverse proxy may group clients under its own IP until its trust boundary is explicitly configured; no hosting WAF is assumed. NATs share the IP budget. The limiter reduces application hash work, not all possible database/network denial of service.
+
+## Clean-environment verification
+
+Use **Node 24**, **pnpm 10.33.2** (check `pnpm --version`, since some environments provide a different fallback), and a disposable **Postgres 17+** database owned by a user allowed to create/drop schemas. Tests need no email provider or production credentials:
+
+```sh
+pnpm install --frozen-lockfile
+pnpm --filter frontend lint
+pnpm --filter frontend exec tsc --noEmit
+pnpm --filter frontend test --maxWorkers=2
+TEST_DATABASE_URL=postgresql://test-user:test-password@127.0.0.1:5432/wadi_test pnpm --filter frontend test:api
+pnpm --filter frontend build
+```
+
+Each API test creates and drops an isolated schema. Never point `TEST_DATABASE_URL` at production. Limit Vitest workers in constrained environments; the full parallel default can exhaust memory.
+
+Full install/desktop packaging needs access to Electron and FFmpeg binary downloads in addition to the npm registry. If those downloads are blocked, `pnpm install --frozen-lockfile --ignore-scripts` supports frontend lint/types/unit/API/build verification, but **does not** prepare an Electron package. Desktop service tests additionally require `apps/desktop/assets/ffmpeg` and `ffprobe`: normally run `pnpm --filter @wadi/desktop prepare:assets` first. For cloud-only service tests, ignored local symlinks to installed system FFmpeg/FFprobe can be used; report that substitution and do not claim packaged-binary coverage. The Linux CI job verifies the actual package and bundled binaries.
+
+For browser QA on a separate machine, build the frontend in the cloud, commit all source changes, then run `node scripts/browser-qa/build-bundle.mjs /tmp/wadi-browser-qa-<revision>`. Package that directory and transfer it through the approved file channel. The bundle records the exact commit and checksums, includes only tracked source/public frontend files/generated media, and runs with Node alone. Follow its README for desktop/mobile/TV, persistence, rewind and interrupted-start assertions. Its synthetic backend is not auth-security or live-provider acceptance. No browser, build, database, secret or provider access is needed on the streaming box beyond serving those static test bytes.

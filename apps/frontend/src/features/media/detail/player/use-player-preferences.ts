@@ -1,5 +1,5 @@
 import { useAppStore } from '@/store/app-store'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import {
@@ -7,6 +7,7 @@ import {
   playerOverrideQuery,
   queryKeys,
   updatePlayerOverride,
+  resetPlayerOverride,
 } from '@/api/queries'
 import { normalizeLanguage } from './subtitle-utils'
 import type { PlayerOverride } from '@/api/types'
@@ -28,6 +29,7 @@ type HydratedPreferenceSource = {
   subtitle_background_color: string
   subtitle_background_opacity: number
   subtitle_outline_color: string
+  subtitle_outline_width?: number
   subtitle_outline_style: string
   subtitle_font_family: string
   subtitle_offset_x: number
@@ -56,75 +58,34 @@ export function usePlayerPreferences({
   )
   const [playbackState, setPlaybackState] = useState<LocalPlaybackState>(initialLocalPlaybackState)
   const hydratedOverrideKeyRef = useRef<string | null>(null)
-  const isHydratingRef = useRef(true)
-  const hydrationReleaseTimerRef = useRef<number | null>(null)
-  const lastPersistedOverrideRef = useRef<string | null>(null)
-  const saveOverrideTimerRef = useRef<number | null>(null)
+  const playbackStateRef = useRef(playbackState)
 
   const mergedPrefs = useMemo(() => playerDefaults.data && playerOverride.isSuccess
-    ? { ...playerDefaults.data, ...(playerOverride.data ?? {}) } satisfies HydratedPreferenceSource
+    ? { ...playerDefaults.data, ...(playerOverride.data ?? {}), ...(playerOverride.data?.subtitle_outline_style && playerOverride.data.subtitle_outline_width === undefined ? { subtitle_outline_width: 1.5 } : {}) } satisfies HydratedPreferenceSource
     : null, [playerDefaults.data, playerOverride.data, playerOverride.isSuccess])
   const overrideHydrationKey = JSON.stringify([profileId, mediaType, overrideMediaId])
 
-  const updatePlaybackState = useCallback((patch: Partial<LocalPlaybackState>) => {
-    setPlaybackState((current) => {
-      const next = { ...current, ...patch }
-      return isLocalPlaybackStateEqual(current, next) ? current : next
-    })
-  }, [])
-
-  const overrideMutation = useMutation({
-    mutationFn: (payload: PlayerOverride) => updatePlayerOverride(mediaType, overrideMediaId, payload, profileId),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.playerOverride(mediaType, overrideMediaId, profileId),
-      })
-    },
-  })
-
-  const { mutate: mutateOverride } = overrideMutation
-  const persistOverride = useCallback(
-    (payload: PlayerOverride) => mutateOverride(payload),
-    [mutateOverride],
-  )
+  const updatePlaybackState = useCallback((patch: Partial<LocalPlaybackState>, persist = true) => {
+    const current = playbackStateRef.current
+    const next = { ...current, ...patch }
+    if (isLocalPlaybackStateEqual(current, next)) return
+    playbackStateRef.current = next
+    // Commit deliberate edits in the event handler, before navigation or reload
+    // can interrupt React's render/effect cycle. Automatic selection is not saved.
+    if (persist && overrideMediaId) {
+      const payload = buildOverridePayload(next, streamSubtitleList, next.selectedSubtitleId)
+      const value = updatePlayerOverride(mediaType, overrideMediaId, payload, profileId)
+      queryClient.setQueryData(queryKeys.playerOverride(mediaType, overrideMediaId, profileId), value)
+    }
+    setPlaybackState(next)
+  }, [mediaType, overrideMediaId, profileId, queryClient, streamSubtitleList])
 
   useEffect(() => {
-    hydratedOverrideKeyRef.current = null
-    isHydratingRef.current = true
-    lastPersistedOverrideRef.current = null
-  }, [overrideHydrationKey])
-
-  useEffect(() => {
-    return () => {
-      if (hydrationReleaseTimerRef.current !== null) {
-        window.clearTimeout(hydrationReleaseTimerRef.current)
-      }
-      if (saveOverrideTimerRef.current !== null) {
-        window.clearTimeout(saveOverrideTimerRef.current)
-      }
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!mergedPrefs || hydratedOverrideKeyRef.current === overrideHydrationKey) {
-      return
-    }
-    if (hydrationReleaseTimerRef.current !== null) {
-      window.clearTimeout(hydrationReleaseTimerRef.current)
-    }
-    isHydratingRef.current = true
-    setPlaybackState((current) => {
-      const next = hydrateLocalPlaybackState(current, mergedPrefs)
-      lastPersistedOverrideRef.current = stableSerializeOverridePayload(
-        buildOverridePayload(next, [], next.selectedSubtitleId),
-      )
-      return isLocalPlaybackStateEqual(current, next) ? current : next
-    })
+    if (!mergedPrefs || hydratedOverrideKeyRef.current === overrideHydrationKey) return
+    const next = hydrateLocalPlaybackState(playbackStateRef.current, mergedPrefs)
+    playbackStateRef.current = next
+    setPlaybackState(current => isLocalPlaybackStateEqual(current, next) ? current : next)
     hydratedOverrideKeyRef.current = overrideHydrationKey
-    hydrationReleaseTimerRef.current = window.setTimeout(() => {
-      isHydratingRef.current = false
-      hydrationReleaseTimerRef.current = null
-    }, 0)
   }, [mergedPrefs, overrideHydrationKey])
 
   useEffect(() => {
@@ -135,8 +96,7 @@ export function usePlayerPreferences({
     )
     if (patch) {
       // Apply the preferred language after addon subtitle tracks arrive.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      updatePlaybackState(patch)
+      updatePlaybackState(patch, false)
     }
   }, [
     playbackState,
@@ -145,34 +105,17 @@ export function usePlayerPreferences({
     updatePlaybackState,
   ])
 
-  useEffect(() => {
-    if (!overrideMediaId || isHydratingRef.current) {
-      return
-    }
-    const payload = buildOverridePayload(
-      playbackState,
-      streamSubtitleList,
-      playbackState.selectedSubtitleId,
-    )
-    const serialized = stableSerializeOverridePayload(payload)
-    if (!shouldPersistOverride(lastPersistedOverrideRef.current, serialized)) {
-      return
-    }
-    if (saveOverrideTimerRef.current !== null) {
-      window.clearTimeout(saveOverrideTimerRef.current)
-    }
-    saveOverrideTimerRef.current = window.setTimeout(() => {
-      lastPersistedOverrideRef.current = serialized
-      persistOverride(payload)
-    }, 450)
-    return () => {
-      if (saveOverrideTimerRef.current !== null) {
-        window.clearTimeout(saveOverrideTimerRef.current)
-      }
-    }
-  }, [overrideMediaId, overrideHydrationKey, persistOverride, playbackState, streamSubtitleList])
+  const resetToDefaults = useCallback(() => {
+    if (!playerDefaults.data) return
+    resetPlayerOverride(mediaType, overrideMediaId, profileId)
+    queryClient.setQueryData(queryKeys.playerOverride(mediaType, overrideMediaId, profileId), {})
+    const next = hydrateLocalPlaybackState({ ...playbackStateRef.current, selectedSubtitleId: null }, playerDefaults.data)
+    playbackStateRef.current = next
+    setPlaybackState(next)
+  }, [mediaType, overrideMediaId, profileId, playerDefaults.data, queryClient])
 
   return {
+    resetToDefaults,
     playbackState,
     updatePlaybackState,
   }
@@ -194,6 +137,7 @@ function hydrateLocalPlaybackState(
     subtitleBackgroundColor: prefs.subtitle_background_color,
     subtitleBackgroundOpacity: prefs.subtitle_background_opacity,
     subtitleOutlineColor: prefs.subtitle_outline_color,
+    subtitleOutlineWidth: prefs.subtitle_outline_width ?? 1.5,
     subtitleOutlineStyle: prefs.subtitle_outline_style,
     subtitleFontFamily: prefs.subtitle_font_family,
     subtitleOffsetX: prefs.subtitle_offset_x,
@@ -276,6 +220,7 @@ function buildOverridePayload(
     subtitle_background_color: state.subtitleBackgroundColor,
     subtitle_background_opacity: state.subtitleBackgroundOpacity,
     subtitle_outline_color: state.subtitleOutlineColor,
+    subtitle_outline_width: state.subtitleOutlineWidth,
     subtitle_outline_style: state.subtitleOutlineStyle,
     subtitle_font_family: state.subtitleFontFamily,
     subtitle_offset_x: state.subtitleOffsetX,
@@ -288,10 +233,6 @@ function buildOverridePayload(
 
 function stableSerializeOverridePayload<T>(payload: T) {
   return JSON.stringify(payload)
-}
-
-function shouldPersistOverride(previousSerialized: string | null, nextSerialized: string) {
-  return previousSerialized !== nextSerialized
 }
 
 function isLocalPlaybackStateEqual(left: LocalPlaybackState, right: LocalPlaybackState) {

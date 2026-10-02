@@ -1,3 +1,7 @@
+import { useMediabunnyPlayer } from './use-mediabunny-player'
+import { usePlaybackResume } from './use-playback-resume'
+import { captionStyle, captionBackgroundStyle } from './caption-style'
+import { SubtitlePreview } from './subtitle-appearance'
 import { useSkipPrompt } from './use-skip-prompt'
 import { introDbPreferencesQuery } from '@/api/introdb'
 import { activeSegment, skipLabels, skipSegmentsQuery, type SkipSegment } from './skip-segments'
@@ -44,26 +48,14 @@ import {
   useRef,
   useState,
 } from 'react'
-import {
-  ALL_FORMATS,
-  AudioBufferSink,
-  CanvasSink,
-  Input,
-  type InputAudioTrack,
-  UrlSource,
-  type WrappedAudioBuffer,
-  type WrappedCanvas,
-} from 'mediabunny'
+
 
 import {
-  defaultWatchState,
-  findWatchState,
   queryKeys,
   type SubtitleQueryContext,
   streamsQuery,
   subtitlesQuery,
   updateWatchProgress,
-  watchDataQuery,
 } from '@/api/queries'
 import type { MediaPreview, WatchState } from '@/api/types'
 import { Button } from '@/components/ui/button'
@@ -83,11 +75,11 @@ import { formatEpisodeReleaseDate, saveLastSeason } from '../series-url-state'
 import { getChromecastTransport } from '../chromecast'
 import { buildStreamProxyUrl, buildSubtitleProxyUrl } from '../stream-playback'
 import type { Episode, PlaybackTarget, PlayableStream } from '../types'
-import { readSubtitleChoice, saveSubtitleChoice, readPlaybackPosition, savePlaybackPosition } from '../playback-session'
+import { acknowledgePlaybackPosition, clearSubtitleChoice, readSubtitleChoice, saveSubtitleChoice, savePlaybackPosition } from '../playback-session'
 import { defaultSubtitleForAudio, languageName, normalizeLanguage, mergeSubtitleTracks, parseSubtitleText, type SubtitleCue } from './subtitle-utils'
 import { usePlayerKeyboardShortcuts } from './use-player-keyboard-shortcuts'
 import { usePlayerPreferences } from './use-player-preferences'
-import { canControlPlayback, initialPlayerState, type CastStateData, type PlayerState } from './state'
+import { canControlPlayback, type CastStateData, type PlayerState } from './state'
 
 export function MediaPlayerPage({
   media,
@@ -120,16 +112,7 @@ export function MediaPlayerPage({
   const desktop = desktopBridge()
   const conversionEnabled = useDeviceStore(state => state.conversionEnabled)
   const proxiedStreamUrl = desktop ? undefined : streamUrl ? buildStreamProxyUrl(streamUrl) : undefined
-  const watchData = useQuery(
-    watchDataQuery(
-      activeTarget.mediaType,
-      activeTarget.mediaId,
-      Boolean(activeTarget.mediaType && activeTarget.mediaId),
-    ),
-  )
-  const watchState =
-    findWatchState(watchData.data, activeTarget.videoId) ??
-    defaultWatchState(activeTarget.mediaType, activeTarget.mediaId, activeTarget.videoId)
+  const resume = usePlaybackResume(activeTarget)
   const subtitleRequestId = activeTarget.videoId ?? activeTarget.mediaId
   const subtitleQueryContext = useMemo<SubtitleQueryContext>(() => {
     const behaviorHints = activeStream.behaviorHints && typeof activeStream.behaviorHints === 'object'
@@ -155,7 +138,7 @@ export function MediaPlayerPage({
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const playerRef = useRef<HTMLDivElement | null>(null)
   const lastSavedRef = useRef(0)
-  const progressMutateRef = useRef<((payload: { position: number; duration?: number | null }) => void) | null>(null)
+  const progressMutateRef = useRef<((payload: { position: number; duration?: number | null; target: PlaybackTarget; submittedAt: number; profileId: string | null }) => void) | null>(null)
   const castTransport = useMemo(() => getChromecastTransport(), [])
   const [castConnected, setCastConnected] = useState(false)
   const [castReady, setCastReady] = useState(false)
@@ -191,7 +174,7 @@ export function MediaPlayerPage({
     [activeStream.subtitles, subtitleTracks.data],
   )
 
-  const { playbackState, updatePlaybackState } = usePlayerPreferences({
+  const { playbackState, updatePlaybackState, resetToDefaults } = usePlayerPreferences({
     mediaType: activeTarget.mediaType,
     overrideMediaId,
     streamSubtitleList,
@@ -199,30 +182,37 @@ export function MediaPlayerPage({
   })
 
   const progress = useMutation({
-    mutationFn: (payload: { position: number; duration?: number | null }) =>
-      updateWatchProgress({
-        media_type: activeTarget.mediaType,
-        media_id: activeTarget.mediaId,
-        video_id: activeTarget.videoId,
+    scope: { id: JSON.stringify([profileId, activeTarget.mediaType, activeTarget.mediaId, activeTarget.videoId]) },
+    mutationFn: (payload: { position: number; duration?: number | null; target: PlaybackTarget; submittedAt: number; profileId: string | null }) => {
+      // A queued write may outlive navigation or a profile switch. Never send
+      // the old profile's progress using the newly selected profile's session.
+      if (payload.profileId !== useAppStore.getState().activeProfileId) return Promise.reject(new Error('Playback profile changed'))
+      return updateWatchProgress({
+        media_type: payload.target.mediaType,
+        media_id: payload.target.mediaId,
+        video_id: payload.target.videoId,
         ignore_start_seconds: autoSettings.ignoreStartSeconds,
         finish_remaining_seconds: autoSettings.finishRemainingSeconds,
         position_seconds: Math.max(0, Math.floor(payload.position)),
         duration_seconds: payload.duration ? Math.floor(payload.duration) : null,
-      }),
-    onSuccess: (state) => {
-      queryClient.setQueryData(queryKeys.watchData(activeTarget.mediaType, activeTarget.mediaId), (existing: { items?: WatchState[] } | undefined) => {
+      })
+    },
+    onSuccess: (state, payload) => {
+      if (payload.profileId !== useAppStore.getState().activeProfileId) return
+      acknowledgePlaybackPosition(payload.target, payload.submittedAt, state)
+      queryClient.setQueryData(queryKeys.watchData(state.media_type, state.media_id), (existing: { items?: WatchState[] } | undefined) => {
         if (!existing) {
-          return { media_type: activeTarget.mediaType, media_id: activeTarget.mediaId, items: [state] }
+          return { media_type: state.media_type, media_id: state.media_id, items: [state] }
         }
         const items = existing.items ?? []
-        const index = items.findIndex((item) => (item.video_id ?? null) === activeTarget.videoId)
+        const index = items.findIndex((item) => (item.video_id ?? null) === state.video_id)
         return {
           ...existing,
           items: index >= 0 ? items.map((item, itemIndex) => (itemIndex === index ? state : item)) : [...items, state],
         }
       })
-      queryClient.invalidateQueries({ queryKey: ['episodes', activeTarget.mediaId] })
-      queryClient.invalidateQueries({ queryKey: queryKeys.watchData(activeTarget.mediaType, activeTarget.mediaId) })
+      queryClient.invalidateQueries({ queryKey: ['episodes', state.media_id] })
+      queryClient.invalidateQueries({ queryKey: queryKeys.watchData(state.media_type, state.media_id) })
       queryClient.invalidateQueries({ queryKey: queryKeys.continueWatching(20) })
       queryClient.invalidateQueries({ queryKey: queryKeys.continueWatching(12) })
     },
@@ -233,13 +223,14 @@ export function MediaPlayerPage({
   }, [progress.mutate])
 
   const saveProgress = useCallback((position: number, duration: number) => {
-    if (!Number.isFinite(position)) {
+    if (profileId !== useAppStore.getState().activeProfileId) return
+    if (!Number.isFinite(position) || !Number.isFinite(duration) || duration <= 0) {
       return
     }
-    savePlaybackPosition(activeTarget, position)
+    const submittedAt = savePlaybackPosition(activeTarget, position) ?? Date.now()
     lastSavedRef.current = position
-    progressMutateRef.current?.({ position, duration: finiteDuration(duration) })
-  }, [activeTarget])
+    progressMutateRef.current?.({ position, duration: finiteDuration(duration), target: activeTarget, submittedAt, profileId })
+  }, [activeTarget, profileId])
 
   const nextEpisode = nextReleasedEpisode(releaseCatalog.data?.items ?? activeTarget.seriesEpisodes ?? [], activeTarget.videoId)
   const promptNextEpisode = useCallback(() => { if (nextEpisode) setUpNext(nextEpisode) }, [nextEpisode])
@@ -247,10 +238,10 @@ export function MediaPlayerPage({
   const onEnded = useCallback(() => endedRef.current?.(), [])
   const webPlayer = useMediabunnyPlayer({
     canvasRef,
-    url: proxiedStreamUrl,
+    url: resume.ready ? proxiedStreamUrl : undefined,
     authToken: null,
-    savedPosition: readPlaybackPosition(activeTarget) ?? watchState.position_seconds,
-    watched: watchState.watched,
+    savedPosition: resume.savedPosition,
+    watched: resume.watched,
     preferredAudioLanguage: playbackState.preferredAudioLanguage,
     selectedAudioTrackId: playbackState.selectedAudioTrackId,
     initialPlaybackSpeed: playbackState.playbackSpeed,
@@ -258,7 +249,7 @@ export function MediaPlayerPage({
     onEnded,
   })
 
-  const desktopPlayer = useDesktopPlayer({ videoRef, source: desktop && !watchData.isLoading ? streamUrl : undefined, hints: activeStream.behaviorHints, savedPosition: readPlaybackPosition(activeTarget) ?? watchState.position_seconds, watched: watchState.watched, onProgressCommit: saveProgress, onEnded })
+  const desktopPlayer = useDesktopPlayer({ videoRef, source: desktop && resume.ready ? streamUrl : undefined, hints: activeStream.behaviorHints, savedPosition: resume.savedPosition, watched: resume.watched, onProgressCommit: saveProgress, onEnded })
   const player = desktop ? desktopPlayer : webPlayer
   const triggerNextEpisode = useEpisodeAutoplay({
     episodeKey: `${activeTarget.mediaType}:${activeTarget.mediaId}:${activeTarget.videoId}`,
@@ -293,7 +284,7 @@ export function MediaPlayerPage({
     const savedChoice = readSubtitleChoice(activeTarget)
     const savedTrack = savedChoice?.language ? streamSubtitleList.find(track => track.id === savedChoice.id) ?? streamSubtitleList.find(track => normalizeLanguage(track.language) === normalizeLanguage(savedChoice.language ?? '')) : undefined
     const id = savedChoice ? savedTrack?.id ?? null : defaultSubtitleForAudio(audio.language, streamSubtitleList)
-    updatePlaybackState({ subtitlesEnabled: id !== null, selectedSubtitleId: id, preferredSubtitleLanguage: id ? streamSubtitleList.find(track => track.id === id)?.language ?? 'eng' : null })
+    updatePlaybackState({ subtitlesEnabled: id !== null, selectedSubtitleId: id, preferredSubtitleLanguage: id ? streamSubtitleList.find(track => track.id === id)?.language ?? 'eng' : null }, false)
   }, [activeTarget, player.state.audioTracks, player.state.selectedAudioTrackId, player.state.status, streamSubtitleList, subtitleTracks.isLoading, updatePlaybackState])
 
   const { setPlaybackSpeed, setAudioTrack, pause: pauseLocal, setVolume } = player
@@ -507,7 +498,7 @@ export function MediaPlayerPage({
     setPendingEpisode(null)
     setUpNext(null)
     setEpisodeSheetOpen(false)
-  }, [pendingEpisode, activeTarget, releaseCatalog.data, saveProgress, player.state.currentTime, player.state.duration, onPlaybackChange])
+  }, [pendingEpisode, activeTarget, releaseCatalog.data, saveProgress, player.state.currentTime, player.state.duration, onPlaybackChange, setPendingEpisode, setEpisodeSheetOpen])
   useEffect(() => {
     if (!pendingEpisode || episodeStreams.isFetching || episodeStreams.error || !episodeStreams.data) return
     const next = autoSettings.enabled ? rankStreams(episodeStreams.data, autoSettings).find(row => row.eligible)?.stream : episodeStreams.data.find(isDirectStream)
@@ -711,6 +702,9 @@ export function MediaPlayerPage({
             onSubtitleBackgroundColorChange={(value) => updatePlaybackState({ subtitleBackgroundColor: value })}
             subtitleBackgroundOpacity={playbackState.subtitleBackgroundOpacity}
             onSubtitleBackgroundOpacityChange={(value) => updatePlaybackState({ subtitleBackgroundOpacity: value })}
+            subtitleOutlineWidth={playbackState.subtitleOutlineWidth}
+            onSubtitleOutlineWidthChange={value => updatePlaybackState({ subtitleOutlineWidth: value })}
+            onUseDefaults={() => { manualSubtitleRef.current = true; clearSubtitleChoice(activeTarget); void resetToDefaults() }}
             subtitleOutlineColor={playbackState.subtitleOutlineColor}
             onSubtitleOutlineColorChange={(value) => updatePlaybackState({ subtitleOutlineColor: value })}
             subtitleOutlineStyle={playbackState.subtitleOutlineStyle}
@@ -758,23 +752,11 @@ export function MediaPlayerPage({
               style={{
                 bottom: `calc(${"var(--player-caption-bottom, max(6vh, 28px))"} + ${playbackState.subtitlePosition * 100 + playbackState.subtitleOffsetY}px + env(safe-area-inset-bottom))`,
                 transform: `translateX(${playbackState.subtitleOffsetX}px)`,
-                fontSize: `calc(clamp(20px, 2.65vw, 36px) * ${playbackState.subtitleSize})`,
-                color: playbackState.subtitleTextColor,
-                fontFamily: playbackState.subtitleFontFamily,
-                textShadow:
-                  playbackState.subtitleOutlineStyle === "shadow"
-                    ? `0 0 8px ${playbackState.subtitleOutlineColor}`
-                    : `1.5px 0 0 ${playbackState.subtitleOutlineColor}, -1.5px 0 0 ${playbackState.subtitleOutlineColor}, 0 1.5px 0 ${playbackState.subtitleOutlineColor}, 0 -1.5px 0 ${playbackState.subtitleOutlineColor}, 1px 1px 0 ${playbackState.subtitleOutlineColor}, -1px -1px 0 ${playbackState.subtitleOutlineColor}, -1px 1px 0 ${playbackState.subtitleOutlineColor}, 1px -1px 0 ${playbackState.subtitleOutlineColor}`,
+                ...captionStyle(playbackState),
               }}
             >
               <span
-                style={{
-                  backgroundColor: hexToRgba(playbackState.subtitleBackgroundColor, playbackState.subtitleBackgroundOpacity),
-                  padding: "0.2em 0.45em",
-                  borderRadius: 4,
-                  whiteSpace: "pre-line",
-                  boxDecorationBreak: "clone",
-                }}
+                style={captionBackgroundStyle(playbackState)}
               >
                 {subtitleText}
               </span>
@@ -849,6 +831,9 @@ function DesktopPlayerChrome({
   onSubtitleBackgroundColorChange,
   subtitleBackgroundOpacity,
   onSubtitleBackgroundOpacityChange,
+  subtitleOutlineWidth,
+  onSubtitleOutlineWidthChange,
+  onUseDefaults,
   subtitleOutlineColor,
   onSubtitleOutlineColorChange,
   subtitleOutlineStyle,
@@ -896,6 +881,9 @@ function DesktopPlayerChrome({
   onSubtitleBackgroundColorChange: (value: string) => void
   subtitleBackgroundOpacity: number
   onSubtitleBackgroundOpacityChange: (value: number) => void
+  subtitleOutlineWidth: number
+  onSubtitleOutlineWidthChange: (value: number) => void
+  onUseDefaults: () => void
   subtitleOutlineColor: string
   onSubtitleOutlineColorChange: (value: string) => void
   subtitleOutlineStyle: string
@@ -1230,9 +1218,12 @@ function DesktopPlayerChrome({
             <Captions className="size-4" />
             Subtitle settings
           </DialogTitle>
+          <SubtitlePreview value={{ subtitleSize, subtitleTextColor, subtitleBackgroundColor, subtitleBackgroundOpacity, subtitleOutlineColor, subtitleOutlineWidth, subtitleOutlineStyle, subtitleFontFamily }} />
+          <Button type="button" onClick={onUseDefaults}>Use device defaults</Button>
           <div className="grid gap-2 text-xs">
             <div className="grid grid-cols-2 gap-2">
               <LabeledNumberInput label="Delay" value={subtitleDelay} step={0.1} min={-30} max={30} onChange={onSubtitleDelayChange} />
+              <LabeledNumberInput label="Outline weight" value={subtitleOutlineWidth} step={0.5} min={0} max={6} onChange={onSubtitleOutlineWidthChange} />
               <LabeledNumberInput label="Size" value={subtitleSize} step={0.05} min={0.5} max={3} onChange={onSubtitleSizeChange} />
               <LabeledNumberInput label="Position" value={subtitlePosition} step={0.05} min={-1} max={1} onChange={onSubtitlePositionChange} />
               <LabeledNumberInput label="Bg Opacity" value={subtitleBackgroundOpacity} step={0.05} min={0} max={1} onChange={onSubtitleBackgroundOpacityChange} />
@@ -1387,7 +1378,7 @@ function LabeledNumberInput({
         min={min}
         max={max}
         step={step}
-        onChange={(event) => onChange(Number(event.target.value))}
+        onChange={(event) => { if (event.target.value && event.target.validity.valid) onChange(Number(event.target.value)) }}
         className="h-8 rounded border border-white/20 bg-black/40 px-2 text-white"
       />
     </label>
@@ -1525,591 +1516,6 @@ function formatEpisodeBadge(season: number | null, episode: number | null) {
   return `${seasonLabel}${episodeLabel}`
 }
 
-function hexToRgba(hex: string, opacity: number) {
-  const safe = hex.replace("#", "")
-  const full = safe.length === 3
-    ? safe.split("").map((char) => `${char}${char}`).join("")
-    : safe
-  const red = Number.parseInt(full.slice(0, 2), 16)
-  const green = Number.parseInt(full.slice(2, 4), 16)
-  const blue = Number.parseInt(full.slice(4, 6), 16)
-  const alpha = Math.max(0, Math.min(opacity, 1))
-  return `rgba(${Number.isFinite(red) ? red : 0}, ${Number.isFinite(green) ? green : 0}, ${Number.isFinite(blue) ? blue : 0}, ${alpha})`
-}
-
-function useMediabunnyPlayer({
-  canvasRef,
-  url,
-  authToken,
-  savedPosition,
-  watched,
-  preferredAudioLanguage,
-  selectedAudioTrackId,
-  initialPlaybackSpeed,
-  onProgressCommit,
-  onEnded,
-}: {
-  canvasRef: RefObject<HTMLCanvasElement | null>
-  url?: string
-  authToken: string | null
-  savedPosition: number
-  watched: boolean
-  preferredAudioLanguage: string | null
-  selectedAudioTrackId: string | null
-  initialPlaybackSpeed: number
-  onEnded?: () => void
-  onProgressCommit: (position: number, duration: number) => void
-}) {
-  const [state, setState] = useState<PlayerState>(initialPlayerState)
-  const stateRef = useRef(initialPlayerState)
-  const inputRef = useRef<Input | null>(null)
-  const videoSinkRef = useRef<CanvasSink | null>(null)
-  const audioSinkRef = useRef<AudioBufferSink | null>(null)
-  const audioContextRef = useRef<AudioContext | null>(null)
-  const gainNodeRef = useRef<GainNode | null>(null)
-  const videoFrameIteratorRef = useRef<AsyncGenerator<WrappedCanvas, void, unknown> | null>(null)
-  const audioBufferIteratorRef = useRef<AsyncGenerator<WrappedAudioBuffer, void, unknown> | null>(null)
-  const nextFrameRef = useRef<WrappedCanvas | null>(null)
-  const queuedAudioNodesRef = useRef<Set<AudioBufferSourceNode>>(new Set())
-  const audioContextStartTimeRef = useRef<number | null>(null)
-  const playbackTimeAtStartRef = useRef(0)
-  const playingRef = useRef(false)
-  const durationRef = useRef(0)
-  const savedPositionRef = useRef(savedPosition)
-  const watchedRef = useRef(watched)
-  const hasRestoredRef = useRef(false)
-  const asyncIdRef = useRef(0)
-  const animationFrameRef = useRef<number | null>(null)
-  const renderIntervalRef = useRef<number | null>(null)
-  const renderRef = useRef<(requestNextFrame?: boolean) => void>(() => undefined)
-  const endedCallback = useRef(onEnded)
-  useEffect(() => { endedCallback.current = onEnded }, [onEnded])
-  const onProgressCommitRef = useRef(onProgressCommit)
-  const playbackRateRef = useRef(Math.max(0.25, Math.min(initialPlaybackSpeed || 1, 3)))
-
-  useEffect(() => {
-    onProgressCommitRef.current = onProgressCommit
-  }, [onProgressCommit])
-
-  useEffect(() => {
-    savedPositionRef.current = savedPosition
-    watchedRef.current = watched
-  }, [savedPosition, watched])
-
-  const updateState = useCallback((patch: Partial<PlayerState>) => {
-    stateRef.current = { ...stateRef.current, ...patch }
-    setState(stateRef.current)
-  }, [])
-
-  const getPlaybackTime = useCallback(() => {
-    if (playingRef.current) {
-      const audioContext = audioContextRef.current
-      const audioContextStartTime = audioContextStartTimeRef.current
-      if (!audioContext || audioContextStartTime === null) {
-        return playbackTimeAtStartRef.current
-      }
-      const elapsed = audioContext.currentTime - audioContextStartTime
-      return elapsed * playbackRateRef.current + playbackTimeAtStartRef.current
-    }
-    return playbackTimeAtStartRef.current
-  }, [])
-
-  const stopQueuedAudio = useCallback(() => {
-    for (const node of queuedAudioNodesRef.current) {
-      try {
-        node.stop()
-      } catch {
-        // Already stopped nodes are harmless here.
-      }
-    }
-    queuedAudioNodesRef.current.clear()
-  }, [])
-
-  const pause = useCallback((commit = true) => {
-    playbackTimeAtStartRef.current = Math.min(getPlaybackTime(), durationRef.current)
-    playingRef.current = false
-    void audioBufferIteratorRef.current?.return()
-    audioBufferIteratorRef.current = null
-    stopQueuedAudio()
-    updateState({ playing: false, currentTime: playbackTimeAtStartRef.current })
-    if (commit) {
-      onProgressCommitRef.current(playbackTimeAtStartRef.current, durationRef.current)
-    }
-  }, [getPlaybackTime, stopQueuedAudio, updateState])
-
-  const drawWrappedCanvas = useCallback((frame: WrappedCanvas) => {
-    const canvas = canvasRef.current
-    const context = canvas?.getContext('2d')
-    if (!canvas || !context) {
-      return
-    }
-    context.clearRect(0, 0, canvas.width, canvas.height)
-    context.drawImage(frame.canvas, 0, 0)
-  }, [canvasRef])
-
-  const updateNextFrame = useCallback(async () => {
-    const currentAsyncId = asyncIdRef.current
-    const iterator = videoFrameIteratorRef.current
-    if (!iterator) {
-      return
-    }
-
-    while (currentAsyncId === asyncIdRef.current) {
-      const result = await iterator.next()
-      const frame = result.value ?? null
-      if (!frame) {
-        break
-      }
-
-      if (currentAsyncId !== asyncIdRef.current) {
-        break
-      }
-
-      if (frame.timestamp <= getPlaybackTime()) {
-        drawWrappedCanvas(frame)
-      } else {
-        nextFrameRef.current = frame
-        break
-      }
-    }
-  }, [drawWrappedCanvas, getPlaybackTime])
-
-  const startVideoIterator = useCallback(async () => {
-    const videoSink = videoSinkRef.current
-    if (!videoSink) {
-      return
-    }
-
-    const generation = ++asyncIdRef.current
-    nextFrameRef.current = null
-    await videoFrameIteratorRef.current?.return()
-    if (generation !== asyncIdRef.current) return
-    const iterator = videoSink.canvases(getPlaybackTime())
-    videoFrameIteratorRef.current = iterator
-    const firstFrame = (await iterator.next()).value ?? null
-    const secondFrame = (await iterator.next()).value ?? null
-    if (generation !== asyncIdRef.current) { await iterator.return(); return }
-    nextFrameRef.current = secondFrame
-    if (firstFrame) {
-      drawWrappedCanvas(firstFrame)
-    }
-  }, [drawWrappedCanvas, getPlaybackTime])
-
-  const runAudioIterator = useCallback(async () => {
-    const audioContext = audioContextRef.current
-    const gainNode = gainNodeRef.current
-    const iterator = audioBufferIteratorRef.current
-    if (!audioContext || !gainNode || !iterator) {
-      return
-    }
-
-    for await (const { buffer, timestamp } of iterator) {
-      if (!playingRef.current) {
-        break
-      }
-
-      const node = audioContext.createBufferSource()
-      node.buffer = buffer
-      node.playbackRate.value = playbackRateRef.current
-      node.connect(gainNode)
-      const startTimestamp = audioContextStartTimeRef.current!
-        + (timestamp - playbackTimeAtStartRef.current) / playbackRateRef.current
-
-      if (startTimestamp >= audioContext.currentTime) {
-        node.start(startTimestamp)
-      } else {
-        node.start(audioContext.currentTime, audioContext.currentTime - startTimestamp)
-      }
-
-      queuedAudioNodesRef.current.add(node)
-      node.onended = () => {
-        queuedAudioNodesRef.current.delete(node)
-      }
-
-      if (timestamp - getPlaybackTime() >= 1) {
-        await waitUntilNearPlaybackTime(timestamp, getPlaybackTime)
-      }
-    }
-  }, [getPlaybackTime])
-
-  const play = useCallback(async () => {
-    if (stateRef.current.status !== 'ready') {
-      return
-    }
-
-    const audioContext = audioContextRef.current
-    if (!audioContext) {
-      return
-    }
-
-    if (audioContext.state === 'suspended') {
-      await audioContext.resume()
-    }
-
-    if (getPlaybackTime() >= durationRef.current) {
-      playbackTimeAtStartRef.current = 0
-      await startVideoIterator()
-    }
-
-    audioContextStartTimeRef.current = audioContext.currentTime
-    playingRef.current = true
-    updateState({ playing: true })
-
-    if (audioSinkRef.current) {
-      void audioBufferIteratorRef.current?.return()
-      audioBufferIteratorRef.current = audioSinkRef.current.buffers(getPlaybackTime())
-      void runAudioIterator()
-    }
-  }, [getPlaybackTime, runAudioIterator, startVideoIterator, updateState])
-
-  const seek = useCallback(async (seconds: number, commit = false) => {
-    if (stateRef.current.status !== 'ready') {
-      return
-    }
-
-    const nextTime = Math.max(0, Math.min(seconds, durationRef.current))
-    const wasPlaying = playingRef.current
-    if (wasPlaying) {
-      pause(false)
-    }
-
-    playbackTimeAtStartRef.current = nextTime
-    updateState({ currentTime: nextTime })
-    if (durationRef.current > 0 && nextTime >= durationRef.current) {
-      onProgressCommitRef.current(nextTime, durationRef.current)
-      endedCallback.current?.()
-      return
-    }
-    await startVideoIterator()
-
-    if (commit) {
-      onProgressCommitRef.current(nextTime, durationRef.current)
-    }
-
-    if (wasPlaying && nextTime < durationRef.current) {
-      void play()
-    }
-  }, [pause, play, startVideoIterator, updateState])
-
-  const render = useCallback((requestNextFrame = true) => {
-    if (stateRef.current.status === 'ready') {
-      const playbackTime = Math.min(getPlaybackTime(), durationRef.current)
-      if (playingRef.current && playbackTime >= durationRef.current) {
-        pause(true)
-        playbackTimeAtStartRef.current = durationRef.current
-        endedCallback.current?.()
-      }
-
-      const nextFrame = nextFrameRef.current
-      if (nextFrame && nextFrame.timestamp <= playbackTime) {
-        drawWrappedCanvas(nextFrame)
-        nextFrameRef.current = null
-        void updateNextFrame()
-      }
-
-      updateState({ currentTime: playbackTime })
-    }
-
-    if (requestNextFrame) {
-      animationFrameRef.current = requestAnimationFrame(() => renderRef.current())
-    }
-  }, [drawWrappedCanvas, getPlaybackTime, pause, updateNextFrame, updateState])
-
-  useEffect(() => {
-    renderRef.current = render
-  }, [render])
-
-  const dispose = useCallback((commit = true) => {
-    if (commit && stateRef.current.status === 'ready') {
-      onProgressCommitRef.current(getPlaybackTime(), durationRef.current)
-    }
-
-    asyncIdRef.current += 1
-    playingRef.current = false
-    void videoFrameIteratorRef.current?.return()
-    void audioBufferIteratorRef.current?.return()
-    videoFrameIteratorRef.current = null
-    audioBufferIteratorRef.current = null
-    nextFrameRef.current = null
-    stopQueuedAudio()
-    inputRef.current?.dispose()
-    inputRef.current = null
-    videoSinkRef.current = null
-    audioSinkRef.current = null
-    void audioContextRef.current?.close()
-    audioContextRef.current = null
-    gainNodeRef.current = null
-
-    if (animationFrameRef.current !== null) {
-      cancelAnimationFrame(animationFrameRef.current)
-      animationFrameRef.current = null
-    }
-    if (renderIntervalRef.current !== null) {
-      clearInterval(renderIntervalRef.current)
-      renderIntervalRef.current = null
-    }
-  }, [getPlaybackTime, stopQueuedAudio])
-
-  useEffect(() => {
-    if (!url) {
-      updateState(initialPlayerState)
-      return
-    }
-
-    let canceled = false
-
-    const init = async () => {
-      dispose(false)
-      stateRef.current = { ...initialPlayerState, status: 'loading' }
-      setState(stateRef.current)
-
-      try {
-        const input = new Input({
-          formats: ALL_FORMATS,
-          source: new UrlSource(url, {
-            requestInit: {
-              headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined,
-            },
-          }),
-        })
-        inputRef.current = input
-
-        const [duration, videoTrackResult, audioTracksResult] = await Promise.all([
-          input.computeDuration(),
-          input.getPrimaryVideoTrack(),
-          input.getAudioTracks(),
-        ])
-        let videoTrack = videoTrackResult
-        const audioTracks = audioTracksResult.filter((track): track is InputAudioTrack => Boolean(track))
-        let audioTrack: InputAudioTrack | null =
-          audioTracks.find((track) => String(track.id) === selectedAudioTrackId)
-          ?? audioTracks.find((track) =>
-            preferredAudioLanguage
-              ? track.languageCode.toLowerCase() === preferredAudioLanguage.toLowerCase()
-              : false,
-          )
-          ?? audioTracks[0]
-          ?? null
-        let warning = ''
-
-        if (videoTrack) {
-          const codec = await resolveTrackCodec(videoTrack)
-          if (videoTrack.codec === null) {
-            warning += `Unsupported video codec (${codec}). `
-            videoTrack = null
-          } else if (!(await videoTrack.canDecode())) {
-            warning += `Unable to decode the video track codec (${codec}). `
-            videoTrack = null
-          }
-        }
-
-        if (audioTrack) {
-          const codec = await resolveTrackCodec(audioTrack)
-          if (audioTrack.codec === null) {
-            warning += `Unsupported audio codec (${codec}). `
-            audioTrack = null
-          } else if (!(await audioTrack.canDecode())) {
-            warning += `Unable to decode the audio track codec (${codec}). `
-            audioTrack = null
-          }
-        }
-
-        if (!videoTrack && !audioTrack) {
-          throw new Error(warning || 'No audio or video track found.')
-        }
-
-        if (canceled) {
-          input.dispose()
-          return
-        }
-
-        const AudioContextConstructor = getAudioContextConstructor()
-        const audioContext = audioTrack
-          ? new AudioContextConstructor({ sampleRate: audioTrack.sampleRate })
-          : new AudioContextConstructor()
-        const gainNode = audioContext.createGain()
-        gainNode.connect(audioContext.destination)
-        audioContextRef.current = audioContext
-        gainNodeRef.current = gainNode
-
-        const videoCanBeTransparent = videoTrack ? await videoTrack.canBeTransparent() : false
-        videoSinkRef.current = videoTrack
-          ? new CanvasSink(videoTrack, { poolSize: 2, fit: 'contain', alpha: videoCanBeTransparent })
-          : null
-        audioSinkRef.current = audioTrack ? new AudioBufferSink(audioTrack) : null
-        durationRef.current = duration
-
-        const canvas = canvasRef.current
-        if (canvas && videoTrack) {
-          canvas.width = videoTrack.displayWidth
-          canvas.height = videoTrack.displayHeight
-        }
-
-        const restoredTime = savedPositionRef.current > 0 && !watchedRef.current
-          ? Math.min(savedPositionRef.current, Math.max(0, duration - 3))
-          : 0
-        playbackTimeAtStartRef.current = restoredTime
-        hasRestoredRef.current = restoredTime > 0
-        playingRef.current = false
-        setGain(gainNode, stateRef.current.volume, stateRef.current.muted)
-        updateState({
-          status: 'ready',
-          warning: warning || null,
-          error: null,
-          duration,
-          currentTime: restoredTime,
-          playing: false,
-          hasVideo: Boolean(videoTrack),
-          hasAudio: Boolean(audioTrack),
-          playbackSpeed: playbackRateRef.current,
-          selectedAudioTrackId: audioTrack ? String(audioTrack.id) : null,
-          audioTracks: audioTracks.map((track) => ({
-            id: String(track.id),
-            label: `${languageName(track.languageCode)}${track.name ? ` · ${track.name}` : ''}`,
-            language: track.languageCode,
-          })),
-        })
-        await startVideoIterator()
-
-        animationFrameRef.current = requestAnimationFrame(() => render())
-        renderIntervalRef.current = window.setInterval(() => render(false), 500)
-
-        if (audioContext.state === 'running') {
-          void play()
-        }
-      } catch (error) {
-        if (canceled) {
-          return
-        }
-        console.error(error)
-        dispose(false)
-        updateState({
-          ...initialPlayerState,
-          status: 'error',
-          error: error instanceof Error ? error.message : String(error),
-        })
-      }
-    }
-
-    void init()
-
-    return () => {
-      canceled = true
-      dispose(true)
-    }
-  }, [
-    authToken,
-    canvasRef,
-    dispose,
-    play,
-    preferredAudioLanguage,
-    render,
-    selectedAudioTrackId,
-    startVideoIterator,
-    updateState,
-    url,
-  ])
-
-  useEffect(() => {
-    if (state.status !== 'ready' || hasRestoredRef.current || savedPosition <= 0 || watched) {
-      return
-    }
-
-    hasRestoredRef.current = true
-    void seek(Math.min(savedPosition, Math.max(0, state.duration - 3)), false)
-  }, [savedPosition, seek, state.duration, state.status, watched])
-
-  const setVolume = useCallback((volume: number) => {
-    const nextVolume = Math.max(0, Math.min(volume, 1))
-    const nextMuted = nextVolume === 0
-    setGain(gainNodeRef.current, nextVolume, nextMuted)
-    updateState({ volume: nextVolume, muted: nextMuted })
-  }, [updateState])
-
-  const toggleMute = useCallback(() => {
-    const muted = !stateRef.current.muted
-    setGain(gainNodeRef.current, stateRef.current.volume, muted)
-    updateState({ muted })
-  }, [updateState])
-
-  const setPlaybackSpeed = useCallback((speed: number) => {
-    const nextSpeed = Math.max(0.25, Math.min(speed, 3))
-    if (playingRef.current) {
-      const audioContext = audioContextRef.current
-      if (audioContext) {
-        playbackTimeAtStartRef.current = getPlaybackTime()
-        audioContextStartTimeRef.current = audioContext.currentTime
-      }
-    }
-    playbackRateRef.current = nextSpeed
-    queuedAudioNodesRef.current.forEach((node) => {
-      node.playbackRate.value = nextSpeed
-    })
-    updateState({ playbackSpeed: nextSpeed })
-  }, [getPlaybackTime, updateState])
-
-  const setAudioTrack = useCallback((id: string | null) => {
-    updateState({ selectedAudioTrackId: id })
-  }, [updateState])
-
-  const toggle = useCallback(() => {
-    if (playingRef.current) {
-      pause(true)
-    } else {
-      void play()
-    }
-  }, [pause, play])
-
-  return useMemo(() => ({
-    state,
-    play,
-    pause,
-    seek,
-    setVolume,
-    setAudioTrack,
-    setPlaybackSpeed,
-    toggleMute,
-    toggle,
-  }), [pause, play, seek, setAudioTrack, setPlaybackSpeed, setVolume, state, toggle, toggleMute])
-}
-
-function setGain(gainNode: GainNode | null, volume: number, muted: boolean) {
-  if (!gainNode) {
-    return
-  }
-  const actualVolume = muted ? 0 : volume
-  gainNode.gain.value = actualVolume ** 2
-}
-
-type DecodableTrack = {
-  codec: string | null
-  getCodecParameterString: () => Promise<string | null>
-}
-
-async function resolveTrackCodec(track: DecodableTrack) {
-  if (track.codec) {
-    return track.codec
-  }
-  try {
-    const codec = await track.getCodecParameterString()
-    return codec || 'unknown'
-  } catch {
-    return 'unknown'
-  }
-}
-
-async function waitUntilNearPlaybackTime(timestamp: number, getPlaybackTime: () => number) {
-  while (timestamp - getPlaybackTime() >= 1) {
-    await new Promise((resolve) => window.setTimeout(resolve, 100))
-  }
-}
-
-function getAudioContextConstructor() {
-  const webkitWindow = window as Window & {
-    webkitAudioContext?: typeof AudioContext
-  }
-  return window.AudioContext ?? webkitWindow.webkitAudioContext!
-}
 
 function toggleFullscreen(element: HTMLElement | null) {
   if (!element) {

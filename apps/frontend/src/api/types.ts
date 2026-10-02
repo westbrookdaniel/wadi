@@ -223,6 +223,7 @@ export type PlayerPreferences = {
   subtitle_background_color: string
   subtitle_background_opacity: number
   subtitle_outline_color: string
+  subtitle_outline_width?: number
   subtitle_outline_style: string
   subtitle_font_family: string
   subtitle_offset_x: number

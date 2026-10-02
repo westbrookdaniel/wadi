@@ -1,3 +1,7 @@
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { SubtitlePreview } from '@/features/media/detail/player/subtitle-appearance'
+import { initialLocalPlaybackState } from '@/features/media/detail/player/state'
+import type { SubtitleAppearance } from '@/features/media/detail/player/caption-style'
 import { useSkipPrompt } from '@/features/media/detail/player/use-skip-prompt'
 import { skipLabels, type SkipSegment } from '@/features/media/detail/player/skip-segments'
 import { useEffect, useRef, useState } from 'react'
@@ -5,7 +9,11 @@ import { nearestTarget } from '@/components/tv-spatial'
 import { canControlPlayback, type PlayerState } from '@/features/media/detail/player/state'
 import { TvPicker } from './tv-picker'
 
-type Props = {
+type Props = Partial<SubtitleAppearance> & {
+  onUseDefaults?: () => void
+  onSubtitleOutlineWidthChange?: (value: number) => void
+  onSubtitleOutlineColorChange?: (value: string) => void
+  onSubtitleOutlineStyleChange?: (value: string) => void
   skipSegment?: SkipSegment
   mediaName: string; state: PlayerState; warning: string | null; hasEpisodeSwapper: boolean
   onBack: () => void; onTogglePlay: () => void; onSeek: (value: number) => void; onOpenEpisodeSwapper: () => void
@@ -19,6 +27,7 @@ type Props = {
 export function TvPlayerChrome(props: Props) {
   const { state } = props
   const { visible: skipVisible, dismiss: dismissSkip } = useSkipPrompt(props.skipSegment)
+  const [subtitleSettingsOpen, setSubtitleSettingsOpen] = useState(false)
   const [visible, setVisible] = useState(true)
   const controlsVisible = visible
   const [seek, setSeek] = useState<number | null>(null)
@@ -113,12 +122,22 @@ export function TvPlayerChrome(props: Props) {
           <TvPicker label="Audio" value={state.selectedAudioTrackId ?? ''} disabled={!state.audioTracks.length} options={state.audioTracks.map(track => ({ value: track.id, label: track.label || track.language }))} onChange={props.onSelectAudioTrack} />
           <TvPicker label="Subtitles" value={props.selectedSubtitleId ?? '__off'} options={[{ value: '__off', label: 'Subtitles off' }, ...props.subtitleTracks.map(track => ({ value: track.id, label: `${track.language} · ${track.source}` }))]} onChange={value => props.onSelectSubtitle(value === '__off' ? null : value)} />
           <TvPicker label="Playback speed" value={String(props.playbackSpeed)} options={[0.5, 0.75, 1, 1.25, 1.5, 2].map(value => ({ value: String(value), label: `${value}× speed` }))} onChange={value => props.onPlaybackSpeedChange(Number(value))} />
-          <TvPicker label="Subtitle size" value={String(props.subtitleSize)} options={[0.75, 1, 1.25, 1.5, 2].map(value => ({ value: String(value), label: `${value}× subtitles` }))} onChange={value => props.onSubtitleSizeChange(Number(value))} />
+          <TvPicker label="Subtitle size" value={String(props.subtitleSize)} options={[0.75, 1, 1.15, 1.25, 1.5, 2].map(value => ({ value: String(value), label: `${value}× subtitles` }))} onChange={value => props.onSubtitleSizeChange(Number(value))} />
+          {props.onUseDefaults ? <button type="button" onClick={() => setSubtitleSettingsOpen(true)}>Subtitle settings</button> : null}
           <TvPicker label="Subtitle timing" value={String(props.subtitleDelay)} options={[-10, -5, -2, -1, 0, 1, 2, 5, 10].map(value => ({ value: String(value), label: `${value > 0 ? '+' : ''}${value}s subtitle delay` }))} onChange={value => props.onSubtitleDelayChange(Number(value))} />
         </div>}
         <p className="tv-hint">OK shows controls · Back hides controls, then returns</p>
       </div>
     </div> : null}
+    <Dialog open={subtitleSettingsOpen} onOpenChange={setSubtitleSettingsOpen}>
+      <DialogContent><DialogTitle>Subtitle settings</DialogTitle>
+        <SubtitlePreview value={{ ...initialLocalPlaybackState, ...props }} />
+        <TvPicker label="Outline weight" value={String(props.subtitleOutlineWidth ?? 1.5)} options={[0, 0.5, 1, 1.5, 2, 3, 4, 6].map(value => ({ value: String(value), label: `${value}px outline` }))} onChange={value => props.onSubtitleOutlineWidthChange?.(Number(value))} />
+        <TvPicker label="Outline colour" value={props.subtitleOutlineColor ?? '#000000'} options={[['#000000', 'Black'], ['#FFFFFF', 'White'], ['#808080', 'Grey'], ['#FFFF00', 'Yellow']].map(([value, label]) => ({ value, label }))} onChange={value => props.onSubtitleOutlineColorChange?.(value)} />
+        <TvPicker label="Border style" value={props.subtitleOutlineStyle ?? 'outline'} options={[{ value: 'outline', label: 'Outline' }, { value: 'shadow', label: 'Shadow' }]} onChange={value => props.onSubtitleOutlineStyleChange?.(value)} />
+        <button type="button" onClick={props.onUseDefaults}>Use device defaults</button>
+      </DialogContent>
+    </Dialog>
   </div>
 }
 function timestamp(value: number) {

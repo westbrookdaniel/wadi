@@ -1,3 +1,4 @@
+import { authThrottle } from './auth-throttle.js';
 import { addIntegrations } from './integrations.js';
 import { addIntroDbRoutes } from './introdb.js';
 import { addEpisodeRoutes } from './episodes.js';
@@ -24,7 +25,7 @@ const listInput = z.object({ name: z.string().trim().min(1).max(100), descriptio
 const digest = value => createHash('sha256').update(value).digest('hex');
 const fail = (status, message) => { throw Object.assign(new Error(message), { status }); };
 const now = () => new Date().toISOString();
-export function createApp({ database = process.env.DATABASE_URL, sessionDays = 30, allowPrivateAddons = false, publicOrigin = process.env.WADI_PUBLIC_ORIGIN || 'https://watchwadi.com', sendVerificationEmail } = {}) {
+export function createApp({ database = process.env.DATABASE_URL, sessionDays = 30, allowPrivateAddons = false, publicOrigin = process.env.WADI_PUBLIC_ORIGIN || 'https://watchwadi.com', sendVerificationEmail, passwordHashers = { hash, verify } } = {}) {
     const db = createDatabase(database);
     const { get, all, run } = db;
     const app = express();
@@ -37,7 +38,7 @@ export function createApp({ database = process.env.DATABASE_URL, sessionDays = 3
         res.set('Vary', 'Origin');
         res.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, Range, MCP-Protocol-Version');
         res.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, PUT, DELETE, OPTIONS');
-        res.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges, Content-Type');
+        res.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges, Content-Type, Retry-After');
         if (req.method === 'OPTIONS')
             return res.sendStatus(204);
         next();
@@ -61,17 +62,20 @@ export function createApp({ database = process.env.DATABASE_URL, sessionDays = 3
         res.status(status).json({ token, user: { id: user.id, email: user.email, created_at: user.created_at }, active_profile_id: profile.id });
     };
     addDesktopAuth(app, { db, sessionDays });
+    const throttleAuth = authThrottle(db);
     const verification = emailVerification({ app, db, session, sendEmail: sendVerificationEmail });
     app.post('/api/auth/register', async (req, res) => {
         const body = credentials.parse(req.body);
+        await throttleAuth(req, res, body.email, true);
         if ((await get('SELECT id FROM users WHERE email=?', body.email)))
             fail(409, 'Email is already registered');
-        res.status(202).json(await verification.begin(req, { email: body.email, passwordHash: await hash(body.password) }));
+        res.status(202).json(await verification.begin(req, { email: body.email, passwordHash: await passwordHashers.hash(body.password) }));
     });
     app.post('/api/auth/login', async (req, res) => {
         const body = credentials.parse(req.body);
+        await throttleAuth(req, res, body.email);
         const user = (await get('SELECT * FROM users WHERE email=?', body.email));
-        if (!user || !await verify(user.password_hash, body.password))
+        if (!user || !await passwordHashers.verify(user.password_hash, body.password))
             fail(401, 'Invalid email or password');
         if (!user.email_verified_at) return res.status(202).json(await verification.begin(req, { email: user.email, passwordHash: user.password_hash, userId: user.id }));
         (await session(user, res));
@@ -186,7 +190,7 @@ export function createApp({ database = process.env.DATABASE_URL, sessionDays = 3
         });
     app.get('/api/continue-watching', async (req, res) => res.json({ items: (await all('SELECT * FROM watch_states WHERE user_id=? AND profile_id=? AND watched=0 AND position_seconds>0 ORDER BY updated_at DESC LIMIT ?', req.user.id, req.user.profile_id, Math.max(1, Math.min(100, Math.floor(Number(req.query.limit)) || 20)))).map(watchView) }));
     const emptyPage = () => ({ order: [], hidden: [] });
-    const defaults = { subtitles_enabled: true, subtitle_language: null, subtitle_delay_seconds: 0, subtitle_size: 1, subtitle_position: 0, subtitle_text_color: '#FFFFFF', subtitle_background_color: '#000000', subtitle_background_opacity: 0, subtitle_outline_color: '#000000', subtitle_outline_style: 'outline', subtitle_font_family: 'sans-serif', subtitle_offset_x: 0, subtitle_offset_y: 0, playback_speed: 1, preferred_audio_language: null, preferred_audio_track_id: null };
+    const defaults = { subtitles_enabled: true, subtitle_language: null, subtitle_delay_seconds: 0, subtitle_size: 1.15, subtitle_position: 0, subtitle_text_color: '#FFFFFF', subtitle_background_color: '#000000', subtitle_background_opacity: 0, subtitle_outline_width: 1.5, subtitle_outline_color: '#000000', subtitle_outline_style: 'outline', subtitle_font_family: 'sans-serif', subtitle_offset_x: 0, subtitle_offset_y: 0, playback_speed: 1, preferred_audio_language: null, preferred_audio_track_id: null };
     for (const [route, column, fallback, schema] of [
         ['browse-layout', 'browse_layout_json', { pages: { home: emptyPage() } }, z.object({ newEpisodes: z.object({ showBadges: z.boolean(), showCalendar: z.boolean(), days: z.number().int().min(1).max(90), includeSpecials: z.boolean(), listId: z.string().max(512) }).optional(), hero: z.object({ hidden: z.boolean(), source: z.string().max(512), rotate: z.boolean() }).optional(), pages: z.object(Object.fromEntries(['home'].map(key => [key, z.object({ order: z.array(identity).default([]), hidden: z.array(identity).default([]), catalogModes: z.record(z.string(), z.enum(["combined", "movie", "series"])).optional() }).default(emptyPage())]))).default({}) })],
         ['playback', 'playback_prefs_json', { stream_action: 'internal', external_player_preset: 'vlc', external_player_template: 'vlc://{url}' }, z.object({ stream_action: z.enum(['internal', 'copy', 'external']), external_player_preset: z.enum(['choose','vlc','mpv','iina','mxplayer','justplayer','outplayer','moonplayer','cineultra','infuse','vidhub','m3u','custom']).optional(), external_player_template: z.string().refine(v => /^[a-z][a-z\d+.-]*:/i.test(v) && v.includes('{url}') && !/^(javascript|data|vbscript|file|shell|powershell|cmd|ms-settings):/i.test(v)) })],
@@ -210,6 +214,7 @@ export function createApp({ database = process.env.DATABASE_URL, sessionDays = 3
         });
         app.put(route, async (req, res) => {
             const value = prefsSchema.parse(req.body);
+            if (value.subtitle_outline_width !== undefined && (value.subtitle_outline_width < 0 || value.subtitle_outline_width > 6)) fail(400, 'Outline width must be between 0 and 6');
             if (value.playback_speed !== undefined && (value.playback_speed < 0.25 || value.playback_speed > 4))
                 fail(400, 'Playback speed must be between 0.25 and 4');
             const prior = (await get('SELECT value FROM player_settings WHERE profile_id=? AND media_type=? AND media_id=?', req.user.profile_id, req.params.type ?? '', req.params.id ?? ''));
