@@ -13,7 +13,7 @@ const json = (res, value, status = 200) => { res.writeHead(status, { 'Content-Ty
 const meta = { id: 'qa-film', type: 'movie', name: 'Synthetic QA film', description: 'Generated colour bars and tone. No provider content.' };
 const server = createServer(async (req, res) => {
   try {
-    const url = new URL(req.url, `http://127.0.0.1:${port}`), path = url.pathname;
+    const url = new URL(req.url, `http://127.0.0.1:${port}`), path = decodeURIComponent(url.pathname);
     // Prevent accidental remote calls, including Cast bootstrap and artwork.
     res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' blob:; font-src 'self' data:; worker-src 'self' blob:");
     let body = {};
