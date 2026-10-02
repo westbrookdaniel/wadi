@@ -45,11 +45,14 @@ it('preserves legacy appearance, saves immediately, resets without resurrecting 
   try {
     await waitFor(() => expect(hook.result.current.playbackState.subtitleSize).toBe(0.8))
     expect(hook.result.current.playbackState.subtitleOutlineWidth).toBe(1.5)
-    // Wait for hydration release, then close inside the former 450ms debounce.
-    await act(async () => { await new Promise(resolve => setTimeout(resolve, 5)) })
-    act(() => hook.result.current.updatePlaybackState({ subtitleOutlineWidth: 4, subtitleSize: 1.7 }))
-    hook.unmount()
     const key = JSON.stringify(['wadi.device.override.v1', 'reset-profile', 'series', 'custom-title'])
+    // No render/effect or timer settle between edits and inspecting storage.
+    act(() => {
+      hook.result.current.updatePlaybackState({ subtitleOutlineWidth: 4 })
+      hook.result.current.updatePlaybackState({ subtitleSize: 1.7 })
+      expect(JSON.parse(localStorage.getItem(key)!)).toMatchObject({ subtitle_outline_width: 4, subtitle_size: 1.7 })
+      hook.unmount()
+    })
     expect(JSON.parse(localStorage.getItem(key)!)).toMatchObject({ subtitle_outline_width: 4, subtitle_size: 1.7 })
     const second = renderHook(() => usePlayerPreferences(options), { wrapper })
     await waitFor(() => expect(second.result.current.playbackState.subtitleOutlineWidth).toBe(4))

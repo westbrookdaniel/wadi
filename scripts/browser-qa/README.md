@@ -27,3 +27,11 @@ Use desktop (1280×800), mobile (390×844), and TV (1920×1080) viewports. Captu
 8. Sign-out or clear `wadi.auth.token` and visit `/login`; submit a synthetic valid email/password. Fixture returns 429: the visible message contains retry time, the form stays usable, and no retry storm occurs. This is presentation coverage only; application throttle/hash-order assertions are in `server/auth-throttle.test.js`.
 
 Report exact source revision, assertions/pass/fail, screenshots, console errors (CSP-blocked Cast bootstrap is expected), and any untested paths. Never claim Electron/live-provider/cross-physical-device acceptance from this harness.
+
+## Focused follow-up to the d3b6866 browser findings
+
+Keep the original failures and do not use keyboard fallback to pass pointer Play. Repeat in fresh desktop contexts (at least ten bounded attempts): wait for the enabled Seek slider, click Play once, require Pause and advancing time within the existing 6.5-second window. Record capture-phase `pointerdown`, `pointerup`, `click` targets, the target's role/name, timeline and button state. Compare the original name-only ARIA locator with an explicit `button[aria-label="Play"]` locator in separate attempts; tooltips can also have the accessible name Play. This diagnoses a possible harness target ambiguity without treating it as resolved. Initial controls now wait for the first decoded frames.
+
+Exercise Back during initial decoding and immediately after a rewind, plus Play → Pause → rewind → Back → reopen. Preserve all console/page errors; any InputDisposedError fails the run. Check no late playback, stale progress or zero-progress write after navigation. The decoder now drains pending iterator reads before disposing the input and cancels stale playback commands.
+
+For persistence, record input/change event values, fill Outline weight 4 then Size 1.3, immediately Close and reload **without the previous 100ms settle**. Require both values in storage and after reload. Repeat with keyboard typing/Tab and at mobile width, then reset and reload. Writes now happen synchronously on deliberate edits. If an automation fill produces no input/change event, report that separately from an application write failure; do not silently insert a delay to obtain a pass.

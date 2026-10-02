@@ -58,10 +58,7 @@ export function usePlayerPreferences({
   )
   const [playbackState, setPlaybackState] = useState<LocalPlaybackState>(initialLocalPlaybackState)
   const hydratedOverrideKeyRef = useRef<string | null>(null)
-  const isHydratingRef = useRef(true)
-  const hydrationReleaseTimerRef = useRef<number | null>(null)
-  const lastPersistedOverrideRef = useRef<string | null>(null)
-  const dirtyRef = useRef(false)
+  const playbackStateRef = useRef(playbackState)
 
   const mergedPrefs = useMemo(() => playerDefaults.data && playerOverride.isSuccess
     ? { ...playerDefaults.data, ...(playerOverride.data ?? {}), ...(playerOverride.data?.subtitle_outline_style && playerOverride.data.subtitle_outline_width === undefined ? { subtitle_outline_width: 1.5 } : {}) } satisfies HydratedPreferenceSource
@@ -69,53 +66,26 @@ export function usePlayerPreferences({
   const overrideHydrationKey = JSON.stringify([profileId, mediaType, overrideMediaId])
 
   const updatePlaybackState = useCallback((patch: Partial<LocalPlaybackState>, persist = true) => {
-    if (persist) dirtyRef.current = true
-    setPlaybackState((current) => {
-      const next = { ...current, ...patch }
-      return isLocalPlaybackStateEqual(current, next) ? current : next
-    })
-  }, [])
-
-  const persistOverride = useCallback((payload: PlayerOverride) => {
-    const value = updatePlayerOverride(mediaType, overrideMediaId, payload, profileId)
-    queryClient.setQueryData(queryKeys.playerOverride(mediaType, overrideMediaId, profileId), value)
-  }, [mediaType, overrideMediaId, profileId, queryClient])
+    const current = playbackStateRef.current
+    const next = { ...current, ...patch }
+    if (isLocalPlaybackStateEqual(current, next)) return
+    playbackStateRef.current = next
+    // Commit deliberate edits in the event handler, before navigation or reload
+    // can interrupt React's render/effect cycle. Automatic selection is not saved.
+    if (persist && overrideMediaId) {
+      const payload = buildOverridePayload(next, streamSubtitleList, next.selectedSubtitleId)
+      const value = updatePlayerOverride(mediaType, overrideMediaId, payload, profileId)
+      queryClient.setQueryData(queryKeys.playerOverride(mediaType, overrideMediaId, profileId), value)
+    }
+    setPlaybackState(next)
+  }, [mediaType, overrideMediaId, profileId, queryClient, streamSubtitleList])
 
   useEffect(() => {
-    hydratedOverrideKeyRef.current = null
-    isHydratingRef.current = true
-    lastPersistedOverrideRef.current = null
-    dirtyRef.current = false
-  }, [overrideHydrationKey])
-
-  useEffect(() => {
-    return () => {
-      if (hydrationReleaseTimerRef.current !== null) {
-        window.clearTimeout(hydrationReleaseTimerRef.current)
-      }
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!mergedPrefs || hydratedOverrideKeyRef.current === overrideHydrationKey) {
-      return
-    }
-    if (hydrationReleaseTimerRef.current !== null) {
-      window.clearTimeout(hydrationReleaseTimerRef.current)
-    }
-    isHydratingRef.current = true
-    setPlaybackState((current) => {
-      const next = hydrateLocalPlaybackState(current, mergedPrefs)
-      lastPersistedOverrideRef.current = stableSerializeOverridePayload(
-        buildOverridePayload(next, [], next.selectedSubtitleId),
-      )
-      return isLocalPlaybackStateEqual(current, next) ? current : next
-    })
+    if (!mergedPrefs || hydratedOverrideKeyRef.current === overrideHydrationKey) return
+    const next = hydrateLocalPlaybackState(playbackStateRef.current, mergedPrefs)
+    playbackStateRef.current = next
+    setPlaybackState(current => isLocalPlaybackStateEqual(current, next) ? current : next)
     hydratedOverrideKeyRef.current = overrideHydrationKey
-    hydrationReleaseTimerRef.current = window.setTimeout(() => {
-      isHydratingRef.current = false
-      hydrationReleaseTimerRef.current = null
-    }, 0)
   }, [mergedPrefs, overrideHydrationKey])
 
   useEffect(() => {
@@ -126,8 +96,7 @@ export function usePlayerPreferences({
     )
     if (patch) {
       // Apply the preferred language after addon subtitle tracks arrive.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setPlaybackState(current => { const next = { ...current, ...patch }; return isLocalPlaybackStateEqual(current, next) ? current : next })
+      updatePlaybackState(patch, false)
     }
   }, [
     playbackState,
@@ -136,31 +105,13 @@ export function usePlayerPreferences({
     updatePlaybackState,
   ])
 
-  useEffect(() => {
-    if (!overrideMediaId || isHydratingRef.current || !dirtyRef.current) {
-      return
-    }
-    const payload = buildOverridePayload(
-      playbackState,
-      streamSubtitleList,
-      playbackState.selectedSubtitleId,
-    )
-    const serialized = stableSerializeOverridePayload(payload)
-    if (!shouldPersistOverride(lastPersistedOverrideRef.current, serialized)) {
-      return
-    }
-    // Device-local writes are cheap: persist immediately so closing/navigating
-    // within the old debounce window cannot discard deliberate customization.
-    lastPersistedOverrideRef.current = serialized
-    void persistOverride(payload)
-  }, [overrideMediaId, overrideHydrationKey, persistOverride, playbackState, streamSubtitleList])
-
   const resetToDefaults = useCallback(() => {
     if (!playerDefaults.data) return
-    dirtyRef.current = false
     resetPlayerOverride(mediaType, overrideMediaId, profileId)
     queryClient.setQueryData(queryKeys.playerOverride(mediaType, overrideMediaId, profileId), {})
-    setPlaybackState(current => hydrateLocalPlaybackState({ ...current, selectedSubtitleId: null }, playerDefaults.data!))
+    const next = hydrateLocalPlaybackState({ ...playbackStateRef.current, selectedSubtitleId: null }, playerDefaults.data)
+    playbackStateRef.current = next
+    setPlaybackState(next)
   }, [mediaType, overrideMediaId, profileId, playerDefaults.data, queryClient])
 
   return {
@@ -282,10 +233,6 @@ function buildOverridePayload(
 
 function stableSerializeOverridePayload<T>(payload: T) {
   return JSON.stringify(payload)
-}
-
-function shouldPersistOverride(previousSerialized: string | null, nextSerialized: string) {
-  return previousSerialized !== nextSerialized
 }
 
 function isLocalPlaybackStateEqual(left: LocalPlaybackState, right: LocalPlaybackState) {
