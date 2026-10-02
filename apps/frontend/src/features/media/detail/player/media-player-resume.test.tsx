@@ -1,3 +1,4 @@
+import { useAppStore } from '@/store/app-store'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -27,9 +28,9 @@ beforeEach(() => {
   mocks.desktop.mockReturnValue(undefined)
   vi.stubGlobal('AudioContext', class { state = 'suspended'; currentTime = 0; destination = {}; createGain() { return { gain: { value: 0 }, connect() {} } }; close = async () => {} })
 })
-afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); localStorage.clear() })
+afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); useAppStore.setState({ activeProfileId: null }); localStorage.clear() })
 
-it.each(['web', 'desktop'])('%s waits for the current server fetch and receives the latest rewind', async path => {
+it.each(['web', 'desktop', 'web-profile-switch'])('%s waits for the current server fetch and receives the latest rewind', async path => {
   if (path === 'desktop') mocks.desktop.mockReturnValue({})
   const now = Date.now()
   savePlaybackPosition(target, 300, now - 20000)
@@ -52,7 +53,7 @@ it.each(['web', 'desktop'])('%s waits for the current server fetch and receives 
   expect(readPlaybackPosition(target)).toBe(300)
   expect(writes).toHaveLength(0)
   await act(async () => { pending.resolve(progress(30, now - 10000)); await pending.promise })
-  if (path === 'web') {
+  if (path !== 'desktop') {
     await waitFor(() => expect(mocks.canvases).toHaveBeenCalledWith(30))
     expect(mocks.canvases).not.toHaveBeenCalledWith(300)
     expect(mocks.url).toHaveBeenCalledTimes(1)
@@ -62,6 +63,13 @@ it.each(['web', 'desktop'])('%s waits for the current server fetch and receives 
     fireEvent.keyDown(screen.getByRole('slider', { name: 'Seek Film' }), { key: 'ArrowLeft' })
     await waitFor(() => expect(mocks.canvases).toHaveBeenCalledWith(20))
     expect(writes.map(write => write.position)).toEqual([30])
+    if (path === 'web-profile-switch') {
+      act(() => useAppStore.setState({ activeProfileId: 'another-profile' }))
+      await act(async () => writes[0].resolve(progress(30, Date.now()).items[0]))
+      await waitFor(() => expect(client.isMutating()).toBe(0))
+      expect(writes.map(write => write.position)).toEqual([30])
+      view.unmount(); client.clear(); return
+    }
     await act(async () => writes[0].resolve(progress(30, Date.now()).items[0]))
     await waitFor(() => expect(writes).toHaveLength(2))
     expect(readPlaybackPosition(target)).toBe(20)

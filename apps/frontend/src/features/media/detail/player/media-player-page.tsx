@@ -191,8 +191,11 @@ export function MediaPlayerPage({
 
   const progress = useMutation({
     scope: { id: JSON.stringify([profileId, activeTarget.mediaType, activeTarget.mediaId, activeTarget.videoId]) },
-    mutationFn: (payload: { position: number; duration?: number | null; target: PlaybackTarget; submittedAt: number; profileId: string | null }) =>
-      updateWatchProgress({
+    mutationFn: (payload: { position: number; duration?: number | null; target: PlaybackTarget; submittedAt: number; profileId: string | null }) => {
+      // A queued write may outlive navigation or a profile switch. Never send
+      // the old profile's progress using the newly selected profile's session.
+      if (payload.profileId !== useAppStore.getState().activeProfileId) return Promise.reject(new Error('Playback profile changed'))
+      return updateWatchProgress({
         media_type: payload.target.mediaType,
         media_id: payload.target.mediaId,
         video_id: payload.target.videoId,
@@ -200,7 +203,8 @@ export function MediaPlayerPage({
         finish_remaining_seconds: autoSettings.finishRemainingSeconds,
         position_seconds: Math.max(0, Math.floor(payload.position)),
         duration_seconds: payload.duration ? Math.floor(payload.duration) : null,
-      }),
+      })
+    },
     onSuccess: (state, payload) => {
       if (payload.profileId !== useAppStore.getState().activeProfileId) return
       acknowledgePlaybackPosition(payload.target, payload.submittedAt, state)
