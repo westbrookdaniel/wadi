@@ -1,3 +1,4 @@
+import { usePlaybackResume } from './use-playback-resume'
 import { useSkipPrompt } from './use-skip-prompt'
 import { introDbPreferencesQuery } from '@/api/introdb'
 import { activeSegment, skipLabels, skipSegmentsQuery, type SkipSegment } from './skip-segments'
@@ -56,14 +57,11 @@ import {
 } from 'mediabunny'
 
 import {
-  defaultWatchState,
-  findWatchState,
   queryKeys,
   type SubtitleQueryContext,
   streamsQuery,
   subtitlesQuery,
   updateWatchProgress,
-  watchDataQuery,
 } from '@/api/queries'
 import type { MediaPreview, WatchState } from '@/api/types'
 import { Button } from '@/components/ui/button'
@@ -83,7 +81,7 @@ import { formatEpisodeReleaseDate, saveLastSeason } from '../series-url-state'
 import { getChromecastTransport } from '../chromecast'
 import { buildStreamProxyUrl, buildSubtitleProxyUrl } from '../stream-playback'
 import type { Episode, PlaybackTarget, PlayableStream } from '../types'
-import { readSubtitleChoice, saveSubtitleChoice, readPlaybackPosition, savePlaybackPosition } from '../playback-session'
+import { acknowledgePlaybackPosition, readSubtitleChoice, saveSubtitleChoice, savePlaybackPosition } from '../playback-session'
 import { defaultSubtitleForAudio, languageName, normalizeLanguage, mergeSubtitleTracks, parseSubtitleText, type SubtitleCue } from './subtitle-utils'
 import { usePlayerKeyboardShortcuts } from './use-player-keyboard-shortcuts'
 import { usePlayerPreferences } from './use-player-preferences'
@@ -120,16 +118,7 @@ export function MediaPlayerPage({
   const desktop = desktopBridge()
   const conversionEnabled = useDeviceStore(state => state.conversionEnabled)
   const proxiedStreamUrl = desktop ? undefined : streamUrl ? buildStreamProxyUrl(streamUrl) : undefined
-  const watchData = useQuery(
-    watchDataQuery(
-      activeTarget.mediaType,
-      activeTarget.mediaId,
-      Boolean(activeTarget.mediaType && activeTarget.mediaId),
-    ),
-  )
-  const watchState =
-    findWatchState(watchData.data, activeTarget.videoId) ??
-    defaultWatchState(activeTarget.mediaType, activeTarget.mediaId, activeTarget.videoId)
+  const resume = usePlaybackResume(activeTarget)
   const subtitleRequestId = activeTarget.videoId ?? activeTarget.mediaId
   const subtitleQueryContext = useMemo<SubtitleQueryContext>(() => {
     const behaviorHints = activeStream.behaviorHints && typeof activeStream.behaviorHints === 'object'
@@ -155,7 +144,7 @@ export function MediaPlayerPage({
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const playerRef = useRef<HTMLDivElement | null>(null)
   const lastSavedRef = useRef(0)
-  const progressMutateRef = useRef<((payload: { position: number; duration?: number | null }) => void) | null>(null)
+  const progressMutateRef = useRef<((payload: { position: number; duration?: number | null; target: PlaybackTarget; submittedAt: number; profileId: string | null }) => void) | null>(null)
   const castTransport = useMemo(() => getChromecastTransport(), [])
   const [castConnected, setCastConnected] = useState(false)
   const [castReady, setCastReady] = useState(false)
@@ -199,30 +188,33 @@ export function MediaPlayerPage({
   })
 
   const progress = useMutation({
-    mutationFn: (payload: { position: number; duration?: number | null }) =>
+    scope: { id: JSON.stringify([profileId, activeTarget.mediaType, activeTarget.mediaId, activeTarget.videoId]) },
+    mutationFn: (payload: { position: number; duration?: number | null; target: PlaybackTarget; submittedAt: number; profileId: string | null }) =>
       updateWatchProgress({
-        media_type: activeTarget.mediaType,
-        media_id: activeTarget.mediaId,
-        video_id: activeTarget.videoId,
+        media_type: payload.target.mediaType,
+        media_id: payload.target.mediaId,
+        video_id: payload.target.videoId,
         ignore_start_seconds: autoSettings.ignoreStartSeconds,
         finish_remaining_seconds: autoSettings.finishRemainingSeconds,
         position_seconds: Math.max(0, Math.floor(payload.position)),
         duration_seconds: payload.duration ? Math.floor(payload.duration) : null,
       }),
-    onSuccess: (state) => {
-      queryClient.setQueryData(queryKeys.watchData(activeTarget.mediaType, activeTarget.mediaId), (existing: { items?: WatchState[] } | undefined) => {
+    onSuccess: (state, payload) => {
+      if (payload.profileId !== useAppStore.getState().activeProfileId) return
+      acknowledgePlaybackPosition(payload.target, payload.submittedAt, state)
+      queryClient.setQueryData(queryKeys.watchData(state.media_type, state.media_id), (existing: { items?: WatchState[] } | undefined) => {
         if (!existing) {
-          return { media_type: activeTarget.mediaType, media_id: activeTarget.mediaId, items: [state] }
+          return { media_type: state.media_type, media_id: state.media_id, items: [state] }
         }
         const items = existing.items ?? []
-        const index = items.findIndex((item) => (item.video_id ?? null) === activeTarget.videoId)
+        const index = items.findIndex((item) => (item.video_id ?? null) === state.video_id)
         return {
           ...existing,
           items: index >= 0 ? items.map((item, itemIndex) => (itemIndex === index ? state : item)) : [...items, state],
         }
       })
-      queryClient.invalidateQueries({ queryKey: ['episodes', activeTarget.mediaId] })
-      queryClient.invalidateQueries({ queryKey: queryKeys.watchData(activeTarget.mediaType, activeTarget.mediaId) })
+      queryClient.invalidateQueries({ queryKey: ['episodes', state.media_id] })
+      queryClient.invalidateQueries({ queryKey: queryKeys.watchData(state.media_type, state.media_id) })
       queryClient.invalidateQueries({ queryKey: queryKeys.continueWatching(20) })
       queryClient.invalidateQueries({ queryKey: queryKeys.continueWatching(12) })
     },
@@ -233,13 +225,14 @@ export function MediaPlayerPage({
   }, [progress.mutate])
 
   const saveProgress = useCallback((position: number, duration: number) => {
-    if (!Number.isFinite(position)) {
+    if (profileId !== useAppStore.getState().activeProfileId) return
+    if (!Number.isFinite(position) || !Number.isFinite(duration) || duration <= 0) {
       return
     }
-    savePlaybackPosition(activeTarget, position)
+    const submittedAt = savePlaybackPosition(activeTarget, position) ?? Date.now()
     lastSavedRef.current = position
-    progressMutateRef.current?.({ position, duration: finiteDuration(duration) })
-  }, [activeTarget])
+    progressMutateRef.current?.({ position, duration: finiteDuration(duration), target: activeTarget, submittedAt, profileId })
+  }, [activeTarget, profileId])
 
   const nextEpisode = nextReleasedEpisode(releaseCatalog.data?.items ?? activeTarget.seriesEpisodes ?? [], activeTarget.videoId)
   const promptNextEpisode = useCallback(() => { if (nextEpisode) setUpNext(nextEpisode) }, [nextEpisode])
@@ -247,10 +240,10 @@ export function MediaPlayerPage({
   const onEnded = useCallback(() => endedRef.current?.(), [])
   const webPlayer = useMediabunnyPlayer({
     canvasRef,
-    url: proxiedStreamUrl,
+    url: resume.ready ? proxiedStreamUrl : undefined,
     authToken: null,
-    savedPosition: readPlaybackPosition(activeTarget) ?? watchState.position_seconds,
-    watched: watchState.watched,
+    savedPosition: resume.savedPosition,
+    watched: resume.watched,
     preferredAudioLanguage: playbackState.preferredAudioLanguage,
     selectedAudioTrackId: playbackState.selectedAudioTrackId,
     initialPlaybackSpeed: playbackState.playbackSpeed,
@@ -258,7 +251,7 @@ export function MediaPlayerPage({
     onEnded,
   })
 
-  const desktopPlayer = useDesktopPlayer({ videoRef, source: desktop && !watchData.isLoading ? streamUrl : undefined, hints: activeStream.behaviorHints, savedPosition: readPlaybackPosition(activeTarget) ?? watchState.position_seconds, watched: watchState.watched, onProgressCommit: saveProgress, onEnded })
+  const desktopPlayer = useDesktopPlayer({ videoRef, source: desktop && resume.ready ? streamUrl : undefined, hints: activeStream.behaviorHints, savedPosition: resume.savedPosition, watched: resume.watched, onProgressCommit: saveProgress, onEnded })
   const player = desktop ? desktopPlayer : webPlayer
   const triggerNextEpisode = useEpisodeAutoplay({
     episodeKey: `${activeTarget.mediaType}:${activeTarget.mediaId}:${activeTarget.videoId}`,
@@ -507,7 +500,7 @@ export function MediaPlayerPage({
     setPendingEpisode(null)
     setUpNext(null)
     setEpisodeSheetOpen(false)
-  }, [pendingEpisode, activeTarget, releaseCatalog.data, saveProgress, player.state.currentTime, player.state.duration, onPlaybackChange])
+  }, [pendingEpisode, activeTarget, releaseCatalog.data, saveProgress, player.state.currentTime, player.state.duration, onPlaybackChange, setPendingEpisode, setEpisodeSheetOpen])
   useEffect(() => {
     if (!pendingEpisode || episodeStreams.isFetching || episodeStreams.error || !episodeStreams.data) return
     const next = autoSettings.enabled ? rankStreams(episodeStreams.data, autoSettings).find(row => row.eligible)?.stream : episodeStreams.data.find(isDirectStream)
@@ -1949,7 +1942,7 @@ function useMediabunnyPlayer({
           ? Math.min(savedPositionRef.current, Math.max(0, duration - 3))
           : 0
         playbackTimeAtStartRef.current = restoredTime
-        hasRestoredRef.current = restoredTime > 0
+        hasRestoredRef.current = true
         playingRef.current = false
         setGain(gainNode, stateRef.current.volume, stateRef.current.muted)
         updateState({
