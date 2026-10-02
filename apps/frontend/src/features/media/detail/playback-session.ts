@@ -76,3 +76,7 @@ export function saveSubtitleChoice(target: PlaybackTarget, choice: z.infer<typeo
 export function readSubtitleChoice(target: PlaybackTarget) {
   try { const parsed = subtitleChoiceSchema.safeParse(JSON.parse(localStorage.getItem(storageKey(`subtitles.${target.mediaType}.${target.mediaId}`)) ?? 'null')); return parsed.success ? parsed.data : undefined } catch { return undefined }
 }
+
+export function clearSubtitleChoice(target: PlaybackTarget) {
+  try { localStorage.removeItem(storageKey(`subtitles.${target.mediaType}.${target.mediaId}`)) } catch { /* Defaults still apply in memory. */ }
+}

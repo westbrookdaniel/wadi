@@ -1,5 +1,5 @@
 import { useAppStore } from '@/store/app-store'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import {
@@ -7,6 +7,7 @@ import {
   playerOverrideQuery,
   queryKeys,
   updatePlayerOverride,
+  resetPlayerOverride,
 } from '@/api/queries'
 import { normalizeLanguage } from './subtitle-utils'
 import type { PlayerOverride } from '@/api/types'
@@ -28,6 +29,7 @@ type HydratedPreferenceSource = {
   subtitle_background_color: string
   subtitle_background_opacity: number
   subtitle_outline_color: string
+  subtitle_outline_width?: number
   subtitle_outline_style: string
   subtitle_font_family: string
   subtitle_offset_x: number
@@ -59,48 +61,37 @@ export function usePlayerPreferences({
   const isHydratingRef = useRef(true)
   const hydrationReleaseTimerRef = useRef<number | null>(null)
   const lastPersistedOverrideRef = useRef<string | null>(null)
-  const saveOverrideTimerRef = useRef<number | null>(null)
+  const dirtyRef = useRef(false)
 
   const mergedPrefs = useMemo(() => playerDefaults.data && playerOverride.isSuccess
-    ? { ...playerDefaults.data, ...(playerOverride.data ?? {}) } satisfies HydratedPreferenceSource
+    ? { ...playerDefaults.data, ...(playerOverride.data ?? {}), ...(playerOverride.data?.subtitle_outline_style && playerOverride.data.subtitle_outline_width === undefined ? { subtitle_outline_width: 1.5 } : {}) } satisfies HydratedPreferenceSource
     : null, [playerDefaults.data, playerOverride.data, playerOverride.isSuccess])
   const overrideHydrationKey = JSON.stringify([profileId, mediaType, overrideMediaId])
 
-  const updatePlaybackState = useCallback((patch: Partial<LocalPlaybackState>) => {
+  const updatePlaybackState = useCallback((patch: Partial<LocalPlaybackState>, persist = true) => {
+    if (persist) dirtyRef.current = true
     setPlaybackState((current) => {
       const next = { ...current, ...patch }
       return isLocalPlaybackStateEqual(current, next) ? current : next
     })
   }, [])
 
-  const overrideMutation = useMutation({
-    mutationFn: (payload: PlayerOverride) => updatePlayerOverride(mediaType, overrideMediaId, payload, profileId),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.playerOverride(mediaType, overrideMediaId, profileId),
-      })
-    },
-  })
-
-  const { mutate: mutateOverride } = overrideMutation
-  const persistOverride = useCallback(
-    (payload: PlayerOverride) => mutateOverride(payload),
-    [mutateOverride],
-  )
+  const persistOverride = useCallback((payload: PlayerOverride) => {
+    const value = updatePlayerOverride(mediaType, overrideMediaId, payload, profileId)
+    queryClient.setQueryData(queryKeys.playerOverride(mediaType, overrideMediaId, profileId), value)
+  }, [mediaType, overrideMediaId, profileId, queryClient])
 
   useEffect(() => {
     hydratedOverrideKeyRef.current = null
     isHydratingRef.current = true
     lastPersistedOverrideRef.current = null
+    dirtyRef.current = false
   }, [overrideHydrationKey])
 
   useEffect(() => {
     return () => {
       if (hydrationReleaseTimerRef.current !== null) {
         window.clearTimeout(hydrationReleaseTimerRef.current)
-      }
-      if (saveOverrideTimerRef.current !== null) {
-        window.clearTimeout(saveOverrideTimerRef.current)
       }
     }
   }, [])
@@ -136,7 +127,7 @@ export function usePlayerPreferences({
     if (patch) {
       // Apply the preferred language after addon subtitle tracks arrive.
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      updatePlaybackState(patch)
+      setPlaybackState(current => { const next = { ...current, ...patch }; return isLocalPlaybackStateEqual(current, next) ? current : next })
     }
   }, [
     playbackState,
@@ -146,7 +137,7 @@ export function usePlayerPreferences({
   ])
 
   useEffect(() => {
-    if (!overrideMediaId || isHydratingRef.current) {
+    if (!overrideMediaId || isHydratingRef.current || !dirtyRef.current) {
       return
     }
     const payload = buildOverridePayload(
@@ -158,21 +149,22 @@ export function usePlayerPreferences({
     if (!shouldPersistOverride(lastPersistedOverrideRef.current, serialized)) {
       return
     }
-    if (saveOverrideTimerRef.current !== null) {
-      window.clearTimeout(saveOverrideTimerRef.current)
-    }
-    saveOverrideTimerRef.current = window.setTimeout(() => {
-      lastPersistedOverrideRef.current = serialized
-      persistOverride(payload)
-    }, 450)
-    return () => {
-      if (saveOverrideTimerRef.current !== null) {
-        window.clearTimeout(saveOverrideTimerRef.current)
-      }
-    }
+    // Device-local writes are cheap: persist immediately so closing/navigating
+    // within the old debounce window cannot discard deliberate customization.
+    lastPersistedOverrideRef.current = serialized
+    void persistOverride(payload)
   }, [overrideMediaId, overrideHydrationKey, persistOverride, playbackState, streamSubtitleList])
 
+  const resetToDefaults = useCallback(() => {
+    if (!playerDefaults.data) return
+    dirtyRef.current = false
+    resetPlayerOverride(mediaType, overrideMediaId, profileId)
+    queryClient.setQueryData(queryKeys.playerOverride(mediaType, overrideMediaId, profileId), {})
+    setPlaybackState(current => hydrateLocalPlaybackState({ ...current, selectedSubtitleId: null }, playerDefaults.data!))
+  }, [mediaType, overrideMediaId, profileId, playerDefaults.data, queryClient])
+
   return {
+    resetToDefaults,
     playbackState,
     updatePlaybackState,
   }
@@ -194,6 +186,7 @@ function hydrateLocalPlaybackState(
     subtitleBackgroundColor: prefs.subtitle_background_color,
     subtitleBackgroundOpacity: prefs.subtitle_background_opacity,
     subtitleOutlineColor: prefs.subtitle_outline_color,
+    subtitleOutlineWidth: prefs.subtitle_outline_width ?? 1.5,
     subtitleOutlineStyle: prefs.subtitle_outline_style,
     subtitleFontFamily: prefs.subtitle_font_family,
     subtitleOffsetX: prefs.subtitle_offset_x,
@@ -276,6 +269,7 @@ function buildOverridePayload(
     subtitle_background_color: state.subtitleBackgroundColor,
     subtitle_background_opacity: state.subtitleBackgroundOpacity,
     subtitle_outline_color: state.subtitleOutlineColor,
+    subtitle_outline_width: state.subtitleOutlineWidth,
     subtitle_outline_style: state.subtitleOutlineStyle,
     subtitle_font_family: state.subtitleFontFamily,
     subtitle_offset_x: state.subtitleOffsetX,

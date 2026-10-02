@@ -47,6 +47,7 @@ export type LocalPlaybackState = {
   subtitleBackgroundColor: string
   subtitleBackgroundOpacity: number
   subtitleOutlineColor: string
+  subtitleOutlineWidth: number
   subtitleOutlineStyle: string
   subtitleFontFamily: string
   subtitleOffsetX: number
@@ -77,12 +78,13 @@ export const initialLocalPlaybackState: LocalPlaybackState = {
   preferredSubtitleLanguage: null,
   selectedSubtitleId: null,
   subtitleDelay: 0,
-  subtitleSize: 1,
+  subtitleSize: 1.15,
   subtitlePosition: 0,
   subtitleTextColor: '#FFFFFF',
   subtitleBackgroundColor: '#000000',
   subtitleBackgroundOpacity: 0,
   subtitleOutlineColor: '#000000',
+  subtitleOutlineWidth: 1.5,
   subtitleOutlineStyle: 'outline',
   subtitleFontFamily: 'sans-serif',
   subtitleOffsetX: 0,

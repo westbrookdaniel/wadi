@@ -1,4 +1,6 @@
 import { usePlaybackResume } from './use-playback-resume'
+import { captionStyle, captionBackgroundStyle } from './caption-style'
+import { SubtitlePreview } from './subtitle-appearance'
 import { useSkipPrompt } from './use-skip-prompt'
 import { introDbPreferencesQuery } from '@/api/introdb'
 import { activeSegment, skipLabels, skipSegmentsQuery, type SkipSegment } from './skip-segments'
@@ -81,7 +83,7 @@ import { formatEpisodeReleaseDate, saveLastSeason } from '../series-url-state'
 import { getChromecastTransport } from '../chromecast'
 import { buildStreamProxyUrl, buildSubtitleProxyUrl } from '../stream-playback'
 import type { Episode, PlaybackTarget, PlayableStream } from '../types'
-import { acknowledgePlaybackPosition, readSubtitleChoice, saveSubtitleChoice, savePlaybackPosition } from '../playback-session'
+import { acknowledgePlaybackPosition, clearSubtitleChoice, readSubtitleChoice, saveSubtitleChoice, savePlaybackPosition } from '../playback-session'
 import { defaultSubtitleForAudio, languageName, normalizeLanguage, mergeSubtitleTracks, parseSubtitleText, type SubtitleCue } from './subtitle-utils'
 import { usePlayerKeyboardShortcuts } from './use-player-keyboard-shortcuts'
 import { usePlayerPreferences } from './use-player-preferences'
@@ -180,7 +182,7 @@ export function MediaPlayerPage({
     [activeStream.subtitles, subtitleTracks.data],
   )
 
-  const { playbackState, updatePlaybackState } = usePlayerPreferences({
+  const { playbackState, updatePlaybackState, resetToDefaults } = usePlayerPreferences({
     mediaType: activeTarget.mediaType,
     overrideMediaId,
     streamSubtitleList,
@@ -286,7 +288,7 @@ export function MediaPlayerPage({
     const savedChoice = readSubtitleChoice(activeTarget)
     const savedTrack = savedChoice?.language ? streamSubtitleList.find(track => track.id === savedChoice.id) ?? streamSubtitleList.find(track => normalizeLanguage(track.language) === normalizeLanguage(savedChoice.language ?? '')) : undefined
     const id = savedChoice ? savedTrack?.id ?? null : defaultSubtitleForAudio(audio.language, streamSubtitleList)
-    updatePlaybackState({ subtitlesEnabled: id !== null, selectedSubtitleId: id, preferredSubtitleLanguage: id ? streamSubtitleList.find(track => track.id === id)?.language ?? 'eng' : null })
+    updatePlaybackState({ subtitlesEnabled: id !== null, selectedSubtitleId: id, preferredSubtitleLanguage: id ? streamSubtitleList.find(track => track.id === id)?.language ?? 'eng' : null }, false)
   }, [activeTarget, player.state.audioTracks, player.state.selectedAudioTrackId, player.state.status, streamSubtitleList, subtitleTracks.isLoading, updatePlaybackState])
 
   const { setPlaybackSpeed, setAudioTrack, pause: pauseLocal, setVolume } = player
@@ -704,6 +706,9 @@ export function MediaPlayerPage({
             onSubtitleBackgroundColorChange={(value) => updatePlaybackState({ subtitleBackgroundColor: value })}
             subtitleBackgroundOpacity={playbackState.subtitleBackgroundOpacity}
             onSubtitleBackgroundOpacityChange={(value) => updatePlaybackState({ subtitleBackgroundOpacity: value })}
+            subtitleOutlineWidth={playbackState.subtitleOutlineWidth}
+            onSubtitleOutlineWidthChange={value => updatePlaybackState({ subtitleOutlineWidth: value })}
+            onUseDefaults={() => { manualSubtitleRef.current = true; clearSubtitleChoice(activeTarget); void resetToDefaults() }}
             subtitleOutlineColor={playbackState.subtitleOutlineColor}
             onSubtitleOutlineColorChange={(value) => updatePlaybackState({ subtitleOutlineColor: value })}
             subtitleOutlineStyle={playbackState.subtitleOutlineStyle}
@@ -751,23 +756,11 @@ export function MediaPlayerPage({
               style={{
                 bottom: `calc(${"var(--player-caption-bottom, max(6vh, 28px))"} + ${playbackState.subtitlePosition * 100 + playbackState.subtitleOffsetY}px + env(safe-area-inset-bottom))`,
                 transform: `translateX(${playbackState.subtitleOffsetX}px)`,
-                fontSize: `calc(clamp(20px, 2.65vw, 36px) * ${playbackState.subtitleSize})`,
-                color: playbackState.subtitleTextColor,
-                fontFamily: playbackState.subtitleFontFamily,
-                textShadow:
-                  playbackState.subtitleOutlineStyle === "shadow"
-                    ? `0 0 8px ${playbackState.subtitleOutlineColor}`
-                    : `1.5px 0 0 ${playbackState.subtitleOutlineColor}, -1.5px 0 0 ${playbackState.subtitleOutlineColor}, 0 1.5px 0 ${playbackState.subtitleOutlineColor}, 0 -1.5px 0 ${playbackState.subtitleOutlineColor}, 1px 1px 0 ${playbackState.subtitleOutlineColor}, -1px -1px 0 ${playbackState.subtitleOutlineColor}, -1px 1px 0 ${playbackState.subtitleOutlineColor}, 1px -1px 0 ${playbackState.subtitleOutlineColor}`,
+                ...captionStyle(playbackState),
               }}
             >
               <span
-                style={{
-                  backgroundColor: hexToRgba(playbackState.subtitleBackgroundColor, playbackState.subtitleBackgroundOpacity),
-                  padding: "0.2em 0.45em",
-                  borderRadius: 4,
-                  whiteSpace: "pre-line",
-                  boxDecorationBreak: "clone",
-                }}
+                style={captionBackgroundStyle(playbackState)}
               >
                 {subtitleText}
               </span>
@@ -842,6 +835,9 @@ function DesktopPlayerChrome({
   onSubtitleBackgroundColorChange,
   subtitleBackgroundOpacity,
   onSubtitleBackgroundOpacityChange,
+  subtitleOutlineWidth,
+  onSubtitleOutlineWidthChange,
+  onUseDefaults,
   subtitleOutlineColor,
   onSubtitleOutlineColorChange,
   subtitleOutlineStyle,
@@ -889,6 +885,9 @@ function DesktopPlayerChrome({
   onSubtitleBackgroundColorChange: (value: string) => void
   subtitleBackgroundOpacity: number
   onSubtitleBackgroundOpacityChange: (value: number) => void
+  subtitleOutlineWidth: number
+  onSubtitleOutlineWidthChange: (value: number) => void
+  onUseDefaults: () => void
   subtitleOutlineColor: string
   onSubtitleOutlineColorChange: (value: string) => void
   subtitleOutlineStyle: string
@@ -1223,9 +1222,12 @@ function DesktopPlayerChrome({
             <Captions className="size-4" />
             Subtitle settings
           </DialogTitle>
+          <SubtitlePreview value={{ subtitleSize, subtitleTextColor, subtitleBackgroundColor, subtitleBackgroundOpacity, subtitleOutlineColor, subtitleOutlineWidth, subtitleOutlineStyle, subtitleFontFamily }} />
+          <Button type="button" onClick={onUseDefaults}>Use device defaults</Button>
           <div className="grid gap-2 text-xs">
             <div className="grid grid-cols-2 gap-2">
               <LabeledNumberInput label="Delay" value={subtitleDelay} step={0.1} min={-30} max={30} onChange={onSubtitleDelayChange} />
+              <LabeledNumberInput label="Outline weight" value={subtitleOutlineWidth} step={0.5} min={0} max={6} onChange={onSubtitleOutlineWidthChange} />
               <LabeledNumberInput label="Size" value={subtitleSize} step={0.05} min={0.5} max={3} onChange={onSubtitleSizeChange} />
               <LabeledNumberInput label="Position" value={subtitlePosition} step={0.05} min={-1} max={1} onChange={onSubtitlePositionChange} />
               <LabeledNumberInput label="Bg Opacity" value={subtitleBackgroundOpacity} step={0.05} min={0} max={1} onChange={onSubtitleBackgroundOpacityChange} />
@@ -1380,7 +1382,7 @@ function LabeledNumberInput({
         min={min}
         max={max}
         step={step}
-        onChange={(event) => onChange(Number(event.target.value))}
+        onChange={(event) => { if (event.target.value && event.target.validity.valid) onChange(Number(event.target.value)) }}
         className="h-8 rounded border border-white/20 bg-black/40 px-2 text-white"
       />
     </label>
@@ -1518,17 +1520,6 @@ function formatEpisodeBadge(season: number | null, episode: number | null) {
   return `${seasonLabel}${episodeLabel}`
 }
 
-function hexToRgba(hex: string, opacity: number) {
-  const safe = hex.replace("#", "")
-  const full = safe.length === 3
-    ? safe.split("").map((char) => `${char}${char}`).join("")
-    : safe
-  const red = Number.parseInt(full.slice(0, 2), 16)
-  const green = Number.parseInt(full.slice(2, 4), 16)
-  const blue = Number.parseInt(full.slice(4, 6), 16)
-  const alpha = Math.max(0, Math.min(opacity, 1))
-  return `rgba(${Number.isFinite(red) ? red : 0}, ${Number.isFinite(green) ? green : 0}, ${Number.isFinite(blue) ? blue : 0}, ${alpha})`
-}
 
 function useMediabunnyPlayer({
   canvasRef,

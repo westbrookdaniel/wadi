@@ -32,3 +32,36 @@ it('hydrates a delayed title override after device defaults are already cached',
     expect(hook.result.current.playbackState.subtitleSize).toBe(1.5)
   } finally { hook.unmount(); client.clear(); useAppStore.getState().setActiveProfileId(null); localStorage.clear() }
 })
+
+it('preserves legacy appearance, saves immediately, resets without resurrecting overrides, and reloads defaults', async () => {
+  localStorage.clear()
+  useAppStore.getState().setActiveProfileId('reset-profile')
+  request.mockResolvedValue({ ...defaults, subtitle_size: 0.8, subtitle_outline_color: '#ff0000' })
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+  client.setQueryData(queryKeys.playerDefaults, { ...defaults, subtitle_size: 1.15, subtitle_outline_width: 3 })
+  const wrapper = ({ children }: PropsWithChildren) => createElement(QueryClientProvider, { client }, children)
+  const options = { mediaType: 'series', overrideMediaId: 'custom-title', streamSubtitleList: [{ id: 'en', language: 'eng' }], streamSubtitlesLoading: false }
+  const hook = renderHook(() => usePlayerPreferences(options), { wrapper })
+  try {
+    await waitFor(() => expect(hook.result.current.playbackState.subtitleSize).toBe(0.8))
+    expect(hook.result.current.playbackState.subtitleOutlineWidth).toBe(1.5)
+    // Wait for hydration release, then close inside the former 450ms debounce.
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 5)) })
+    act(() => hook.result.current.updatePlaybackState({ subtitleOutlineWidth: 4, subtitleSize: 1.7 }))
+    hook.unmount()
+    const key = JSON.stringify(['wadi.device.override.v1', 'reset-profile', 'series', 'custom-title'])
+    expect(JSON.parse(localStorage.getItem(key)!)).toMatchObject({ subtitle_outline_width: 4, subtitle_size: 1.7 })
+    const second = renderHook(() => usePlayerPreferences(options), { wrapper })
+    await waitFor(() => expect(second.result.current.playbackState.subtitleOutlineWidth).toBe(4))
+    await act(async () => { await second.result.current.resetToDefaults() })
+    expect(second.result.current.playbackState.subtitleSize).toBe(1.15)
+    expect(second.result.current.playbackState.subtitleOutlineWidth).toBe(3)
+    expect(JSON.parse(localStorage.getItem(key)!)).toEqual({})
+    second.unmount()
+    client.removeQueries({ queryKey: queryKeys.playerOverride('series', 'custom-title', 'reset-profile') })
+    const third = renderHook(() => usePlayerPreferences(options), { wrapper })
+    await waitFor(() => expect(third.result.current.playbackState.subtitleOutlineWidth).toBe(3))
+    expect(third.result.current.playbackState.subtitleSize).toBe(1.15)
+    third.unmount()
+  } finally { hook.unmount(); client.clear(); useAppStore.getState().setActiveProfileId(null); localStorage.clear() }
+})
