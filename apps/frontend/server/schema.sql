@@ -177,3 +177,6 @@ CREATE INDEX IF NOT EXISTS idx_integration_refresh_grant ON integration_refresh_
 CREATE TABLE IF NOT EXISTS integration_rate_limits (
   key TEXT PRIMARY KEY, count INTEGER NOT NULL, expires_at TEXT NOT NULL
 );
+
+-- Profile playback defaults; empty settings inherit the device defaults.
+ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS auto_playback_json TEXT NOT NULL DEFAULT '{}';

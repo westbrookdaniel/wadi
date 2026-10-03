@@ -53,3 +53,24 @@ it('keeps existing saved preferences when adding cached defaults', async () => {
   const oldSettings = { enabled: true, skipSelection: true, preferredResolution: 720, qualityWeight: 55 }
   expect(autoPlaybackSchema.parse(oldSettings)).toMatchObject({ ...oldSettings, cachedMode: 'any', cachedIndicator: '⚡' })
 })
+
+it('prefers the season release family without bypassing hard rules or a season opt-out', () => {
+  const streams = [
+    { url: 'https://test/a', title: '1080p', behaviorHints: { bingeGroup: 'other' } },
+    { url: 'https://test/b', title: '720p', behaviorHints: { bingeGroup: 'season' } },
+    { url: 'https://test/c', title: '2160p', behaviorHints: { bingeGroup: 'season' } },
+  ]
+  const preferences = { ...settings, maxResolution: 1080 }
+  expect(rankStreams(streams, preferences, { bingeGroup: 'season' })[0].stream.url).toBe('https://test/b')
+  expect(rankStreams(streams, preferences, { bingeGroup: 'season' }).find(row => row.stream.url === 'https://test/c')?.eligible).toBe(false)
+  expect(rankStreams(streams, preferences, { bingeGroup: 'season', preferBingeGroup: false })[0].stream.url).toBe('https://test/a')
+})
+
+it('uses device compatibility hints and learned results only when their settings are enabled', () => {
+  const streams = [{ url: 'https://test/hevc', title: '1080p HEVC' }, { url: 'https://test/h264', title: '1080p H.264' }]
+  expect(rankStreams(streams, settings, { desktop: false })[0].stream.url).toBe('https://test/h264')
+  expect(rankStreams(streams, settings, { desktop: true })[0].stream.url).toBe('https://test/hevc')
+  const context = { reliability: (stream: { url?: string }) => stream.url?.includes('h264') ? 20 : -20 }
+  expect(rankStreams(streams, settings, context)[0].stream.url).toBe('https://test/h264')
+  expect(rankStreams(streams, { ...settings, learnSourceReliability: false }, context)[0].stream.url).toBe('https://test/hevc')
+})

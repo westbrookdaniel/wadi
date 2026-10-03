@@ -3,22 +3,34 @@ import { useState } from 'react'
 import { addonsQuery } from '@/api/queries'
 import { Button } from '@/components/ui/button'
 import { SettingsSelect } from '@/components/ui/settings-select'
+import { useAppStore } from '@/store/app-store'
+import { usePlaybackDefaults } from '@/store/use-playback-defaults'
+import { useSourceHistory } from '@/store/source-history'
 import { useAutoPlayback, type AutoPlaybackSettings as PlaybackSettings } from '@/store/auto-playback'
 
 export function AutoPlaybackSettings() {
-  const savedSettings = useAutoPlayback(state => state.settings)
-  const saveSettings = useAutoPlayback(state => state.update)
+  const profileId = useAppStore(state => state.activeProfileId)
+  return <PlaybackDefaultsForm key={profileId ?? 'device'} />
+}
+function PlaybackDefaultsForm() {
+  const { settings: savedSettings, profileId, hasProfileDefaults, ready, profileError, retryProfile, save } = usePlaybackDefaults()
+  const saveDevice = useAutoPlayback(state => state.update)
+  const clearHistory = useSourceHistory(state => state.clear)
   const [draft, setDraft] = useState<Partial<PlaybackSettings>>({})
   const settings = { ...savedSettings, ...draft }
   const update = (patch: Partial<PlaybackSettings>) => setDraft(current => ({ ...current, ...patch }))
   const needsIndicator = settings.enabled && settings.cachedMode !== 'any' && !settings.cachedIndicator.replace(/[\uFE0E\uFE0F]/g, '').trim()
   const isDirty = JSON.stringify(settings) !== JSON.stringify(savedSettings)
   const addons = useQuery(addonsQuery)
+  if (!ready) return <section role="status" className="p-5">Loading playback defaults…</section>
   return <section className="grid gap-5 rounded-xl border border-border bg-card/60 p-5">
-    <div><h2 className="text-lg font-medium">Auto-pick streams</h2><p className="mt-1 text-sm text-muted-foreground">Choose how streams are selected on this device.</p></div>
+    <div><h2 className="text-lg font-medium">Playback defaults</h2><p className="mt-1 text-sm text-muted-foreground">Choose quality, source selection, recovery, and episode defaults.</p></div>
+    <p className="text-sm text-muted-foreground">{profileId ? hasProfileDefaults ? 'Saved for your active profile and synced across devices.' : 'Using device defaults until you save preferences for this profile.' : 'These defaults apply on this device.'}</p>
+    {profileError ? <p role="alert" className="text-sm text-destructive">Could not load profile defaults. <Button variant="secondary" onClick={() => void retryProfile()}>Retry</Button></p> : null}
+    {save.error ? <p role="alert" className="text-sm text-destructive">Could not save preferences. Your changes are still here; try again.</p> : null}
     <Checkbox label="Recommend a stream" description="Wait for providers, then put the best match first." checked={settings.enabled} onChange={enabled => update({ enabled })} />
     <Checkbox label="Skip stream selection" description="Open the recommendation directly in Wadi. If nothing matches, show the stream list." checked={settings.skipSelection} disabled={!settings.enabled} onChange={skipSelection => update({ skipSelection })} />
-    <fieldset disabled={!settings.enabled} className="grid gap-5 border-t border-border pt-5 disabled:opacity-50">
+    <fieldset className="grid gap-5 border-t border-border pt-5 disabled:opacity-50">
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="grid gap-2 text-sm">Preferred resolution<SettingsSelect aria-label="Preferred resolution" value={String(settings.preferredResolution)} onValueChange={value => update({ preferredResolution: Number(value) })}>{[480,720,1080,1440,2160].map(value => <option key={value} value={value}>{value === 2160 ? '4K / 2160p' : `${value}p`}</option>)}</SettingsSelect></label>
         <label className="grid gap-2 text-sm">Maximum resolution<SettingsSelect aria-label="Maximum resolution" value={String(settings.maxResolution)} onValueChange={value => update({ maxResolution: Number(value) })}>{[480,720,1080,1440,2160].map(value => <option key={value} value={value}>{value === 2160 ? '4K / 2160p' : `${value}p`}</option>)}</SettingsSelect></label>
@@ -38,14 +50,28 @@ export function AutoPlaybackSettings() {
       <div className="grid gap-4 rounded-lg bg-muted/40 p-4"><Checkbox label="Avoid camera recordings" checked={settings.excludeCam} onChange={excludeCam => update({ excludeCam })} /><Checkbox label="Allow HDR and Dolby Vision" checked={settings.allowHdr} onChange={allowHdr => update({ allowHdr })} /><Checkbox label="Allow unknown resolution, size, or HDR" checked={settings.allowUnknown} onChange={allowUnknown => update({ allowUnknown })} /></div>
       <label className="grid gap-2 text-sm">Exclude words<input className="rounded-lg border border-border bg-background p-3" placeholder="e.g. sample, dubbed" maxLength={500} value={settings.excludedWords} onChange={event => update({ excludedWords: event.target.value })} /><span className="text-xs text-muted-foreground">Separate words with commas. Provider labels are hints, not a guarantee of playback support.</span></label>
     </fieldset>
-    <div className="grid gap-4 border-t border-border pt-5"><h3 className="font-medium">Next episode</h3><Checkbox label="Autoplay next episode" description="Continue after a cancellable countdown. Uses auto-pick when enabled; otherwise uses the first direct stream." checked={settings.autoplayNext} onChange={autoplayNext => update({ autoplayNext })} /><Range label="Countdown" value={settings.countdownSeconds} min={3} max={30} display={`${settings.countdownSeconds} seconds`} onChange={countdownSeconds => update({ countdownSeconds })} /><Range label="Start countdown before the end" value={settings.nextEpisodeLeadSeconds} max={600} display={settings.nextEpisodeLeadSeconds ? `${settings.nextEpisodeLeadSeconds} seconds remaining` : 'At the end'} onChange={nextEpisodeLeadSeconds => update({ nextEpisodeLeadSeconds })} /><p className="text-xs text-muted-foreground">The countdown begins this early, then plays the next episode. For short episodes it starts no earlier than halfway through.</p><p className="text-xs text-muted-foreground">Automatic playback works in Wadi. External players and copy-link mode keep a manual launch step.</p></div>
+    <div className="grid gap-4 border-t border-border pt-5"><h3 className="font-medium">Playback reliability</h3>
+      <Checkbox label="Automatically try another source" description="Preserve your position when playback fails or takes too long to start. Each source is tried once, within the retry limit." checked={settings.autoRecover} onChange={autoRecover => update({ autoRecover })} />
+      <Range label="Automatic retry limit" value={settings.recoveryAttempts} min={1} max={5} display={`${settings.recoveryAttempts} alternate sources`} onChange={recoveryAttempts => update({ recoveryAttempts })} />
+      <Range label="Startup wait limit" value={settings.startupTimeoutSeconds} min={10} max={120} display={`${settings.startupTimeoutSeconds} seconds`} onChange={startupTimeoutSeconds => update({ startupTimeoutSeconds })} />
+      <Checkbox label="Prefer browser-friendly video" description="Prefer H.264 sources for web playback. Provider labels cannot guarantee support; desktop conversion remains a device setting." checked={settings.preferCompatible} onChange={preferCompatible => update({ preferCompatible })} />
+      <Checkbox label="Learn from successful playback" description="Remember provider and codec results for this profile on this device for seven days. No stream links are stored." checked={settings.learnSourceReliability} onChange={learnSourceReliability => update({ learnSourceReliability })} />
+      <Button variant="secondary" className="w-fit" onClick={() => clearHistory(profileId)}>Clear playback learning</Button>
+    </div>
+    <div className="grid gap-4 border-t border-border pt-5"><h3 className="font-medium">Next episode</h3>
+      <Checkbox label="Prepare the next episode" description="Fetch available sources near the end of playback. Video is not downloaded or opened in advance." checked={settings.prefetchNext} onChange={prefetchNext => update({ prefetchNext })} />
+      <Checkbox label="Keep the same release family" description="Prefer matching releases across a season to keep audio and subtitle timing consistent, when the provider identifies them." checked={settings.preferBingeGroup} onChange={preferBingeGroup => update({ preferBingeGroup })} /><Checkbox label="Autoplay next episode" description="Continue after a cancellable countdown. Uses your playback defaults; if no source matches, choose one manually." checked={settings.autoplayNext} onChange={autoplayNext => update({ autoplayNext })} /><Range label="Countdown" value={settings.countdownSeconds} min={3} max={30} display={`${settings.countdownSeconds} seconds`} onChange={countdownSeconds => update({ countdownSeconds })} /><Range label="Start countdown before the end" value={settings.nextEpisodeLeadSeconds} max={600} display={settings.nextEpisodeLeadSeconds ? `${settings.nextEpisodeLeadSeconds} seconds remaining` : 'At the end'} onChange={nextEpisodeLeadSeconds => update({ nextEpisodeLeadSeconds })} /><p className="text-xs text-muted-foreground">The countdown begins this early, then plays the next episode. For short episodes it starts no earlier than halfway through.</p><p className="text-xs text-muted-foreground">Automatic playback works in Wadi. External players and copy-link mode keep a manual launch step.</p></div>
     <div className="grid gap-4 border-t border-border pt-5"><h3 className="font-medium">Watch progress</h3>
       <Range label="Count as started after" value={settings.ignoreStartSeconds} max={300} display={settings.ignoreStartSeconds ? `${settings.ignoreStartSeconds} seconds` : 'Immediately'} onChange={ignoreStartSeconds => update({ ignoreStartSeconds })} />
       <Range label="Count as finished with" value={settings.finishRemainingSeconds} max={600} display={settings.finishRemainingSeconds ? `${settings.finishRemainingSeconds} seconds remaining` : 'Nothing remaining'} onChange={finishRemainingSeconds => update({ finishRemainingSeconds })} />
-      <p className="text-xs text-muted-foreground">Brief starts stay out of Continue Watching. Finished titles are marked watched. These device settings apply when playback progress is next saved and sync the result to your active profile. Short titles must reach at least halfway before counting as finished.</p>
+      <p className="text-xs text-muted-foreground">Brief starts stay out of Continue Watching. Finished titles are marked watched. These defaults apply when playback progress is next saved and sync the result to your active profile. Short titles must reach at least halfway before counting as finished.</p>
     </div>
-    <div className="flex justify-end border-t border-border pt-4">
-      <Button type="button" disabled={!isDirty || needsIndicator} onClick={() => { saveSettings(draft); setDraft({}) }}>Save changes</Button>
+    <div className="flex justify-end gap-3 border-t border-border pt-4">
+      {hasProfileDefaults ? <Button variant="secondary" disabled={save.isPending || !ready} onClick={() => save.mutate(null, { onSuccess: () => setDraft({}) })}>Use device defaults</Button> : null}
+      <Button type="button" disabled={!isDirty || needsIndicator || !ready || !!profileError || save.isPending} onClick={() => {
+        if (!profileId) { saveDevice(settings); setDraft({}) }
+        else save.mutate(settings, { onSuccess: () => setDraft({}) })
+      }}>Save changes</Button>
     </div>
   </section>
 }

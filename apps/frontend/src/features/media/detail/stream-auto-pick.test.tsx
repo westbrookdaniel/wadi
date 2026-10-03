@@ -26,3 +26,11 @@ it('keeps external playback and unmatched streams manual', async () => {
   const unmatched = render(<QueryClientProvider client={client}><StreamList streams={[{ title: '1080p', infoHash: 'abc' }]} selectionKey="episode" isLoading={false} onPlay={play} /></QueryClientProvider>)
   expect(unmatched.getByText(/No stream matches/)).toBeInTheDocument(); expect(play).not.toHaveBeenCalled()
 })
+
+it('honors an explicit episode Play request without enabling automatic selection globally', async () => {
+  const client = new QueryClient(); const play = vi.fn()
+  client.setQueryData(['playback-preferences'], { stream_action: 'internal' })
+  render(<QueryClientProvider client={client}><StreamList playRequested streams={streams} selectionKey="episode" isLoading={false} onPlay={play} /></QueryClientProvider>)
+  await waitFor(() => expect(play).toHaveBeenCalledOnce())
+  expect(useAutoPlayback.getState().settings.enabled).toBe(false)
+})

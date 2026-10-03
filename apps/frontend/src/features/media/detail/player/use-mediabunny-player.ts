@@ -23,7 +23,9 @@ export function useMediabunnyPlayer({
   initialPlaybackSpeed,
   onProgressCommit,
   onEnded,
+  autoPlay,
 }: {
+  autoPlay?: boolean
   canvasRef: RefObject<HTMLCanvasElement | null>
   url?: string
   authToken: string | null
@@ -60,6 +62,8 @@ export function useMediabunnyPlayer({
   const animationFrameRef = useRef<number | null>(null)
   const renderIntervalRef = useRef<number | null>(null)
   const renderRef = useRef<(requestNextFrame?: boolean) => void>(() => undefined)
+  const autoPlayRef = useRef(autoPlay)
+  useEffect(() => { autoPlayRef.current = autoPlay }, [autoPlay])
   const endedCallback = useRef(onEnded)
   useEffect(() => { endedCallback.current = onEnded }, [onEnded])
   const onProgressCommitRef = useRef(onProgressCommit)
@@ -144,7 +148,15 @@ export function useMediabunnyPlayer({
     }
 
     while (currentAsyncId === asyncIdRef.current) {
-      const result = await iterator.next()
+      let result
+      try { result = await iterator.next() }
+      catch {
+        if (currentAsyncId === asyncIdRef.current) {
+          pause(false)
+          updateState({ status: 'error', error: 'Video playback stopped. Try another source.' })
+        }
+        return
+      }
       const frame = result.value ?? null
       if (!frame) {
         break
@@ -161,7 +173,7 @@ export function useMediabunnyPlayer({
         break
       }
     }
-  }, [drawWrappedCanvas, getPlaybackTime])
+  }, [drawWrappedCanvas, getPlaybackTime, pause, updateState])
 
   const startVideoIterator = useCallback(async () => {
     const videoSink = videoSinkRef.current
@@ -193,34 +205,41 @@ export function useMediabunnyPlayer({
       return
     }
 
-    for await (const { buffer, timestamp } of iterator) {
-      if (!playingRef.current || iterator !== audioBufferIteratorRef.current) {
-        break
+    try {
+      for await (const { buffer, timestamp } of iterator) {
+        if (!playingRef.current || iterator !== audioBufferIteratorRef.current) {
+          break
+        }
+
+        const node = audioContext.createBufferSource()
+        node.buffer = buffer
+        node.playbackRate.value = playbackRateRef.current
+        node.connect(gainNode)
+        const startTimestamp = audioContextStartTimeRef.current!
+          + (timestamp - playbackTimeAtStartRef.current) / playbackRateRef.current
+
+        if (startTimestamp >= audioContext.currentTime) {
+          node.start(startTimestamp)
+        } else {
+          node.start(audioContext.currentTime, audioContext.currentTime - startTimestamp)
+        }
+
+        queuedAudioNodesRef.current.add(node)
+        node.onended = () => {
+          queuedAudioNodesRef.current.delete(node)
+        }
+
+        if (timestamp - getPlaybackTime() >= 1) {
+          await waitUntilNearPlaybackTime(timestamp, getPlaybackTime, () => playingRef.current && iterator === audioBufferIteratorRef.current)
+        }
       }
-
-      const node = audioContext.createBufferSource()
-      node.buffer = buffer
-      node.playbackRate.value = playbackRateRef.current
-      node.connect(gainNode)
-      const startTimestamp = audioContextStartTimeRef.current!
-        + (timestamp - playbackTimeAtStartRef.current) / playbackRateRef.current
-
-      if (startTimestamp >= audioContext.currentTime) {
-        node.start(startTimestamp)
-      } else {
-        node.start(audioContext.currentTime, audioContext.currentTime - startTimestamp)
-      }
-
-      queuedAudioNodesRef.current.add(node)
-      node.onended = () => {
-        queuedAudioNodesRef.current.delete(node)
-      }
-
-      if (timestamp - getPlaybackTime() >= 1) {
-        await waitUntilNearPlaybackTime(timestamp, getPlaybackTime, () => playingRef.current && iterator === audioBufferIteratorRef.current)
+    } catch {
+      if (iterator === audioBufferIteratorRef.current && playingRef.current) {
+        pause(false)
+        updateState({ status: 'error', error: 'Audio playback stopped. Try another source.' })
       }
     }
-  }, [getPlaybackTime])
+  }, [getPlaybackTime, pause, updateState])
 
   const play = useCallback(async () => {
     if (stateRef.current.status !== 'ready') {
@@ -365,7 +384,7 @@ export function useMediabunnyPlayer({
 
     const init = async () => {
       dispose(false)
-      stateRef.current = { ...initialPlayerState, status: 'loading' }
+      stateRef.current = { ...initialPlayerState, status: 'loading', sourceUrl: url }
       setState(stateRef.current)
 
       try {
@@ -479,8 +498,8 @@ export function useMediabunnyPlayer({
         animationFrameRef.current = requestAnimationFrame(() => render())
         renderIntervalRef.current = window.setInterval(() => render(false), 500)
 
-        if (audioContext.state === 'running') {
-          void play()
+        if (autoPlayRef.current ?? (audioContext.state === 'running')) {
+          void play().catch(() => updateState({ playing: false, warning: 'Press Play to start playback.' }))
         }
       } catch (error) {
         if (canceled) {
@@ -491,6 +510,7 @@ export function useMediabunnyPlayer({
         updateState({
           ...initialPlayerState,
           status: 'error',
+          sourceUrl: url,
           error: error instanceof Error ? error.message : String(error),
         })
       }

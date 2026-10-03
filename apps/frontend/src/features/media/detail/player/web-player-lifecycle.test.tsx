@@ -33,9 +33,9 @@ beforeEach(() => {
   })
 })
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks() })
-function mount() {
+function mount(autoPlay?: boolean) {
   const onProgressCommit = vi.fn()
-  const options = { canvasRef: { current: null }, url: '/fixture.webm', authToken: null, savedPosition: 60, watched: false, preferredAudioLanguage: null, selectedAudioTrackId: null, initialPlaybackSpeed: 1, onProgressCommit }
+  const options = { canvasRef: { current: null }, url: '/fixture.webm', authToken: null, savedPosition: 60, watched: false, preferredAudioLanguage: null, selectedAudioTrackId: null, initialPlaybackSpeed: 1, onProgressCommit, autoPlay }
   return { ...renderHook(() => useMediabunnyPlayer(options)), onProgressCommit }
 }
 async function ready(hook: ReturnType<typeof mount>) {
@@ -107,4 +107,17 @@ it('reports a real decoder failure instead of hiding it as cancellation', async 
     expect(hook.result.current.state.error).toBe('decoder failed')
     expect(report).toHaveBeenCalledWith(error)
   } finally { hook.unmount(); report.mockRestore() }
+})
+
+it('keeps explicitly paused source switches paused even when the audio context is already running', async () => {
+  vi.stubGlobal('AudioContext', class {
+    state = 'running'; currentTime = 0; destination = {}
+    createGain() { return { gain: { value: 0 }, connect() {} } }
+    resume = mocks.resume; close = mocks.close
+  })
+  const hook = mount(false)
+  await ready(hook)
+  expect(hook.result.current.state.playing).toBe(false)
+  expect(mocks.resume).not.toHaveBeenCalled()
+  hook.unmount()
 })
