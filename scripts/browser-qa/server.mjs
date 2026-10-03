@@ -8,7 +8,7 @@ const root = dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT || 4173);
 const defaults = { subtitles_enabled: true, subtitle_language: null, subtitle_delay_seconds: 0, subtitle_size: 1.15, subtitle_position: 0, subtitle_text_color: '#FFFFFF', subtitle_background_color: '#000000', subtitle_background_opacity: 0, subtitle_outline_color: '#000000', subtitle_outline_style: 'outline', subtitle_outline_width: 1.5, subtitle_font_family: 'sans-serif', subtitle_offset_x: 0, subtitle_offset_y: 0, playback_speed: 1, preferred_audio_language: null, preferred_audio_track_id: null };
 let watch = { media_type: 'movie', media_id: 'qa-film', video_id: null, watched: false, position_seconds: 60, duration_seconds: 120, updated_at: new Date().toISOString() };
-let writes = [], delayWatchMs = 0;
+let writes = [], delayWatchMs = 0, playbackSettings = null;
 const json = (res, value, status = 200) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(value)); };
 const meta = { id: 'qa-film', type: 'movie', name: 'Synthetic QA film', description: 'Generated colour bars and tone. No provider content.' };
 const server = createServer(async (req, res) => {
@@ -30,6 +30,7 @@ const server = createServer(async (req, res) => {
     }
     if (path === '/api/auth/me') return json(res, { id: 'qa-user', email: 'qa@example.invalid', active_profile_id: 'qa-profile' });
     if (path === '/api/profiles') return json(res, { items: [{ id: 'qa-profile', name: 'QA', avatar_key: 'avatar-1', user_id: 'qa-user' }] });
+    if (path === '/api/profiles/qa-profile/playback-settings') { if (req.method === 'PUT') playbackSettings = body; if (req.method === 'DELETE') playbackSettings = null; return json(res, { settings: playbackSettings }); }
     if (path === '/api/profiles/select') return json(res, { active_profile_id: 'qa-profile' });
     if (path === '/api/auth/login' || path === '/api/auth/register') { res.setHeader('Retry-After', '900'); return json(res, { error: 'Too many sign-in attempts. Try again in 900 seconds.' }, 429); }
     if (path === '/api/settings/player-defaults') return json(res, defaults);
@@ -41,7 +42,7 @@ const server = createServer(async (req, res) => {
     if (path === '/api/watch-progress') { watch = { ...watch, ...body, updated_at: new Date().toISOString() }; writes.push({ position: body.position_seconds, updated_at: watch.updated_at }); return json(res, watch); }
     if (path.startsWith('/api/meta/')) return json(res, { responses: [{ addon_id: 'qa-addon', response: { meta } }] });
     if (path.startsWith('/api/subtitles/')) return json(res, { responses: [] });
-    if (path.startsWith('/api/stream/')) return json(res, { responses: [{ addon_id: 'qa-addon', response: { streams: [{ name: 'QA', url: `http://127.0.0.1:${port}/fixture.webm` }] } }] });
+    if (path.startsWith('/api/streams/')) return json(res, { responses: [{ addon_id: 'qa-addon', response: { streams: [{ name: 'QA 1080p', title: '1080p VP9', url: `http://127.0.0.1:${port}/fixture.webm` }, { name: 'QA 720p', title: '720p VP9', url: `http://127.0.0.1:${port}/fixture.webm?quality=720` }] } }] });
     if (path.startsWith('/api/')) return json(res, { items: [] });
     let file = path.startsWith('/_next/static/') ? join(root, 'static', path.slice('/_next/static/'.length)) : join(root, path.slice(1));
     if (!resolve(file).startsWith(root + '/')) return json(res, {}, 403);

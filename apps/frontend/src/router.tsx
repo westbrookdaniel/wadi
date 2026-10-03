@@ -1,5 +1,5 @@
 import { useDeviceStore } from '@/store/device-store'
-import { useAutoPlayback } from '@/store/auto-playback'
+import { usePlaybackDefaults } from '@/store/use-playback-defaults'
 /* eslint-disable react-refresh/only-export-components */
 import {
   Navigate,
@@ -291,6 +291,7 @@ function BrowseRoute({
 }
 
 function MediaRoute() {
+  const { settings: playbackDefaults } = usePlaybackDefaults()
   const playbackPrefs = useQuery(playbackPreferencesQuery)
   const [launchFailure, setLaunchFailure] = useState<{ stream: PlayableStream; message: string } | null>(null)
   const [chosenPlayer, setChosenPlayer] = useState("vlc")
@@ -318,7 +319,7 @@ function MediaRoute() {
       return
     }
     const key = savePlaybackSession(stream, target)
-    void navigate({ to: '/media/$type/$id', params: { type, id }, search: previous => ({ ...previous, manual: true, playback: key, episode: target.videoId ?? undefined, season: target.episodeContext?.season?.toString() }), replace: Boolean(playback) || useAutoPlayback.getState().settings.enabled && useAutoPlayback.getState().settings.skipSelection })
+    void navigate({ to: '/media/$type/$id', params: { type, id }, search: previous => ({ ...previous, manual: true, playback: key, episode: target.videoId ?? undefined, season: target.episodeContext?.season?.toString() }), replace: Boolean(playback) || playbackDefaults.enabled && playbackDefaults.skipSelection })
   }
 
   const updateSeriesSelection = ({

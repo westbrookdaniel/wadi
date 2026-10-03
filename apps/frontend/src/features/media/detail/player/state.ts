@@ -6,6 +6,7 @@ export function canControlPlayback({ status, duration }: Pick<PlayerState, 'stat
 }
 
 export type PlayerState = {
+  sourceUrl?: string
   status: PlayerStatus
   warning: string | null
   error: string | null

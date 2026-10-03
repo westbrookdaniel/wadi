@@ -8,8 +8,13 @@ import { activeSegment, skipLabels, skipSegmentsQuery, type SkipSegment } from '
 import { TvPlayerChrome } from '@/components/tv/tv-player'
 import type { ComponentProps } from 'react'
 import { useEpisodeAutoplay } from './use-episode-autoplay'
-import { useAutoPlayback } from '@/store/auto-playback'
-import { nextReleasedEpisode, rankStreams, isDirectStream } from '../auto-pick'
+import { usePlaybackDefaults } from '@/store/use-playback-defaults'
+import { useSourceHistory } from '@/store/source-history'
+import { useSourceRanking } from '../use-source-ranking'
+import { parseStreamMetadata } from '../stream-metadata'
+import { SourceControls } from './source-controls'
+import { useSourceRecovery } from './use-source-recovery'
+import { nextReleasedEpisode, rankStreams } from '../auto-pick'
 import { NextEpisodePrompt } from './next-episode-prompt'
 import { StreamList } from '../stream-list'
 import { episodesQuery } from '@/api/queries'
@@ -94,7 +99,7 @@ export function MediaPlayerPage({
   target: PlaybackTarget
   onBack: () => void
 }) {
-  const autoSettings = useAutoPlayback(state => state.settings)
+  const { settings: autoSettings, ready: defaultsReady } = usePlaybackDefaults()
   const profileId = useAppStore(state => state.activeProfileId)
   const releaseCatalog = useQuery({ ...episodesQuery(target.mediaId, profileId), enabled: target.mediaType === "series" && Boolean(profileId) })
   const [upNext, setUpNext] = useState<Episode | null>(null)
@@ -106,7 +111,27 @@ export function MediaPlayerPage({
   const introDbPreferences = useQuery(introDbPreferencesQuery(accountRevision))
   const introDbEnabled = !introDbPreferences.isError && introDbPreferences.data?.enabled === true
   const segments = useQuery(skipSegmentsQuery(activeTarget, introDbEnabled, accountRevision))
+  const rankingContext = useSourceRanking(activeTarget)
+  const recordResult = useSourceHistory(state => state.record)
+  const rememberFamily = useSourceHistory(state => state.rememberFamily)
+  const [sourceSheetOpen, setSourceSheetOpen] = useState(false)
+  const [quality, setQuality] = useState<number | null>(null)
+  const setFamilyChoice = useSourceHistory(state => state.setFamilyChoice)
+  const keepFamily = rankingContext.preferBingeGroup ?? autoSettings.preferBingeGroup
+  const [sourceResume, setSourceResume] = useState<{ url: string; position: number; playing: boolean } | null>(null)
   const streamUrl = activeStream.url
+  const currentSources = useQuery(streamsQuery(activeTarget.mediaType, activeTarget.videoId ?? activeTarget.mediaId, defaultsReady && (autoSettings.autoRecover || sourceSheetOpen)))
+  const eligibleSources = useMemo(() => rankStreams(currentSources.data ?? [], autoSettings, rankingContext)
+    .filter(row => row.eligible).map(row => row.stream), [currentSources.data, autoSettings, rankingContext])
+  const sourceCandidates = useMemo(() => eligibleSources.filter(candidate => quality === null || parseStreamMetadata(candidate).resolution.value === quality), [eligibleSources, quality])
+  const describedStream = currentSources.data?.find(candidate => candidate.url === streamUrl) ?? activeStream
+  const activeMetadata = parseStreamMetadata(describedStream)
+  const smallerSource = eligibleSources.find(candidate => {
+    if (candidate.url === streamUrl) return false
+    const metadata = parseStreamMetadata(candidate)
+    return activeMetadata.resolution.value && metadata.resolution.value && metadata.resolution.value < activeMetadata.resolution.value
+      || activeMetadata.sizeBytes.value && metadata.sizeBytes.value && metadata.sizeBytes.value < activeMetadata.sizeBytes.value
+  })
   const token = useAppStore((state) => state.token)
   const externalPreferences = useQuery(playbackPreferencesQuery)
   const desktop = desktopBridge()
@@ -148,6 +173,7 @@ export function MediaPlayerPage({
   const [episodeSheetOpen, setEpisodeSheetOpen] = useState(false)
   const [selectedSwapSeason, setSelectedSwapSeason] = useState<number | null>(activeTarget.episodeContext?.season ?? null)
   const [pendingEpisode, setPendingEpisode] = useState<Episode | null>(null)
+  const pendingRankingContext = useSourceRanking(pendingEpisode ? { ...activeTarget, episodeContext: pendingEpisode } : activeTarget)
   const episodeStreams = useQuery(
     streamsQuery(
       activeTarget.mediaType,
@@ -240,8 +266,9 @@ export function MediaPlayerPage({
     canvasRef,
     url: resume.ready ? proxiedStreamUrl : undefined,
     authToken: null,
-    savedPosition: resume.savedPosition,
-    watched: resume.watched,
+    savedPosition: sourceResume && sourceResume.url === streamUrl ? sourceResume.position : resume.savedPosition,
+    watched: sourceResume && sourceResume.url === streamUrl ? false : resume.watched,
+    autoPlay: sourceResume && sourceResume.url === streamUrl ? sourceResume.playing : true,
     preferredAudioLanguage: playbackState.preferredAudioLanguage,
     selectedAudioTrackId: playbackState.selectedAudioTrackId,
     initialPlaybackSpeed: playbackState.playbackSpeed,
@@ -249,11 +276,71 @@ export function MediaPlayerPage({
     onEnded,
   })
 
-  const desktopPlayer = useDesktopPlayer({ videoRef, source: desktop && resume.ready ? streamUrl : undefined, hints: activeStream.behaviorHints, savedPosition: resume.savedPosition, watched: resume.watched, onProgressCommit: saveProgress, onEnded })
+  const desktopPlayer = useDesktopPlayer({ videoRef, source: desktop && resume.ready ? streamUrl : undefined, hints: activeStream.behaviorHints, savedPosition: sourceResume && sourceResume.url === streamUrl ? sourceResume.position : resume.savedPosition, watched: sourceResume && sourceResume.url === streamUrl ? false : resume.watched, autoPlay: sourceResume && sourceResume.url === streamUrl ? sourceResume.playing : true, onProgressCommit: saveProgress, onEnded })
   const player = desktop ? desktopPlayer : webPlayer
+  const automaticAudioRef = useRef<string | null>(null)
+  const manualSubtitleRef = useRef(false)
+  const failedSources = useRef(new Set<string>())
+  const onSourceFailure = useCallback((failed: PlayableStream) => {
+    if (!autoSettings.learnSourceReliability || !failed.url || failedSources.current.has(failed.url)) return
+    failedSources.current.add(failed.url)
+    recordResult(profileId, failed, false)
+  }, [autoSettings.learnSourceReliability, profileId, recordResult])
+  const switchSource = useCallback((next: PlayableStream, position: number, playing: boolean) => {
+    if (!next.url || next.url === streamUrl || castConnected) return
+    savePlaybackPosition(activeTarget, position)
+    if (player.state.duration > 0) saveProgress(position, player.state.duration)
+    setSourceResume({ url: next.url, position, playing })
+    updatePlaybackState({ selectedAudioTrackId: null }, false)
+    setSubtitleCues([])
+    automaticAudioRef.current = null
+    manualSubtitleRef.current = false
+    setActiveStream(next)
+    setSourceSheetOpen(false)
+    if (keepFamily) rememberFamily(profileId, activeTarget, next)
+    onPlaybackChange?.(next, activeTarget)
+  }, [streamUrl, castConnected, activeTarget, player.state.duration, saveProgress, updatePlaybackState, keepFamily, rememberFamily, profileId, onPlaybackChange])
+  const recovery = useSourceRecovery({
+    episodeKey: `${profileId}:${activeTarget.mediaType}:${activeTarget.mediaId}:${activeTarget.videoId}`,
+    source: activeStream, state: player.state, candidates: sourceCandidates,
+    enabled: defaultsReady && autoSettings.autoRecover && currentSources.isSuccess && !castConnected && resume.ready && !sourceSheetOpen,
+    attempts: autoSettings.recoveryAttempts, timeoutSeconds: autoSettings.startupTimeoutSeconds,
+    savedPosition: resume.savedPosition, onSwitch: switchSource, onFailure: onSourceFailure,
+  })
+  const successfulSources = useRef(new Set<string>())
+  const sourceProgress = useRef({ url: streamUrl, position: 0, elapsed: 0 })
+  useEffect(() => {
+    if (sourceProgress.current.url !== streamUrl) sourceProgress.current = { url: streamUrl, position: player.state.currentTime, elapsed: 0 }
+    if (player.state.sourceUrl && player.state.sourceUrl !== streamUrl) return
+    if (player.state.status === 'error') onSourceFailure(activeStream)
+    if (player.state.status !== 'ready' || !player.state.playing || castConnected) return
+    const delta = player.state.currentTime - sourceProgress.current.position
+    sourceProgress.current.position = player.state.currentTime
+    if (delta > 0 && delta <= 3) sourceProgress.current.elapsed += delta
+    if (streamUrl && sourceProgress.current.elapsed >= 10 && !successfulSources.current.has(streamUrl)) {
+      successfulSources.current.add(streamUrl)
+      if (autoSettings.learnSourceReliability) recordResult(profileId, activeStream, true)
+      if (keepFamily) rememberFamily(profileId, activeTarget, activeStream)
+    }
+  }, [streamUrl, player.state.status, player.state.playing, player.state.currentTime, player.state.sourceUrl, activeStream, activeTarget, castConnected, onSourceFailure, recordResult, profileId, autoSettings.learnSourceReliability, keepFamily, rememberFamily])
+  const prefetchedNext = useRef<string | null>(null)
+  useEffect(() => {
+    if (!defaultsReady || !autoSettings.prefetchNext || !autoSettings.autoplayNext || !nextEpisode || castConnected || (!tvMode && externalPreferences.data?.stream_action !== 'internal')) return
+    if (player.state.duration <= 0 || player.state.currentTime < Math.max(player.state.duration / 2, player.state.duration - Math.max(120, autoSettings.nextEpisodeLeadSeconds + autoSettings.countdownSeconds))) return
+    const key = `${profileId}:${activeTarget.mediaType}:${nextEpisode.id}`
+    if (prefetchedNext.current === key) return
+    prefetchedNext.current = key
+    void queryClient.prefetchQuery(streamsQuery(activeTarget.mediaType, nextEpisode.id))
+  }, [defaultsReady, autoSettings.prefetchNext, autoSettings.autoplayNext, autoSettings.nextEpisodeLeadSeconds, autoSettings.countdownSeconds, nextEpisode, castConnected, tvMode, externalPreferences.data, player.state.duration, player.state.currentTime, queryClient, activeTarget.mediaType, profileId])
+  const chooseQuality = (resolution: number | null) => {
+    const next = eligibleSources.find(candidate => resolution === null || parseStreamMetadata(candidate).resolution.value === resolution)
+    if (!next) return
+    setQuality(resolution)
+    switchSource(next, recovery.getPosition(), recovery.getPlaying())
+  }
   const triggerNextEpisode = useEpisodeAutoplay({
     episodeKey: `${activeTarget.mediaType}:${activeTarget.mediaId}:${activeTarget.videoId}`,
-    enabled: autoSettings.autoplayNext && !!nextEpisode && !castConnected && (tvMode || externalPreferences.data?.stream_action === 'internal'),
+    enabled: defaultsReady && autoSettings.autoplayNext && !!nextEpisode && !castConnected && (tvMode || externalPreferences.data?.stream_action === 'internal'),
     playing: player.state.status === 'ready' && player.state.playing,
     currentTime: player.state.currentTime,
     duration: player.state.duration,
@@ -272,10 +359,8 @@ export function MediaPlayerPage({
   useEffect(() => () => { if (hideControlsTimer.current) clearTimeout(hideControlsTimer.current) }, [])
   const checkpointSecond = Math.floor(player.state.currentTime)
   useEffect(() => {
-    if (player.state.status === 'ready') savePlaybackPosition(activeTarget, checkpointSecond)
-  }, [activeTarget, checkpointSecond, player.state.status])
-  const automaticAudioRef = useRef<string | null>(null)
-  const manualSubtitleRef = useRef(false)
+    if (player.state.status === 'ready' && (!player.state.sourceUrl || player.state.sourceUrl === streamUrl)) savePlaybackPosition(activeTarget, checkpointSecond)
+  }, [activeTarget, checkpointSecond, player.state.status, player.state.sourceUrl, streamUrl])
   useEffect(() => {
     const audio = player.state.audioTracks.find(track => track.id === player.state.selectedAudioTrackId)
     if (!audio || subtitleTracks.isLoading || player.state.status !== 'ready' || automaticAudioRef.current === audio.id) return
@@ -500,12 +585,12 @@ export function MediaPlayerPage({
     setEpisodeSheetOpen(false)
   }, [pendingEpisode, activeTarget, releaseCatalog.data, saveProgress, player.state.currentTime, player.state.duration, onPlaybackChange, setPendingEpisode, setEpisodeSheetOpen])
   useEffect(() => {
-    if (!pendingEpisode || episodeStreams.isFetching || episodeStreams.error || !episodeStreams.data) return
-    const next = autoSettings.enabled ? rankStreams(episodeStreams.data, autoSettings).find(row => row.eligible)?.stream : episodeStreams.data.find(isDirectStream)
+    if (!defaultsReady || !pendingEpisode || episodeStreams.isFetching || episodeStreams.error || !episodeStreams.data) return
+    const next = rankStreams(episodeStreams.data, autoSettings, pendingRankingContext).find(row => row.eligible)?.stream
     // Completing the provider request transitions the external player and its episode state together.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (next && (tvMode || externalPreferences.data?.stream_action === 'internal')) changeEpisode(next)
-  }, [pendingEpisode, episodeStreams.data, episodeStreams.isFetching, episodeStreams.error, autoSettings, externalPreferences.data, changeEpisode, tvMode])
+  }, [defaultsReady, pendingEpisode, episodeStreams.data, episodeStreams.isFetching, episodeStreams.error, autoSettings, externalPreferences.data, changeEpisode, tvMode, pendingRankingContext])
 
   const onTogglePlay = useCallback(() => {
     setUpNext(null)
@@ -642,6 +727,8 @@ export function MediaPlayerPage({
 
           {(player.state.status === 'loading' || player.state.status === 'idle') && !player.state.error ? (
             <div className="player-loading pointer-events-none absolute inset-0 z-[4] grid place-content-center justify-items-center gap-6 bg-black text-center" role="status" aria-label="Loading stream">
+              <p className="text-sm text-white/70">{recovery.notice ?? (!resume.ready ? 'Loading your watch position…' : desktop ? 'Preparing playback…' : 'Opening source…')}</p>
+              <div className="pointer-events-auto flex gap-3"><Button variant="secondary" onClick={() => setSourceSheetOpen(true)}>Choose another source</Button><Button variant="ghost" onClick={onBack}>Back to streams</Button></div>
               {typeof media.raw.logo === 'string' && media.raw.logo ? <RevealedImage className="player-loading-mark max-h-36 w-[min(55vw,360px)] object-contain" src={media.raw.logo} alt={media.name} /> : <strong className="player-loading-mark max-w-[70vw] text-2xl font-medium tracking-tight">{media.name}</strong>}
 
             </div>
@@ -653,6 +740,8 @@ export function MediaPlayerPage({
             <div className={cn(stateBlock, 'absolute inset-0 min-h-0 bg-black/92 px-6', tvMode && 'z-10')}>
               <strong>Unable to play this stream</strong>
               <p>{player.state.error}</p>
+              {recovery.notice ? <p role="status">{recovery.notice}</p> : null}
+              <Button onClick={() => setSourceSheetOpen(true)}>Choose another source</Button>
               {tvMode ? <Button data-tv-back onClick={onBack}>Back to streams</Button> : null}
               {desktop ? <Button onClick={desktopPlayer.retry}>{conversionEnabled ? 'Retry with full conversion' : 'Retry'}</Button> : tvMode ? <p>Try another stream supported by this browser.</p> : <><p>Web playback depends on the source and browser. Try the desktop app or an external player.</p><DesktopDownload /></>}
               {!tvMode && streamUrl && <><Button onClick={() => { void navigator.clipboard.writeText(streamUrl).catch(() => {}) }}>Copy stream link</Button><Button onClick={() => { void openExternalPlayback(streamUrl, normalizePlaybackPreferences(externalPreferences.data)).catch(() => {}) }}>Open external player</Button></>}
@@ -667,6 +756,7 @@ export function MediaPlayerPage({
           ) : null}
 
           <PlayerChrome
+            onOpenSources={!castConnected ? () => setSourceSheetOpen(true) : undefined}
             skipSegment={introDbEnabled && effectiveState.status === 'ready' ? activeSegment(segments.data ?? [], effectiveState.currentTime, effectiveState.duration) : undefined}
             playerRef={playerRef}
             mediaName={media.name}
@@ -769,6 +859,14 @@ export function MediaPlayerPage({
             </div>
           ) : null}
 
+          <SourceControls open={sourceSheetOpen} onOpenChange={setSourceSheetOpen} target={activeTarget}
+            qualityStreams={eligibleSources}
+            streams={currentSources.data ?? []} loading={currentSources.isFetching} error={currentSources.isError} onRetry={() => void currentSources.refetch()}
+            activeStream={describedStream} quality={quality} onQuality={chooseQuality}
+            onSelect={next => { setQuality(null); switchSource(next, recovery.getPosition(), recovery.getPlaying()) }}
+            onSmallerSource={smallerSource ? () => { setQuality(parseStreamMetadata(smallerSource).resolution.value); switchSource(smallerSource, recovery.getPosition(), recovery.getPlaying()) } : undefined}
+            onTryAnother={() => { recovery.tryAnother() }} keepFamily={keepFamily} onKeepFamily={keep => { setFamilyChoice(profileId, activeTarget, keep); if (keep) rememberFamily(profileId, activeTarget, activeStream) }} />
+          {recovery.exhausted && !player.state.error ? <div className="absolute inset-x-4 top-24 z-[6] rounded bg-black/80 p-3 text-sm" role="status">{recovery.notice}<Button className="ml-3" onClick={() => setSourceSheetOpen(true)}>Choose source</Button></div> : null}
           {upNext && autoSettings.autoplayNext && (tvMode || externalPreferences.data?.stream_action === 'internal') ? <NextEpisodePrompt key={upNext.id} episode={upNext} seconds={autoSettings.countdownSeconds} paused={autoSettings.nextEpisodeLeadSeconds > 0 && player.state.currentTime < player.state.duration - 2 && (!player.state.playing || player.state.status !== 'ready')} onCancel={() => setUpNext(null)} onContinue={() => { setPendingEpisode(upNext); setUpNext(null); setEpisodeSheetOpen(true) }} /> : null}
           <Dialog open={episodeSheetOpen} onOpenChange={open => { setEpisodeSheetOpen(open); if (!open) setPendingEpisode(null) }}>
             <DialogContent
@@ -856,7 +954,9 @@ function DesktopPlayerChrome({
   onVolumeChange,
   onToggleMute,
   onSelectAudioTrack,
+  onOpenSources,
 }: {
+  onOpenSources?: () => void
   skipSegment?: SkipSegment
   playerRef: RefObject<HTMLDivElement | null>
   mediaName: string
@@ -982,6 +1082,7 @@ function DesktopPlayerChrome({
           </button>
         </div>
 
+        {onOpenSources ? <Button variant="ghost" className="bg-black/55 text-white hover:bg-white/15" onClick={onOpenSources}>Quality & sources</Button> : null}
         {warning ? (
           <p className="max-w-[min(520px,60vw)] rounded-md bg-black/62 px-3 py-2 text-right text-xs font-medium text-white/78">
             {warning}

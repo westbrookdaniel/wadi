@@ -240,7 +240,7 @@ it('keeps the linked provider ID selected after duplicate episodes merge', async
   })
   const page = renderSeriesDetailPage({ preferredVideoId: 'provider-b:2:1' })
   try {
-    await waitFor(() => expect(apiRequestMock).toHaveBeenCalledWith('/api/streams/series/provider-b:2:1'))
+    await waitFor(() => expect(apiRequestMock).toHaveBeenCalledWith('/api/streams/series/provider-b:2:1', expect.objectContaining({ signal: expect.any(AbortSignal) })))
     expect(screen.getByRole('button', { name: 'Change Episode' })).toBeInTheDocument()
     expect(screen.getByText('Merged premiere')).toBeInTheDocument()
   } finally { page.unmount(); useAppStore.getState().setActiveProfileId(null) }

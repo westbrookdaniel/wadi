@@ -1,5 +1,7 @@
 import { useDeviceStore } from '@/store/device-store'
-import { useAutoPlayback } from '@/store/auto-playback'
+import { usePlaybackDefaults } from '@/store/use-playback-defaults'
+import { useSourceRanking } from './use-source-ranking'
+import { Button } from '@/components/ui/button'
 import { rankStreams } from './auto-pick'
 import { playbackPreferencesQuery } from '@/api/queries'
 import { useQuery } from '@tanstack/react-query'
@@ -17,7 +19,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { bottomPagePadding, mutedText } from '@/lib/styles'
 import { cn } from '@/lib/utils'
 
-import type { PlayableStream } from './types'
+import type { PlaybackTarget, PlayableStream } from './types'
 
 const FILTER_ALL = '__all__'
 type StreamRow = {
@@ -31,27 +33,32 @@ export function StreamList({
   streams,
   selectionKey,
   autoPickAllowed = true,
+  playRequested = false,
+  target,
   isLoading,
   onPlay,
 }: {
   selectionKey?: string
   autoPickAllowed?: boolean
+  playRequested?: boolean
+  target?: PlaybackTarget
   streams: PlayableStream[]
   isLoading: boolean
   onPlay: (stream: PlayableStream) => void
 }) {
   const tvMode = useDeviceStore(state => state.tvMode)
-  const settings = useAutoPlayback(state => state.settings)
+  const { settings, ready } = usePlaybackDefaults()
+  const context = useSourceRanking(target)
   const playback = useQuery(playbackPreferencesQuery)
-  const ranked = useMemo(() => rankStreams(streams, settings), [streams, settings])
-  const recommendation = settings.enabled && !isLoading ? ranked.find(row => row.eligible) : undefined
+  const ranked = useMemo(() => rankStreams(streams, settings, context), [streams, settings, context])
+  const recommendation = !isLoading ? ranked.find(row => row.eligible) : undefined
   const orderedStreams = settings.enabled ? ranked.map(row => row.stream) : streams
   const attempted = useRef<string | null>(null)
   useEffect(() => {
-    if (!selectionKey || !autoPickAllowed || !settings.enabled || !settings.skipSelection || isLoading || (!tvMode && playback.data?.stream_action !== 'internal') || !recommendation || attempted.current === selectionKey) return
+    if (!selectionKey || !autoPickAllowed || !ready || !(playRequested || settings.enabled && settings.skipSelection) || isLoading || (!tvMode && playback.data?.stream_action !== 'internal') || !recommendation || attempted.current === selectionKey) return
     attempted.current = selectionKey
     onPlay(recommendation.stream)
-  }, [selectionKey, autoPickAllowed, settings.enabled, settings.skipSelection, isLoading, playback.data, recommendation, onPlay, tvMode])
+  }, [selectionKey, autoPickAllowed, ready, playRequested, settings.enabled, settings.skipSelection, isLoading, playback.data, recommendation, onPlay, tvMode])
   const addons = useQuery(addonsQuery)
   const sourceLabelsById = useMemo(() => {
     const map = new Map<string, string>()
@@ -92,6 +99,8 @@ export function StreamList({
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       {settings.enabled && !recommendation ? <p className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">No stream matches your auto-pick rules. Choose one below or adjust your settings.</p> : null}
+      {recommendation ? <Button disabled={!ready} data-tv-default onClick={() => onPlay(recommendation.stream)}>Play recommended source</Button> : null}
+      <p className="text-xs text-muted-foreground">Choose a source below to use a different version. Playback support depends on the source and your device.</p>
       <div className="grid gap-2">
         <Select value={activeFilterValue} onValueChange={setFilterValue}>
           <SelectTrigger className="w-full justify-between rounded-lg border border-border bg-card/70 px-2.5 text-sm" aria-label="Source filter">
@@ -166,7 +175,7 @@ function streamDetail(stream: PlayableStream) {
     stream.infoHash ? 'Torrent' : undefined,
   ].filter(Boolean)
 
-  return parts.length ? parts.join(' • ') : stream.url ? 'Direct browser-playable stream' : 'Addon stream'
+  return parts.length ? parts.join(' • ') : stream.url ? 'Direct stream · compatibility varies' : 'Addon stream'
 }
 
 function normalizeStreamRow(

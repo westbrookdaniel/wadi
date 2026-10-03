@@ -53,3 +53,13 @@ The desktop development build and sign-in window were opened, and the web login 
 - Confirm an outro ending before a post-credits scene stops at that end, without forcing the next episode. Existing next-episode autoplay settings still apply.
 - Try a title without IMDb identity, an uncovered episode, an unavailable IntroDB endpoint and a stream shorter than the segment end. Playback must work without skip buttons or metadata errors.
 - Check phone-width controls and a fullscreen player. External players do not receive Wadi skip controls.
+
+## Playback defaults and source switching
+
+- Save different resolution/language/recovery defaults for two profiles; switch between them and reopen on another device. A profile without an override uses device defaults; resetting an override restores those defaults.
+- Play/resume an episode directly and confirm manual source selection still works on returning from the player.
+- Switch quality while playing and paused, including after a rewind to zero. Confirm the position and pause state survive, and the selected source is retained when reloading.
+- Fail the first two sources or delay startup beyond the wait limit. Confirm bounded recovery, no repeated URLs, and manual selection after exhaustion. Disable recovery and confirm errors remain manual. Desktop seeks must not trigger startup recovery.
+- Open Quality & sources on desktop, mobile and TV; reach all controls and close normally. Test smaller-source recovery. While casting, source switching must be unavailable.
+- With autoplay enabled, inspect network requests near the end of an episode: next-episode metadata is fetched once, no second video/conversion starts, and cancellation keeps the current episode.
+- For providers with bingeGroup hints, verify family continuity across episodes, season opt-out, profile isolation, and Clear playback learning. Verify external players/copy-link retain manual launch.

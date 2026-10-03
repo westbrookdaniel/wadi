@@ -6,8 +6,8 @@ import { desktopBridge } from '@/lib/desktop'
 import { initialPlayerState, type PlayerState } from './state'
 const sessionSchema = z.object({ id:z.string(),url:z.url(),duration:z.number(),offset:z.number(),hasVideo:z.boolean(),hasAudio:z.boolean(),audioTracks:z.array(z.object({id:z.string(),label:z.string(),language:z.string()})),selectedAudioTrackId:z.string().nullable(),mode:z.enum(['direct','remux','audio','video']) })
 const hintsSchema = z.object({ proxyHeaders: z.object({ request:z.record(z.string(),z.string()).optional() }).optional() })
-export function useDesktopPlayer({ videoRef, source, hints, savedPosition, watched, onProgressCommit, onEnded }: {
-  videoRef:RefObject<HTMLVideoElement | null>; source?:string; hints:unknown; savedPosition:number; watched:boolean; onEnded?:()=>void; onProgressCommit:(position:number,duration:number)=>void
+export function useDesktopPlayer({ videoRef, source, hints, savedPosition, watched, onProgressCommit, onEnded, autoPlay = true }: {
+  autoPlay?:boolean; videoRef:RefObject<HTMLVideoElement | null>; source?:string; hints:unknown; savedPosition:number; watched:boolean; onEnded?:()=>void; onProgressCommit:(position:number,duration:number)=>void
 }) {
   const conversionEnabled = useDeviceStore(state => state.conversionEnabled)
   const [state,setState]=useState<PlayerState>(initialPlayerState)
@@ -19,7 +19,9 @@ export function useDesktopPlayer({ videoRef, source, hints, savedPosition, watch
   const audio=useRef<string|null>(null)
   const speed=useRef(1)
   const forceVideo=useRef(false)
-  const playing=useRef(true)
+  const playing=useRef(autoPlay)
+  const autoPlayRef=useRef(autoPlay)
+  useEffect(()=>{autoPlayRef.current=autoPlay},[autoPlay])
   const job=useRef<string|null>(null)
   const session=useRef<{offset:number;direct:boolean}|null>(null)
   const activeSource=useRef<string|null>(null)
@@ -43,7 +45,7 @@ export function useDesktopPlayer({ videoRef, source, hints, savedPosition, watch
     if(!desktop||!source||!video)return
     const sourceKey=JSON.stringify([source,headers])
     const sourceChanged=activeSource.current!==sourceKey
-    if(sourceChanged){activeSource.current=sourceKey;started.current=false;playing.current=true;audio.current=null;forceVideo.current=false}
+    if(sourceChanged){activeSource.current=sourceKey;started.current=false;playing.current=autoPlayRef.current;audio.current=null;forceVideo.current=false}
     if(!started.current){position.current=restore.current;started.current=true}
     let cancelled=false,hls:Hls|null=null
     const id=crypto.randomUUID()
@@ -60,7 +62,7 @@ export function useDesktopPlayer({ videoRef, source, hints, savedPosition, watch
         if(result.error)update({status:'error',error:result.error,playing:false})
       }).catch(()=>{if(!cancelled)update({status:'error',error:'Local media service disconnected'})})
     }
-    update({status:'loading',error:null,playing:playing.current,currentTime:position.current,...(sourceChanged?{duration:0,hasVideo:false,hasAudio:false,audioTracks:[],selectedAudioTrackId:null}:{})})
+    update({sourceUrl:source,status:'loading',error:null,playing:playing.current,currentTime:position.current,...(sourceChanged?{duration:0,hasVideo:false,hasAudio:false,audioTracks:[],selectedAudioTrackId:null}:{})})
     const sync=()=>{
       if(!playable)return
       position.current=offset+video.currentTime
