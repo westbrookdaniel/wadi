@@ -11,7 +11,6 @@ export { DetailShellSkeleton, StreamPlaybackPage }
 
 export function MediaDetailPage({
   media,
-  autoPickAllowed = true,
   listAction,
   preferredVideoId,
   preferredSeason,
@@ -19,7 +18,6 @@ export function MediaDetailPage({
   onBack,
   onPlay,
 }: {
-  autoPickAllowed?: boolean
   media: MediaPreview | null
   listAction?: React.ReactNode
   preferredVideoId?: string | null
@@ -39,7 +37,6 @@ export function MediaDetailPage({
     return (
       <SeriesDetailPage
         key={media.id}
-        autoPickAllowed={autoPickAllowed}
         media={media}
         listAction={listAction}
         preferredVideoId={preferredVideoId}
@@ -51,5 +48,5 @@ export function MediaDetailPage({
     )
   }
 
-  return <MovieDetailPage autoPickAllowed={autoPickAllowed} media={media} listAction={listAction} onBack={onBack} onPlay={onPlay} />
+  return <MovieDetailPage key={`${media.type}:${media.id}`} media={media} listAction={listAction} onBack={onBack} onPlay={onPlay} />
 }

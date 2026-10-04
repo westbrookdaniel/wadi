@@ -1,5 +1,4 @@
 import { useDeviceStore } from '@/store/device-store'
-import { useAutoPlayback } from '@/store/auto-playback'
 /* eslint-disable react-refresh/only-export-components */
 import {
   Navigate,
@@ -296,7 +295,7 @@ function MediaRoute() {
   const [chosenPlayer, setChosenPlayer] = useState("vlc")
   const navigate = useNavigate()
   const { type, id } = mediaRoute.useParams()
-  const { videoId, episode, season, from, playback, manual } = mediaRoute.useSearch()
+  const { videoId, episode, season, from, playback } = mediaRoute.useSearch()
   const session = useMemo(() => readPlaybackSession(playback, type, id), [playback, type, id])
   const selectedStream = session?.stream
   const selectedPlaybackTarget = session?.target
@@ -318,7 +317,7 @@ function MediaRoute() {
       return
     }
     const key = savePlaybackSession(stream, target)
-    void navigate({ to: '/media/$type/$id', params: { type, id }, search: previous => ({ ...previous, manual: true, playback: key, episode: target.videoId ?? undefined, season: target.episodeContext?.season?.toString() }), replace: Boolean(playback) || useAutoPlayback.getState().settings.enabled && useAutoPlayback.getState().settings.skipSelection })
+    void navigate({ to: '/media/$type/$id', params: { type, id }, search: previous => ({ ...previous, manual: true, playback: key, episode: target.videoId ?? undefined, season: target.episodeContext?.season?.toString() }), replace: Boolean(playback) })
   }
 
   const updateSeriesSelection = ({
@@ -382,7 +381,6 @@ function MediaRoute() {
             <DetailShellSkeleton onBack={() => navigate({ to: backPath, search: backSearch })} />
           ) : (
             <MediaDetailPage
-              autoPickAllowed={!manual}
               media={displayMedia}
               preferredVideoId={preferredEpisodeIdFromSearch({ episode, videoId })}
               preferredSeason={season}

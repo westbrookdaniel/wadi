@@ -33,12 +33,16 @@ export function StreamList({
   autoPickAllowed = true,
   isLoading,
   onPlay,
+  selectedStream,
+  selectionOnly = false,
 }: {
   selectionKey?: string
   autoPickAllowed?: boolean
   streams: PlayableStream[]
   isLoading: boolean
   onPlay: (stream: PlayableStream) => void
+  selectedStream?: PlayableStream
+  selectionOnly?: boolean
 }) {
   const tvMode = useDeviceStore(state => state.tvMode)
   const settings = useAutoPlayback(state => state.settings)
@@ -119,11 +123,13 @@ export function StreamList({
             <button
               className="grid min-w-0 h-fit cursor-pointer content-between gap-1 rounded-lg border border-border bg-card/80 p-2.5 text-xs leading-relaxed text-left text-card-foreground hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/30 focus-visible:outline-none [&_small]:text-[0.76rem] [&_small]:text-primary [&_span]:text-muted-foreground"
               type="button"
+              aria-pressed={selectionOnly ? stream === selectedStream : undefined}
               key={`${i}-${stream.addon_id}-${stream.title ?? stream.name ?? index}`}
               data-tv-default={stream === recommendation?.stream || !recommendation && i === 0 ? '' : undefined}
               data-tv-focus-key={`stream:${stream.addon_id}:${stream.title ?? stream.name ?? index}`}
               onClick={() => onPlay(stream)}
             >
+              {selectionOnly && stream === selectedStream ? <strong className="text-primary">Selected</strong> : null}
               {stream === recommendation?.stream ? <span className="!text-primary text-xs font-medium">Recommended{recommendation.reasons.length ? ' · ' + recommendation.reasons.join(' · ') : ''}</span> : null}
               <p className="font-medium text-sm leading-snug whitespace-pre-line [overflow-wrap:anywhere]">{stream.title ?? stream.name ?? `Stream ${index + 1}`}</p>
               <p className="max-w-full whitespace-pre-wrap [overflow-wrap:anywhere] text-sm leading-relaxed text-muted-foreground">{streamDetail(stream)}</p>

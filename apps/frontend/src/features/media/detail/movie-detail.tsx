@@ -4,19 +4,17 @@ import { defaultWatchState, findWatchState, streamsQuery, watchDataQuery } from 
 import type { MediaPreview } from '@/api/types'
 
 import { DetailShell } from './detail-shell'
-import { StreamList } from './stream-list'
+import { DetailStreamControls } from './detail-stream-controls'
 import type { PlaybackTarget, PlayableStream } from './types'
 import { useWatchToggle } from './use-watch-toggle'
 import { WatchedButton } from './watch-state'
 
 export function MovieDetailPage({
   media,
-  autoPickAllowed = true,
   listAction,
   onBack,
   onPlay,
 }: {
-  autoPickAllowed?: boolean
   media: MediaPreview
   listAction?: React.ReactNode
   onBack: () => void
@@ -34,9 +32,10 @@ export function MovieDetailPage({
       sideLabel="Available streams"
       sideTitle="Streams"
       sideContent={
-        <StreamList
-          selectionKey={media.id}
-          autoPickAllowed={autoPickAllowed && !streams.error}
+        <DetailStreamControls
+          key={`${media.type}:${media.id}`}
+          error={streams.error}
+          onRetry={() => void streams.refetch()}
           streams={streams.data ?? []}
           isLoading={streams.isFetching}
           onPlay={(stream) =>
