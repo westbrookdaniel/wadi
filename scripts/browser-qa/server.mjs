@@ -12,8 +12,8 @@ const watchKey = body => JSON.stringify([body.media_type, body.media_id, body.vi
 const watches = new Map([[watchKey(watch), watch]]);
 let writes = [], delayWatchMs = 0;
 const unexpected = [], requests = [], held = new Map(), rules = {};
-const completed = [];
-const state = () => ({ watch, watches: [...watches.values()], writes, delayWatchMs, unexpected, requests, completed, pending: [...held.keys()] });
+const completed = [], aborted = [];
+const state = () => ({ watch, watches: [...watches.values()], writes, delayWatchMs, unexpected, requests, completed, aborted, pending: [...held.keys()] });
 const json = (res, value, status = 200) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(value)); };
 const meta = { id: 'qa-film', type: 'movie', name: 'Synthetic QA film', description: 'Generated colour bars and tone. No provider content.' };
 const episodes = [1,2].map(episode => ({ id:`qa-episode-${episode}`, title:`Synthetic episode ${episode}`, season:episode, episode, released:'2020-01-01', releasePrecision:'date', releaseState:'released', releaseConflicting:false, videoIds:[`qa-episode-${episode}`], addonIds:['qa-addon'], watched:false, position_seconds:0 }));
@@ -25,7 +25,10 @@ const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://127.0.0.1:${port}`), path = decodeURIComponent(url.pathname);
     let rule = {};
-    if(!path.startsWith('/qa/'))res.once('close',()=>completed.push({path,at:Date.now()}));
+    if(!path.startsWith('/qa/')) {
+      res.once('finish',()=>{if(res.writableFinished)completed.push({path,at:Date.now()});});
+      res.once('close',()=>{if(!res.writableFinished)aborted.push({path,at:Date.now()});});
+    }
     // Prevent accidental remote calls, including Cast bootstrap and artwork.
     res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' blob:; font-src 'self' data:; worker-src 'self' blob:");
     let body = {};
