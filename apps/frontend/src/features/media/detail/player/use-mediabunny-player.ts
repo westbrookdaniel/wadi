@@ -275,6 +275,7 @@ export function useMediabunnyPlayer({
     playbackTimeAtStartRef.current = nextTime
     updateState({ currentTime: nextTime })
     if (durationRef.current > 0 && nextTime >= durationRef.current) {
+      playbackIntentRef.current = false
       onProgressCommitRef.current(nextTime, durationRef.current)
       endedCallback.current?.()
       return
@@ -581,8 +582,9 @@ export function useMediabunnyPlayer({
   }, [pause, play, updateState])
 
   useEffect(() => {
-    if (selectedAudioTrackId && state.status === 'ready' && selectedAudioTrackId !== state.selectedAudioTrackId) void setAudioTrack(selectedAudioTrackId)
-  }, [selectedAudioTrackId, state.status, state.selectedAudioTrackId, setAudioTrack])
+    const preferredId = selectedAudioTrackId ?? (preferredAudioLanguage ? state.audioTracks.find(track => track.language.toLowerCase() === preferredAudioLanguage.toLowerCase())?.id : null)
+    if (preferredId && state.status === 'ready' && preferredId !== state.selectedAudioTrackId) void setAudioTrack(preferredId)
+  }, [selectedAudioTrackId, preferredAudioLanguage, state.audioTracks, state.status, state.selectedAudioTrackId, setAudioTrack])
 
   const toggle = useCallback(() => {
     if (playingRef.current) {

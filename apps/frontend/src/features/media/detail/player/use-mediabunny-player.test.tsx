@@ -50,6 +50,15 @@ it('keeps intended playback through rapid switches while resume is pending', asy
   expect(fixture.inputs).toBe(1)
 })
 
+it('changing audio after a seek to the end keeps playback stopped at the end', async () => {
+  const view = renderPlayer()
+  await waitFor(() => expect(view.result.current.state.status).toBe('ready'))
+  await act(async () => view.result.current.play())
+  await act(async () => view.result.current.seek(120))
+  await act(async () => view.result.current.setAudioTrack('2'))
+  expect(view.result.current.state).toMatchObject({ selectedAudioTrackId: '2', playing: false, currentTime: 120 })
+})
+
 it('duplicate selection during resume cannot retain stale pause intent after explicit Pause/Play', async () => {
   const view = renderPlayer()
   await waitFor(() => expect(view.result.current.state.status).toBe('ready'))
