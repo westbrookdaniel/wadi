@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,6 +11,33 @@ import { randomUUID } from 'node:crypto';
 import { createMediaService } from './media.mjs';
 const sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 const binaries = join(dirname(fileURLToPath(import.meta.url)), '../assets');
+// Extract ADTS audio from generated MPEG-TS packets for the independent tone
+// measurement. The pinned static FFmpeg 6.1.1 MPEG-TS input demuxer segfaults
+// even on its own generated TS; the app renders these through Hls.js instead.
+function audioPayload(ts) {
+  const chunks = [];
+  let audioPid = null, remaining = 0;
+  for (let start=0;start+188<=ts.length;start+=188) {
+    assert.equal(ts[start],0x47);
+    const pid=((ts[start+1]&31)<<8)|ts[start+2], control=(ts[start+3]>>4)&3;
+    if (!(control&1)) continue;
+    let offset=start+4;
+    if (control&2) offset+=1+ts[offset];
+    const end=start+188;
+    if (ts[start+1]&64) {
+      if (offset+9>end || ts.readUIntBE(offset,3)!==1 || ts[offset+3]<0xc0 || ts[offset+3]>0xdf) continue;
+      audioPid=pid;
+      const header=ts[offset+8];
+      remaining=ts.readUInt16BE(offset+4)-3-header;
+      offset+=9+header;
+    }
+    if (pid!==audioPid || remaining<=0) continue;
+    const length=Math.min(remaining,end-offset);
+    chunks.push(ts.subarray(offset,offset+length)); remaining-=length;
+  }
+  assert.ok(chunks.length>0,'native segment must contain AAC audio');
+  return Buffer.concat(chunks);
+}
 
 for (const mode of ['audio', 'remux', 'video']) test(`${mode}: retains paused segments, bounds read-ahead and resumes the same session`, { timeout: 30000 }, async () => {
   const directory = await mkdtemp(join(tmpdir(), 'wadi-buffer-test-'));
@@ -67,18 +94,22 @@ test('native conversion emits the chosen English/Japanese/default tone and retai
   let service;
   const server = createServer(async (_req, res) => { const body = await readFile(fixture); res.writeHead(200, { 'Content-Length': body.length }); res.end(body); });
   try {
-    await run(ffmpeg, ['-v','error','-f','lavfi','-i','sine=frequency=440:duration=120','-f','lavfi','-i','sine=frequency=880:duration=120','-map','0:a','-map','1:a','-c:a','ac3','-metadata:s:a:0','language=eng','-metadata:s:a:1','language=jpn',fixture]);
+    await run(ffmpeg, ['-v','error','-f','lavfi','-i','testsrc2=size=64x64:rate=10:duration=120','-f','lavfi','-i','sine=frequency=440:duration=120','-f','lavfi','-i','sine=frequency=880:duration=120','-map','0:v','-map','1:a','-map','2:a','-c:v','libx264','-preset','ultrafast','-g','40','-c:a','ac3','-metadata:s:a:0','language=eng','-metadata:s:a:1','language=jpn',fixture]);
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     service = await createMediaService({ directory: join(directory, 'cache'), binaries });
-    for (const [audio, hz] of [['0',440],['1',880],[null,440],['1',880]]) {
+    for (const [audio, hz] of [['1',440],['2',880],[null,440],['2',880]]) {
       const id = randomUUID();
       const session = await service.command('start', { id, url: `http://127.0.0.1:${server.address().port}/tracks.mkv?synthetic=1`, audio, position:65 });
       assert.equal(session.offset, 65);
-      assert.equal(session.selectedAudioTrackId, audio ?? '0');
+      assert.equal(session.selectedAudioTrackId, audio ?? '1');
       assert.deepEqual(session.audioTracks.map(track => track.language), ['eng','jpn']);
       const playlist = await (await fetch(session.url)).text();
       const segment = playlist.match(/segment\d+\.ts/)[0];
-      const { stdout } = await run(ffmpeg, ['-v','error','-i',new URL(segment, session.url).href,'-t','1','-vn','-ac','1','-ar','48000','-f','s16le','pipe:1'], { encoding:'buffer', maxBuffer:1024*1024 });
+      const response = await fetch(new URL(segment, session.url));
+      assert.equal(response.status, 200);
+      const downloaded = join(directory, 'selected-track.aac');
+      await writeFile(downloaded, audioPayload(Buffer.from(await response.arrayBuffer())));
+      const { stdout } = await run(ffmpeg, ['-v','error','-f','aac','-i',downloaded,'-t','1','-vn','-ac','1','-ar','48000','-f','s16le','pipe:1'], { encoding:'buffer', maxBuffer:1024*1024 });
       // Hysteresis excludes codec noise around zero and initial decoder padding.
       let crossings = 0, negative = false;
       const firstSample = 12000, lastSample = Math.min(43200, stdout.length/2);
