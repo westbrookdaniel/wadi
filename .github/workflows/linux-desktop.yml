@@ -4,6 +4,11 @@ on:
     paths:
       - 'apps/desktop/**'
       - 'apps/frontend/**'
+      - 'package.json'
+      - 'scripts/browser-qa/**'
+      - 'scripts/native-qa/**'
+      - 'scripts/player-smoke/**'
+      - '.github/workflows/desktop-release.yml'
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'
       - '.github/workflows/linux-desktop.yml'
@@ -12,11 +17,50 @@ on:
     paths:
       - 'apps/desktop/**'
       - 'apps/frontend/**'
+      - 'package.json'
+      - 'scripts/browser-qa/**'
+      - 'scripts/native-qa/**'
+      - 'scripts/player-smoke/**'
+      - '.github/workflows/desktop-release.yml'
       - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
       - '.github/workflows/linux-desktop.yml'
+concurrency:
+  group: player-checks-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
+  web-player-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:qa-fixtures
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm --filter @wadi/desktop prepare:assets
+        env:
+          WADI_WEB_ORIGIN: https://watchwadi.com
+      - run: pnpm --filter frontend build
+      - run: node scripts/browser-qa/build-bundle.mjs "$RUNNER_TEMP/web-player-qa"
+      - run: pnpm test:player-smoke web "$RUNNER_TEMP/web-player-qa"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: web-player-smoke-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          path: player-smoke-results/
+          retention-days: 14
   native-candidate:
     # Artifact-only candidate verification. No tags, releases or publication.
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
@@ -79,6 +123,7 @@ jobs:
           node scripts/native-qa/build-fixtures.mjs "$RUNNER_TEMP/native-fixtures" apps/desktop/assets/ffmpeg
           node scripts/native-qa/build-bundle.mjs "$RUNNER_TEMP/native-qa" "$RUNNER_TEMP/native-fixtures"
           node scripts/native-qa/package-candidate.mjs "$RUNNER_TEMP/native-qa"
+          node scripts/player-smoke/manifest.mjs "$RUNNER_TEMP/native-qa"
           pnpm --filter @wadi/desktop exec electron-builder --projectDir "$RUNNER_TEMP/native-qa" --config "$RUNNER_TEMP/native-qa/electron-builder.json" --mac zip --arm64 --publish never
           node apps/desktop/scripts/verify-mac-package.mjs apps/desktop/native-qa-release/mac-arm64/Wadi.app arm64
           codesign --verify --deep --strict --verbose=2 apps/desktop/native-qa-release/mac-arm64/Wadi.app
@@ -89,6 +134,19 @@ jobs:
           cd apps/desktop/native-qa-release
           shasum -a 256 *.zip fixtures.tar.gz REVISION > SHA256SUMS
           cat SHA256SUMS
+      - name: Real sealed macOS arm64 player smoke
+        if: runner.os == 'macOS'
+        timeout-minutes: 5
+        run: |
+          (cd apps/desktop/native-qa-release && shasum -a 256 -c SHA256SUMS)
+          pnpm test:player-smoke native "$RUNNER_TEMP/native-qa" apps/desktop/native-qa-release/mac-arm64/Wadi.app/Contents/MacOS/Wadi
+      - uses: actions/upload-artifact@v4
+        if: always() && runner.os == 'macOS'
+        with:
+          name: native-player-smoke-${{ github.event.pull_request.head.sha }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          path: player-smoke-results/
+          retention-days: 14
       - uses: actions/upload-artifact@v4
         if: runner.os == 'macOS'
         with:

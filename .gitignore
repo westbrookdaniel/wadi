@@ -31,3 +31,6 @@ apps/desktop/native-qa-release/
 apps/desktop/desktop-config.json
 .vercel
 .env*
+
+# Synthetic browser/native smoke evidence
+player-smoke-results/

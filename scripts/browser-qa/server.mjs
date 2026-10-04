@@ -2,13 +2,15 @@
 import { createServer } from 'node:http';
 import { stat } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
-const root = dirname(fileURLToPath(import.meta.url));
-const port = Number(process.env.PORT || 4173);
+export function createFixtureServer(root = dirname(fileURLToPath(import.meta.url))) {
+let port;
 const defaults = { subtitles_enabled: true, subtitle_language: null, subtitle_delay_seconds: 0, subtitle_size: 1.15, subtitle_position: 0, subtitle_text_color: '#FFFFFF', subtitle_background_color: '#000000', subtitle_background_opacity: 0, subtitle_outline_color: '#000000', subtitle_outline_style: 'outline', subtitle_outline_width: 1.5, subtitle_font_family: 'sans-serif', subtitle_offset_x: 0, subtitle_offset_y: 0, playback_speed: 1, preferred_audio_language: null, preferred_audio_track_id: null };
 let watch = { media_type: 'movie', media_id: 'qa-film', video_id: null, watched: false, position_seconds: 60, duration_seconds: 120, updated_at: new Date().toISOString() };
 let writes = [], delayWatchMs = 0;
+const unexpected = [], requests = [], held = new Map(), rules = {};
+const state = () => ({ watch, writes, delayWatchMs, unexpected, requests, pending: [...held.keys()] });
 const json = (res, value, status = 200) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(value)); };
 const meta = { id: 'qa-film', type: 'movie', name: 'Synthetic QA film', description: 'Generated colour bars and tone. No provider content.' };
 const server = createServer(async (req, res) => {
@@ -22,12 +24,27 @@ const server = createServer(async (req, res) => {
       for await (const chunk of req) { length += chunk.length; if (length > 16384) return json(res, { error: 'Too large' }, 413); chunks.push(chunk); }
       const text = Buffer.concat(chunks).toString(); body = text ? JSON.parse(text) : {};
     }
-    if (path === '/qa/state') return json(res, { watch, writes, delayWatchMs });
-    if (path === '/qa/control' && req.method === 'POST') { if (Number.isFinite(body.position)) watch = { ...watch, position_seconds: body.position, updated_at: body.updated_at || new Date().toISOString() }; delayWatchMs = Math.max(0, Math.min(5000, Number(body.delayWatchMs) || 0)); if (body.clearWrites) writes = []; return json(res, { watch, delayWatchMs }); }
+    if (path === '/qa/state') return json(res, state());
+    if (path === '/qa/control' && req.method === 'POST') {
+      if (body.release) { for (const finish of held.get(body.release) || []) finish(); held.delete(body.release); }
+      if (body.rules) { for (const [name, rule] of Object.entries(body.rules)) { if (!['/english.srt','/french.srt','/english-alternate.srt','/api/watch-data/movie/qa-film','/api/streams/movie/qa-film'].includes(name)) return json(res, {error:'Unsupported fixture rule'}, 400); rules[name] = rule; } }
+    }
+    if (path === '/qa/control' && req.method === 'POST') { if (Number.isFinite(body.position)) watch = { ...watch, position_seconds: body.position, updated_at: body.updated_at || new Date().toISOString() }; delayWatchMs = Math.max(0, Math.min(5000, Number(body.delayWatchMs) || 0)); if (body.clearWrites) writes = []; return json(res, state()); }
+    if (path.startsWith('/api/')) {
+      const method = path === '/api/watch-progress' || path === '/api/profiles/select' || ['/api/auth/login','/api/auth/register'].includes(path) ? 'POST' : 'GET';
+      const progressValid = path !== '/api/watch-progress' || (body.media_type === 'movie' && body.media_id === 'qa-film' && (body.video_id === null || body.video_id === undefined) && Number.isFinite(body.position_seconds) && body.position_seconds >= 0 && body.position_seconds <= 121 && (body.duration_seconds === undefined || body.duration_seconds === null || Number.isFinite(body.duration_seconds)));
+      if(req.method !== method || !progressValid){unexpected.push({path,method:req.method,reason:'Fixture contract mismatch'});return json(res,{error:'Fixture contract mismatch'},400);}
+    }
+    if (!path.startsWith('/qa/')) {
+      requests.push({path, method:req.method, at:Date.now()});
+      const rule = {...rules[path]};
+      if (rule.hold) await new Promise(resolve => held.set(path, [...(held.get(path) || []), resolve]));
+      if (rule.status) return json(res, {error:'Synthetic failure'}, rule.status);
+    }
     if (path === '/qa/bootstrap') {
       const tracks = url.searchParams.get('tracks') === '1';
       const fixture = tracks ? '/multitrack.webm?token=synthetic-only&source=1' : '/fixture.webm';
-      const captions = tracks ? [{ id: 'qa-en', lang: 'eng', url: '/english.srt' }, { id: 'qa-fr', lang: 'fra', url: '/french.srt' }] : [{ id: 'qa-en', lang: 'eng', url: '/fixture.srt' }];
+      const captions = tracks ? [{ id: 'qa-en', lang: 'eng', url: '/english.srt' }, { id: 'qa-fr', lang: 'fra', url: '/french.srt' }, { id: 'qa-en-alt', lang: 'eng', url: '/english-alternate.srt' }] : [{ id: 'qa-en', lang: 'eng', url: '/fixture.srt' }];
       const sessionScript = (key, source) => `sessionStorage.setItem('wadi.playback.qa-profile.${key}',JSON.stringify({stream:{url:location.origin+${JSON.stringify(source)},subtitles:${JSON.stringify(captions)}.map(track=>({...track,url:location.origin+track.url}))},target:{mediaType:'movie',mediaId:'qa-film',videoId:null}}));`;
       const script = `localStorage.clear();sessionStorage.clear();localStorage.setItem('wadi.auth.token','synthetic-qa-only');localStorage.setItem('wadi.auth.profile_id','qa-profile');sessionStorage.setItem('wadi.profile.selected_token','synthetic-qa-only');localStorage.setItem('wadi.device',JSON.stringify({state:{tvMode:${url.searchParams.get('tv') === '1'},askForProfile:false,theme:'dark',conversionEnabled:true},version:0}));${sessionScript('qa-session', fixture)}${sessionScript('qa-session-b', '/multitrack.webm?token=synthetic-only&source=2')}${url.searchParams.get('legacy') === '1' ? `localStorage.setItem('wadi.device.player.v1',${JSON.stringify(JSON.stringify({ ...defaults, subtitle_size: 0.9, subtitle_outline_width: undefined }))});` : ''}location.replace(${JSON.stringify(url.searchParams.get('settings') === '1' ? '/settings' : '/media/movie/qa-film?playback=qa-session')});`;
       res.writeHead(200, { 'Content-Type': 'text/html' }); return res.end(`<html><body><script>${script}</script></body></html>`);
@@ -41,12 +58,13 @@ const server = createServer(async (req, res) => {
     if (path === '/api/settings/playback') return json(res, { stream_action: 'internal', external_player_preset: 'vlc', external_player_template: 'vlc://{url}' });
     if (path === '/api/settings/introdb') return json(res, { enabled: false });
     if (path === '/api/settings/browse-layout') return json(res, { pages: { home: { order: [], hidden: [] } } });
-    if (path.startsWith('/api/watch-data/')) { if (delayWatchMs) await new Promise(resolve => setTimeout(resolve, delayWatchMs)); return json(res, { media_type: 'movie', media_id: 'qa-film', items: [watch] }); }
+    if (path === '/api/watch-data/movie/qa-film') { if (delayWatchMs) await new Promise(resolve => setTimeout(resolve, delayWatchMs)); return json(res, { media_type: 'movie', media_id: 'qa-film', items: [watch] }); }
     if (path === '/api/watch-progress') { watch = { ...watch, ...body, updated_at: new Date().toISOString() }; writes.push({ position: body.position_seconds, updated_at: watch.updated_at }); return json(res, watch); }
-    if (path.startsWith('/api/meta/')) return json(res, { responses: [{ addon_id: 'qa-addon', response: { meta } }] });
-    if (path.startsWith('/api/subtitles/')) return json(res, { responses: [] });
-    if (path.startsWith('/api/streams/')) return json(res, { responses: [{ addon_id: 'qa-addon', response: { streams: [{ name: 'QA', url: `http://127.0.0.1:${port}/fixture.webm` }] } }] });
-    if (path.startsWith('/api/')) return json(res, { items: [] });
+    if (path === '/api/meta/movie/qa-film') return json(res, { responses: [{ addon_id: 'qa-addon', response: { meta } }] });
+    if (path === '/api/subtitles/movie/qa-film') return json(res, { responses: [] });
+    if (path === '/api/streams/movie/qa-film') return json(res, { responses: [{ addon_id: 'qa-addon', response: { streams: [1,2].map(source => ({ name: `QA ${source}`, url: `http://127.0.0.1:${port}/multitrack.webm?token=synthetic-only&source=${source}` })) } }] });
+    if (['/api/addons','/api/catalogs','/api/lists','/api/continue-watching'].includes(path) && req.method === 'GET') return json(res, {items:[]});
+    if (path.startsWith('/api/')) { unexpected.push({path,method:req.method}); return json(res, {error:`Unexpected fixture API: ${req.method} ${path}`}, 501); }
     let file = path.startsWith('/_next/static/') ? join(root, 'static', path.slice('/_next/static/'.length)) : join(root, path.slice(1));
     if (!resolve(file).startsWith(root + '/')) return json(res, {}, 403);
     let info = await stat(file).catch(() => null);
@@ -59,4 +77,11 @@ const server = createServer(async (req, res) => {
     if (req.method === 'HEAD') res.end(); else createReadStream(file, { start, end }).pipe(res);
   } catch (error) { if (!res.headersSent) json(res, { error: String(error) }, 500); else res.destroy(); }
 });
-server.listen(port, '127.0.0.1', () => console.log(`Synthetic Wadi QA: http://127.0.0.1:${port}/qa/bootstrap`));
+server.on('listening', () => { port = server.address().port; });
+return server;
+}
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  const port = Number(process.env.PORT || 4173);
+  const server = createFixtureServer();
+  server.listen(port, '127.0.0.1', () => console.log(`Synthetic Wadi QA: http://127.0.0.1:${server.address().port}/qa/bootstrap`));
+}

@@ -1,0 +1,224 @@
+// CI-only real GUI smoke. Local physical runs must use the assigned QA slot.
+import { chromium, expect } from '@playwright/test';
+import { spawn, execFileSync } from 'node:child_process';
+import { once } from 'node:events';
+import { createServer } from 'node:net';
+import { mkdir, readFile, writeFile, rm } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { join, resolve } from 'node:path';
+import { observeWebAudio, observeNativeAudio, readFrequency } from './audio-probe.mjs';
+
+const [engine, bundleArgument, executable] = process.argv.slice(2);
+if (!['web','native'].includes(engine) || !bundleArgument || engine === 'native' && (!executable || process.platform !== 'darwin' || process.arch !== 'arm64')) throw new Error('Usage: node scripts/player-smoke/run.mjs web <web-bundle> | native <native-bundle> <sealed-arm64-app-executable>');
+const bundle = resolve(bundleArgument), output = resolve('player-smoke-results',engine);
+await mkdir(output,{recursive:true});
+const started = Date.now(), revision = execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim();
+const evidence = {engine,revision,platform:process.platform,arch:process.arch,fixture:'tones-v2-440-880-660',started:new Date().toISOString(),phases:[],console:[],pageErrors:[],network:[],samples:[],limitations:['decoded audio graph is not physical speakers','synthetic authentication/API only','native OS write-denial injection is not physical OS denial']};
+const owned = [];
+let browser, context, page, isolated;
+const save = () => writeFile(join(output,'evidence.json'),JSON.stringify(evidence,null,2));
+const sleep = ms => new Promise(resolve => setTimeout(resolve,ms));
+async function waitUntil(fn, timeout=15000) {
+  const end = Date.now()+timeout;
+  while(Date.now()<end) { const value = await fn(); if(value) return value; await sleep(100); }
+  throw new Error('Timed out waiting for owned runtime/fixture');
+}
+async function freePort(preferred=0) {
+  const server = createServer();
+  await new Promise((resolve,reject) => { server.once('error',reject); server.listen(preferred,'127.0.0.1',resolve); });
+  const port = server.address().port;
+  await new Promise(resolve => server.close(resolve));
+  return port;
+}
+function start(command,args,env={}) {
+  const child = spawn(command,args,{env:{...process.env,...env},stdio:['ignore','pipe','pipe']});
+  owned.push(child);
+  const chunks=[];
+  for(const stream of [child.stdout,child.stderr]) stream.on('data',chunk => {
+    chunks.push(chunk.toString());
+    evidence.processEvents ??= [];evidence.processEvents.push({at:Date.now(),phase:evidence.phases.at(-1)?.name,text:chunk.toString()});
+    const match = chunk.toString().match(/"isolated":"([^"\n]+)"/);
+    if(match) isolated = match[1];
+  });
+  child.on('error',error=>chunks.push(String(error)));
+  child.log = chunks;
+  return child;
+}
+async function phase(name,run) {
+  const stamp = Date.now(), entry={name}; evidence.phases.push(entry);
+  console.log(`START ${engine}: ${name}`);
+  try { await run(); entry.result='pass'; await page.screenshot({path:join(output,`${evidence.phases.length}.png`)}); }
+  catch(error) { entry.result='fail';entry.error=error.stack;throw error; }
+  finally { entry.seconds=(Date.now()-stamp)/1000;await save(); }
+}
+try {
+  expect((await readFile(join(bundle,'REVISION'),'utf8')).trim()).toBe(revision);
+  // Verify the source handoff before either server or app is executed.
+  for(const line of (await readFile(join(bundle,'SHA256SUMS'),'utf8')).trim().split('\n')) {
+    const [hash,name]=line.split('  ');
+    expect(createHash('sha256').update(await readFile(join(bundle,name))).digest('hex')).toBe(hash);
+  }
+  const port = await freePort(engine==='native'?4173:0), origin=`http://127.0.0.1:${port}`;
+  const fixture = start(process.execPath,[join(bundle,engine==='native'?'fixtures/server.mjs':'server.mjs')],{PORT:String(port)});
+  await waitUntil(async()=> {if(fixture.exitCode!==null) throw new Error(fixture.log.join(''));try{return (await fetch(origin+'/qa/state')).ok;}catch{return false;}});
+  const state = async()=> (await fetch(origin+'/qa/state')).json();
+  const control = async body => {const response=await fetch(origin+'/qa/control',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});expect(response.ok).toBe(true);};
+  if(engine==='native') {
+    const appRoot=resolve(executable,'../../..');
+    evidence.sealedIdentity=JSON.parse(execFileSync(process.execPath,['scripts/player-smoke/verify-candidate.mjs',appRoot,bundle],{encoding:'utf8'}));
+    const cdp=await freePort();
+    const app=start(resolve(executable),[],{WADI_QA_CDP_PORT:String(cdp)});
+    await waitUntil(async()=>{if(app.exitCode!==null)throw new Error(app.log.join(''));try{return (await fetch(`http://127.0.0.1:${cdp}/json/version`)).ok;}catch{return false;}},30000);
+    browser=await chromium.connectOverCDP(`http://127.0.0.1:${cdp}`);
+    context=browser.contexts()[0];
+    page=await waitUntil(()=>context.pages().find(p=>p.url().startsWith('wadi://app/')));
+    expect(await page.evaluate(()=>Boolean(window.wadiDesktop?.media && window.wadiDesktop?.copyStreamLink))).toBe(true);
+    // macOS OS clipboard stays behind real UI/production IPC. No read bridge.
+  } else {
+    browser=await chromium.launch();
+    context=await browser.newContext({viewport:{width:1280,height:800},permissions:['clipboard-read','clipboard-write']});
+    await context.addInitScript(observeWebAudio);
+    page=await context.newPage();
+  }
+  page.setDefaultTimeout(15000);
+  await context.tracing.start({screenshots:true,snapshots:true,sources:true});
+  page.on('pageerror',error=>evidence.pageErrors.push({at:Date.now(),error:String(error)}));
+  page.on('console',message=>{if(['error','warning'].includes(message.type()))evidence.console.push({at:Date.now(),type:message.type(),text:message.text()});});
+  page.on('requestfailed',request=>evidence.network.push({at:Date.now(),url:request.url(),error:request.failure()?.errorText}));
+  const reveal=async()=>{await page.mouse.move(300,250);await page.mouse.move(310,250);};
+  const button=name=>page.getByRole('button',{name,exact:true});
+  const seek=page.getByRole('slider',{name:'Seek Synthetic QA film',exact:true});
+  const mediaProperties=()=>page.evaluate(()=>{const video=document.querySelector('video');if(video)return {volume:video.volume,muted:video.muted,speed:video.playbackRate};const analyser=globalThis.__wadiAudioProbe?.probes.find(a=>a.context.state!=='closed');return {gain:analyser?.__wadiOutputNode?.gain?.value};});
+  const position=async()=>Number(await seek.getAttribute('aria-valuenow'));
+  const attachNative=async()=>{await reveal();if(await button('Pause').count())await button('Pause').click();await page.evaluate(observeNativeAudio);await button('Play').click();await expect(button('Pause')).toBeEnabled();};
+  const startPlaying=async()=>{await reveal();if(await button('Play').count())await button('Play').click();await expect(button('Pause')).toBeEnabled();};
+  async function frequency(expected) {
+    let consecutive=0;
+    await expect.poll(async()=>{
+      const sample=await page.evaluate(readFrequency);evidence.samples.push({at:Date.now(),expected,...sample});
+      consecutive=sample.db>-70&&Math.abs(sample.hz-expected)<20?consecutive+1:0;return consecutive;
+    },{timeout:15000,intervals:[100,200,300]}).toBeGreaterThanOrEqual(3);
+  }
+  const option=(kind,name)=>page.getByRole('menu',{name:kind,exact:true}).getByRole(name.source.startsWith('^Default')?'menuitem':'menuitemradio',{name});
+  async function audio(name,hz,playing=true) {
+    await reveal();await button('Audio track').click();await option('Audio tracks',name).click();
+    await expect(page.getByRole('menu',{name:'Audio tracks',exact:true})).toBeHidden();
+    await reveal();await button('Audio track').click();// Default is an action; the resolved first stream remains checked.
+    await expect(option('Audio tracks',name.source.startsWith('^Default')?/^English.*440/:name)).toHaveAttribute('aria-checked','true');await page.keyboard.press('Escape');
+    await expect(button('Audio track')).toBeFocused();
+    await expect(page.getByRole('status',{name:'Loading stream',exact:true})).toBeHidden();
+    if(playing) await frequency(hz);
+  }
+  async function subtitle(name,text) {
+    await reveal();await button('Subtitles').click();await option('Subtitles',name).click();await page.keyboard.press('Escape');
+    if(text) await expect(page.getByText(text,{exact:true})).toBeVisible();
+    else {await expect(page.getByText('ENGLISH QA CAPTION',{exact:true})).toBeHidden();await expect(page.getByText('FRENCH QA CAPTION',{exact:true})).toBeHidden();}
+    await reveal();await button('Subtitles').click();await expect(option('Subtitles',name)).toHaveAttribute('aria-checked','true');await page.keyboard.press('Escape');
+  }
+  const clipboard = async()=> engine==='native'?execFileSync('/usr/bin/pbpaste',{encoding:'utf8'}):page.evaluate(()=>navigator.clipboard.readText());
+  const source=id=>`${origin}/multitrack.webm?token=synthetic-only&source=${id}`;
+  await phase('production player starts synthetic resume with decoded English',async()=>{
+    if(engine==='web')await page.goto(origin+'/qa/bootstrap?tracks=1');
+    await expect(seek).toHaveAttribute('aria-disabled','false');await startPlaying();
+    if(engine==='native')await attachNative();
+    await frequency(440);expect(await position()).toBeGreaterThanOrEqual(59);expect(await position()).toBeLessThan(75);
+  });
+  await phase('repeated pointer choices update menu AND decoded output',async()=>{
+    const before=await position();
+    await audio(/^Japanese/,880);await audio(/^English.*440/,440);await audio(/^English.*alternate/,660);await audio(/^Default audio/,440);await audio(/^Japanese/,880);await audio(/^Default audio/,440);
+    expect(await position()).toBeGreaterThanOrEqual(before-1);
+  });
+  await phase('pause seek switch retains position volume mute speed and resumes chosen output',async()=>{
+    await reveal();await button('Pause').click();
+    const box=await seek.boundingBox();await seek.click({position:{x:box.width*65/120,y:box.height/2}});
+    await expect.poll(position).toBe(65);
+    const volume=page.getByRole('slider',{name:'Volume',exact:true});
+    await volume.focus();await page.keyboard.press('Home');await page.keyboard.press('ArrowRight');await page.keyboard.press('ArrowRight');
+    const selectedVolume=await mediaProperties();
+    expect(engine==='native'?selectedVolume.volume:selectedVolume.gain).toBeGreaterThan(0);
+    await button('Playback speed').click();await button('1.25x').click();
+    await button('Mute').click();
+    await audio(/^Japanese/,880,false);
+    await expect(button('Play')).toBeEnabled();await expect(button('Unmute')).toBeVisible();await expect.poll(position).toBe(65);await expect(button('Playback speed')).toContainText('1.25x');if(engine==='native')expect(await mediaProperties()).toMatchObject({muted:true,speed:1.25});
+    await button('Unmute').click();await expect.poll(mediaProperties).toMatchObject(engine==='native'?{volume:selectedVolume.volume,muted:false,speed:1.25}:{gain:selectedVolume.gain});await startPlaying();
+    // Restore speed through the UI before the frequency oracle.
+    await button('Playback speed').click();await button('1x').click();await frequency(880);
+  });
+  await phase('real captions repeated language alternative off on and keyboard close',async()=>{
+    await subtitle(/^French/,'FRENCH QA CAPTION');await subtitle(/^English.*Stream · 2|^English.*Stream 2/,'ENGLISH QA CAPTION');
+    await subtitle(/^English.*Stream · 1|^English.*Stream 1/,'ALTERNATE ENGLISH QA CAPTION');await subtitle(/^No subtitles/,null);await subtitle(/^French/,'FRENCH QA CAPTION');
+    await reveal();await button('Audio track').click();await page.keyboard.press('Home');await expect(option('Audio tracks',/^Default audio/)).toBeFocused();await page.keyboard.press('End');await expect(option('Audio tracks',/^English.*alternate/)).toBeFocused();await page.keyboard.press('Escape');await expect(button('Audio track')).toBeFocused();
+    await button('Audio track').click();await page.mouse.click(600,200);await expect(page.getByRole('menu',{name:'Audio tracks',exact:true})).toBeHidden();
+  });
+  await phase('fullscreen caption and menu close',async()=>{
+    await subtitle(/^French/,'FRENCH QA CAPTION');await reveal();await button('Fullscreen').click();
+    await expect.poll(()=>page.evaluate(()=>Boolean(document.fullscreenElement))).toBe(true);
+    await expect(page.getByText('FRENCH QA CAPTION',{exact:true})).toBeVisible();
+    await page.keyboard.press('Escape');await expect.poll(()=>page.evaluate(()=>Boolean(document.fullscreenElement))).toBe(false);
+    if(engine==='web'){await page.setViewportSize({width:390,height:844});await reveal();await button('Subtitles').click();await expect(option('Subtitles',/^French/)).toHaveAttribute('aria-checked','true');await page.keyboard.press('Escape');await page.setViewportSize({width:1280,height:800});}
+  });
+  await phase('delayed stale subtitle and HTTP failure leave no stale cues',async()=>{
+    await subtitle(/^English.*Stream · 2|^English.*Stream 2/,'ENGLISH QA CAPTION');
+    await control({rules:{'/french.srt':{hold:true}}});
+    await reveal();await button('Subtitles').click();await option('Subtitles',/^French/).click();await page.keyboard.press('Escape');
+    await expect.poll(async()=> (await state()).pending).toContain('/french.srt');
+    await expect(page.getByText('ENGLISH QA CAPTION',{exact:true})).toBeHidden();
+    await subtitle(/^English.*Stream · 2|^English.*Stream 2/,'ENGLISH QA CAPTION');
+    await control({rules:{'/french.srt':{}},release:'/french.srt'});
+    await expect(page.getByText('FRENCH QA CAPTION',{exact:true})).toBeHidden();
+    await control({rules:{'/french.srt':{status:503}}});
+    await reveal();await button('Subtitles').click();await option('Subtitles',/^French/).click();await page.keyboard.press('Escape');
+    await expect(page.getByRole('alert')).toContainText('Could not load subtitles');
+    await control({rules:{'/french.srt':{}}});await subtitle(/^English.*Stream · 2|^English.*Stream 2/,'ENGLISH QA CAPTION');await expect(page.getByRole('alert')).toBeHidden();
+  });
+  await phase('real clipboard pointer and keyboard preserve source query exactly',async()=>{
+    await reveal();await button('Copy stream link').click();await expect(page.getByRole('status').filter({hasText:'Stream link copied.'})).toBeVisible();expect(await clipboard()).toBe(source(1));
+    await audio(/^Japanese/,880);
+    await page.reload();await expect(seek).toHaveAttribute('aria-disabled','false');await startPlaying();
+    if(engine==='native')await attachNative();
+    await frequency(880);await reveal();await button('Audio track').click();await expect(option('Audio tracks',/^Japanese/)).toHaveAttribute('aria-checked','true');await page.keyboard.press('Escape');
+    await page.goto(engine==='native'?'wadi://app/media/movie/qa-film?playback=qa-session-b':origin+'/media/movie/qa-film?playback=qa-session-b');
+    await expect(seek).toHaveAttribute('aria-disabled','false');await startPlaying();if(engine==='native')await attachNative();await frequency(880);
+    await reveal();await button('Copy stream link').focus();await page.keyboard.press('Enter');await expect(page.getByRole('status').filter({hasText:'Stream link copied.'})).toBeVisible();expect(await clipboard()).toBe(source(2));
+    evidence.clipboard={pointer:source(1),keyboard:source(2),real:true};
+    if(engine==='native') {
+      await expect.poll(()=>page.evaluate(()=>navigator.userActivation.isActive)).toBe(false);
+      const rejection=await page.evaluate(async url=>{try{await window.wadiDesktop.copyStreamLink(url);return 'unexpected success';}catch(error){return String(error);}},source(1));
+      expect(rejection).toContain('Copy requires a user action');expect(await clipboard()).toBe(source(2));evidence.noGesture=rejection;
+    }
+  });
+  if(engine==='web') await phase('separate injected clipboard failure has selectable fallback and close',async()=>{
+    await page.evaluate(()=>{navigator.clipboard.writeText=async()=>{throw new Error('Synthetic write denial');};});
+    await reveal();await button('Copy stream link').click();await expect(page.getByRole('textbox',{name:'Stream link',exact:true})).toHaveValue(source(2));
+    await page.getByRole('textbox',{name:'Stream link',exact:true}).focus();expect(await page.getByRole('textbox',{name:'Stream link',exact:true}).evaluate(node=>node.selectionEnd-node.selectionStart)).toBe(source(2).length);
+    await button('Close link').click();await expect(page.getByRole('textbox',{name:'Stream link',exact:true})).toBeHidden();
+  });
+  evidence.fixture=await state();expect(evidence.fixture.unexpected).toEqual([]);expect(evidence.pageErrors).toEqual([]);
+  // Keep every console entry in evidence. Only the specifically exercised HTTP
+  // subtitle failure and blocked optional Cast bootstrap are expected.
+  const unexpectedErrors=evidence.console.filter(x=>x.type==='error'&&!(/cast_sender\.js/.test(x.text)&&/Content Security Policy/.test(x.text))&&!(/Failed to load resource: the server responded with a status of 503 \(Service Unavailable\)/.test(x.text)&&evidence.phases.some(p=>p.name==='delayed stale subtitle and HTTP failure leave no stale cues'&&p.result==='pass')));
+  expect(unexpectedErrors).toEqual([]);
+  const unexpectedRequests=evidence.network.filter(x=>!x.error?.includes('ERR_ABORTED')&&!(/cast_sender\.js/.test(x.url)&&x.error?.includes('ERR_BLOCKED_BY_CSP')));
+  expect(unexpectedRequests).toEqual([]);
+  // Native service errors must not disappear into the attached-process log.
+  // The prior cancelled-probe navigation diagnostic is retained separately,
+  // only during the source/reload phase that subsequently proves real output.
+  evidence.navigationDiagnostics=(evidence.processEvents||[]).filter(x=>x.phase==='real clipboard pointer and keyboard preserve source query exactly'&&/Could not inspect this stream/.test(x.text));
+  const nativeErrors=(evidence.processEvents||[]).filter(x=>/Error occurred in handler|InputDisposedError|UnhandledPromiseRejection|Conversion stopped|Could not start the bundled media converter/.test(x.text)&&!evidence.navigationDiagnostics.includes(x));
+  expect(nativeErrors).toEqual([]);
+  evidence.result='pass';
+} catch(error) {
+  evidence.result='fail';evidence.error=error.stack;process.exitCode=1;
+  if(page)await page.screenshot({path:join(output,'failure.png')}).catch(()=>{});
+  console.error(error);
+} finally {
+  if(context)await context.tracing.stop({path:join(output,'trace.zip')}).catch(error=>{evidence.traceError=String(error);});
+  if(engine==='native'&&page)await page.close({runBeforeUnload:false}).catch(()=>{});
+  if(browser)await browser.close().catch(()=>{});
+  for(const child of owned.reverse()) {
+    if(child.exitCode===null) {child.kill('SIGTERM');await Promise.race([once(child,'exit'),sleep(3000)]);if(child.exitCode===null){child.kill('SIGKILL');await Promise.race([once(child,'exit'),sleep(3000)]);}}
+    await writeFile(join(output,`process-${child.pid}.log`),child.log.join(''));
+  }
+  if(isolated&&/^\/.*\/wadi-native-qa-[^/]+$/.test(isolated))await rm(isolated,{recursive:true,force:true});
+  evidence.seconds=(Date.now()-started)/1000;await save();console.log(JSON.stringify({engine,result:evidence.result,seconds:evidence.seconds,output}));
+}
