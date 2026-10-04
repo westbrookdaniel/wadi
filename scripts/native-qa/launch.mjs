@@ -20,6 +20,20 @@ const register = ipcMain.handle.bind(ipcMain);
 ipcMain.handle = (name, handler) => {
   if (name === 'session') {
     register(name, (event, ...args) => { handler(event, ...args); return true; });
+  } else if (name === 'media') {
+    // Observe IDs/outcomes only. The original trusted production handler runs
+    // unchanged, and every rejection is rethrown to Electron and the caller.
+    register(name, async (event, ...args) => {
+      const [action, payload] = args;
+      const observed = action === 'start' || action === 'stop';
+      const id = action === 'start' ? payload?.id : payload;
+      const record = (outcome, message) => { if (observed) console.log(JSON.stringify({ qaMedia: { action, id, outcome, ...(message ? { message } : {}) } })); };
+      record('called');
+      try { const result = await handler(event, ...args); record('resolved'); return result; }
+      catch (error) { record('rejected', String(error?.message ?? error)); throw error; }
+    });
+    // Production startup registers session before media, asynchronously after
+    // main module evaluation. Restore only after both were captured.
     ipcMain.handle = register;
   } else register(name, handler);
 };

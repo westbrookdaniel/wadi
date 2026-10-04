@@ -8,6 +8,7 @@ import { mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { observeWebAudio, observeNativeAudio, readFrequency } from './audio-probe.mjs';
+import { classifyNativeErrors } from './native-errors.mjs';
 
 const [engine, bundleArgument, executable] = process.argv.slice(2);
 if (!['web','native'].includes(engine) || !bundleArgument || engine === 'native' && (!executable || process.platform !== 'darwin' || process.arch !== 'arm64')) throw new Error('Usage: node scripts/player-smoke/run.mjs web <web-bundle> | native <native-bundle> <sealed-arm64-app-executable>');
@@ -54,8 +55,9 @@ function start(command,args,env={}) {
   return child;
 }
 function nativeErrors() {
-  evidence.navigationDiagnostics=(evidence.processEvents||[]).filter(x=>/^Error occurred in handler for 'media': Error: Could not inspect this stream\. Check the provider or choose another stream\.$/.test(x.text.trim())&&evidence.navigationWindows?.some(w=>w.finished&&x.at>=w.started&&x.at<=w.finished));
-  return (evidence.processEvents||[]).filter(x=>/Error occurred in handler|InputDisposedError|UnhandledPromiseRejection|Conversion stopped|Could not start the bundled media converter/.test(x.text)&&!evidence.navigationDiagnostics.includes(x));
+  const result=classifyNativeErrors(evidence.processEvents||[],evidence.navigationWindows);
+  evidence.navigationDiagnostics=result.diagnostics;evidence.cancelledSessions=result.cancellations;
+  return result.errors;
 }
 async function phase(name,run) {
   const stamp = Date.now(), entry={name}; evidence.phases.push(entry);
@@ -219,6 +221,7 @@ try {
     }
   });
   await phase('Back and explicit source reopen retain resume and audio preference',async()=>{
+    const backWindow={started:Date.now()};evidence.navigationWindows.push(backWindow);
     await reveal();await button('Pause').click();const box=await seek.boundingBox();await seek.click({position:{x:box.width*65/120,y:box.height/2}});await expect.poll(position).toBe(65);
     await control({clearWrites:true});
     await reveal();await button('Back').click();await expect(seek).toBeHidden();
@@ -229,6 +232,7 @@ try {
     expect(await position()).toBeGreaterThanOrEqual(64);expect(await position()).toBeLessThan(75);
     await reveal();await button('Audio track').click();await expect(option('Audio tracks',/^Japanese/)).toHaveAttribute('aria-checked','true');await page.keyboard.press('Escape');
     await button('Copy stream link').click();await expect(page.getByRole('status').filter({hasText:'Stream link copied.'})).toBeVisible();expect(await clipboard()).toBe(source(2));
+    backWindow.finished=Date.now();
   });
   if(engine==='web') await phase('separate injected clipboard failure has selectable fallback and close',async()=>{
     await passive(()=>{navigator.clipboard.writeText=async()=>{throw new Error('Synthetic write denial');};});
