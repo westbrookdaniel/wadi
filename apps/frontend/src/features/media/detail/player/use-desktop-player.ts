@@ -149,7 +149,7 @@ export function useDesktopPlayer({ videoRef, source, hints, savedPosition, watch
     }
     restart(n=>n+1)
   },[videoRef,update])
-  const setAudioTrack=useCallback((id:string|null)=>{if(id&&id!==audio.current){audio.current=id;restart(n=>n+1)}},[])
+  const setAudioTrack=useCallback((id:string|null)=>{if(id!==audio.current){audio.current=id;restart(n=>n+1)}},[])
   const setPlaybackSpeed=useCallback((value:number)=>{if(value!==speed.current){speed.current=value;if(videoRef.current)videoRef.current.playbackRate=value;update({playbackSpeed:value})}},[videoRef,update])
   const setVolume=useCallback((value:number)=>{const volume=Math.min(1,Math.max(0,value));if(videoRef.current){videoRef.current.volume=volume;videoRef.current.muted=volume===0}update({volume,muted:volume===0})},[videoRef,update])
   const toggleMute=useCallback(()=>{const muted=!stateRef.current.muted;if(videoRef.current)videoRef.current.muted=muted;update({muted})},[videoRef,update])

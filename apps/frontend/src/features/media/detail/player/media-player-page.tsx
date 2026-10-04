@@ -1,3 +1,5 @@
+import { useSubtitleTrack } from './use-subtitle-track'
+import { CopyStreamLink } from './copy-stream-link'
 import { useMediabunnyPlayer } from './use-mediabunny-player'
 import { usePlaybackResume } from './use-playback-resume'
 import { captionStyle, captionBackgroundStyle } from './caption-style'
@@ -73,10 +75,10 @@ import { useAppStore } from '@/store/app-store'
 
 import { formatEpisodeReleaseDate, saveLastSeason } from '../series-url-state'
 import { getChromecastTransport } from '../chromecast'
-import { buildStreamProxyUrl, buildSubtitleProxyUrl } from '../stream-playback'
+import { buildStreamProxyUrl } from '../stream-playback'
 import type { Episode, PlaybackTarget, PlayableStream } from '../types'
 import { acknowledgePlaybackPosition, clearSubtitleChoice, readSubtitleChoice, saveSubtitleChoice, savePlaybackPosition } from '../playback-session'
-import { defaultSubtitleForAudio, languageName, normalizeLanguage, mergeSubtitleTracks, parseSubtitleText, type SubtitleCue } from './subtitle-utils'
+import { defaultSubtitleForAudio, languageName, normalizeLanguage, mergeSubtitleTracks } from './subtitle-utils'
 import { usePlayerKeyboardShortcuts } from './use-player-keyboard-shortcuts'
 import { usePlayerPreferences } from './use-player-preferences'
 import { canControlPlayback, type CastStateData, type PlayerState } from './state'
@@ -107,7 +109,6 @@ export function MediaPlayerPage({
   const introDbEnabled = !introDbPreferences.isError && introDbPreferences.data?.enabled === true
   const segments = useQuery(skipSegmentsQuery(activeTarget, introDbEnabled, accountRevision))
   const streamUrl = activeStream.url
-  const token = useAppStore((state) => state.token)
   const externalPreferences = useQuery(playbackPreferencesQuery)
   const desktop = desktopBridge()
   const conversionEnabled = useDeviceStore(state => state.conversionEnabled)
@@ -159,8 +160,6 @@ export function MediaPlayerPage({
 
 
   const lastSentCastPropsRef = useRef<string | null>(null)
-  const [subtitleCues, setSubtitleCues] = useState<SubtitleCue[]>([])
-  const [subtitleDebugError, setSubtitleDebugError] = useState<string | null>(null)
 
   const streamSubtitleList = useMemo(
     () => mergeSubtitleTracks(
@@ -276,6 +275,7 @@ export function MediaPlayerPage({
   }, [activeTarget, checkpointSecond, player.state.status])
   const automaticAudioRef = useRef<string | null>(null)
   const manualSubtitleRef = useRef(false)
+  useEffect(() => { automaticAudioRef.current = null; manualSubtitleRef.current = false }, [activeTarget.mediaType, activeTarget.mediaId, activeTarget.videoId])
   useEffect(() => {
     const audio = player.state.audioTracks.find(track => track.id === player.state.selectedAudioTrackId)
     if (!audio || subtitleTracks.isLoading || player.state.status !== 'ready' || automaticAudioRef.current === audio.id) return
@@ -294,10 +294,7 @@ export function MediaPlayerPage({
   }, [setPlaybackSpeed, playbackState.playbackSpeed])
 
   useEffect(() => {
-    if (!playbackState.selectedAudioTrackId) {
-      return
-    }
-    setAudioTrack(playbackState.selectedAudioTrackId)
+    if (playbackState.selectedAudioTrackId) void setAudioTrack(playbackState.selectedAudioTrackId)
   }, [setAudioTrack, playbackState.selectedAudioTrackId])
 
   useEffect(() => {
@@ -427,49 +424,7 @@ export function MediaPlayerPage({
     [playbackState.selectedSubtitleId, streamSubtitleList],
   )
 
-  useEffect(() => {
-    let cancelled = false
-    if (!activeSubtitleTrack) {
-      // Clear captions when the selected external track changes.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setSubtitleCues([])
-      setSubtitleDebugError(null)
-      return
-    }
-    void buildSubtitleProxyUrl(activeSubtitleTrack.url).then(url => fetch(url))
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(`subtitle proxy request failed with ${response.status}`)
-        }
-        return response.text()
-      })
-      .then((text) => {
-        if (cancelled) {
-          return
-        }
-        const cues = parseSubtitleText(text)
-        if (!cues.length && text.trim()) {
-          console.warn('[subtitles] parsed zero cues')
-          setSubtitleDebugError('Subtitle track loaded but no cues were parsed')
-        } else {
-          setSubtitleDebugError(null)
-        }
-        setSubtitleCues(cues)
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          console.error('[subtitles] failed to load subtitle track', {
-            subtitleUrl: activeSubtitleTrack.url,
-            error,
-          })
-          setSubtitleCues([])
-          setSubtitleDebugError('Failed to load subtitle track')
-        }
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [activeSubtitleTrack, token])
+  const { cues: subtitleCues, error: subtitleDebugError } = useSubtitleTrack(activeSubtitleTrack?.url)
 
   const subtitleText = useMemo(() => {
     if (!playbackState.selectedSubtitleId || !subtitleCues.length) {
@@ -601,6 +556,7 @@ export function MediaPlayerPage({
       <div className="min-h-dvh bg-black">
         <div className={cn(stateBlock, 'min-h-dvh bg-black px-6')}>
           <strong>This stream cannot play directly</strong>
+          <CopyStreamLink url={activeStream.url} />
           <p>Only direct stream URLs can be played in the browser right now.</p>
           {!tvMode && stream.externalUrl ? (
             <Button size="sm" asChild>
@@ -655,7 +611,7 @@ export function MediaPlayerPage({
               <p>{player.state.error}</p>
               {tvMode ? <Button data-tv-back onClick={onBack}>Back to streams</Button> : null}
               {desktop ? <Button onClick={desktopPlayer.retry}>{conversionEnabled ? 'Retry with full conversion' : 'Retry'}</Button> : tvMode ? <p>Try another stream supported by this browser.</p> : <><p>Web playback depends on the source and browser. Try the desktop app or an external player.</p><DesktopDownload /></>}
-              {!tvMode && streamUrl && <><Button onClick={() => { void navigator.clipboard.writeText(streamUrl).catch(() => {}) }}>Copy stream link</Button><Button onClick={() => { void openExternalPlayback(streamUrl, normalizePlaybackPreferences(externalPreferences.data)).catch(() => {}) }}>Open external player</Button></>}
+              {!tvMode && streamUrl && <><Button onClick={() => { void openExternalPlayback(streamUrl, normalizePlaybackPreferences(externalPreferences.data)).catch(() => {}) }}>Open external player</Button></>}
               {!tvMode && stream.externalUrl ? (
                 <Button size="sm" asChild>
                   <a href={stream.externalUrl} target="_blank" rel="noreferrer">
@@ -667,6 +623,7 @@ export function MediaPlayerPage({
           ) : null}
 
           <PlayerChrome
+            streamLink={activeStream.url}
             skipSegment={introDbEnabled && effectiveState.status === 'ready' ? activeSegment(segments.data ?? [], effectiveState.currentTime, effectiveState.duration) : undefined}
             playerRef={playerRef}
             mediaName={media.name}
@@ -737,7 +694,7 @@ export function MediaPlayerPage({
             onVolumeChange={onVolume}
             onToggleMute={onToggleMute}
             onSelectAudioTrack={(id) => {
-              updatePlaybackState({ selectedAudioTrackId: id })
+              updatePlaybackState({ selectedAudioTrackId: id, preferredAudioLanguage: id ? effectiveState.audioTracks.find(track => track.id === id)?.language ?? null : null })
               if (castConnected) {
                 void castTransport.sendMessage({ type: "setProp", propName: "selectedAudioTrackId", propValue: id })
               } else {
@@ -763,8 +720,8 @@ export function MediaPlayerPage({
             </div>
           ) : null}
 
-          {process.env.NODE_ENV === 'development' && subtitleDebugError ? (
-            <div className="pointer-events-none absolute right-4 bottom-4 z-[6] rounded bg-black/70 px-2 py-1 text-[11px] text-white/80">
+          {subtitleDebugError ? (
+            <div role="alert" className="pointer-events-none absolute right-4 top-24 z-[6] rounded bg-black/70 px-2 py-1 text-sm text-white/80">
               {subtitleDebugError}
             </div>
           ) : null}
@@ -807,6 +764,7 @@ export function PlayerChrome(props: ComponentProps<typeof DesktopPlayerChrome>) 
 }
 
 function DesktopPlayerChrome({
+  streamLink,
   skipSegment,
   playerRef,
   mediaName,
@@ -866,6 +824,7 @@ function DesktopPlayerChrome({
   hasEpisodeSwapper: boolean
   forceVisible: boolean
   onOpenEpisodeSwapper: () => void
+  streamLink?: string | null
   subtitleTracks: Array<{ id: string; language: string; source: string }>
   selectedSubtitleId: string | null
   onSelectSubtitle: (id: string | null) => void
@@ -915,6 +874,8 @@ function DesktopPlayerChrome({
   const [speedMenuOpen, setSpeedMenuOpen] = useState(false)
   const [subtitleMenuOpen, setSubtitleMenuOpen] = useState(false)
   const [subtitleSettingsOpen, setSubtitleSettingsOpen] = useState(false)
+  const audioTriggerRef = useRef<HTMLButtonElement>(null)
+  const subtitleTriggerRef = useRef<HTMLButtonElement>(null)
   const controlsLayerRef = useRef<HTMLDivElement | null>(null)
   const selectedAudioTrack =
     state.audioTracks.find((track) => track.id === state.selectedAudioTrackId) ?? null
@@ -939,6 +900,8 @@ function DesktopPlayerChrome({
       if (event.key !== 'Escape') {
         return
       }
+      if (audioMenuOpen) audioTriggerRef.current?.focus()
+      if (subtitleMenuOpen) subtitleTriggerRef.current?.focus()
       setAudioMenuOpen(false)
       setSpeedMenuOpen(false)
       setSubtitleMenuOpen(false)
@@ -950,6 +913,14 @@ function DesktopPlayerChrome({
       window.removeEventListener('keydown', onKeyDown)
     }
   }, [audioMenuOpen, speedMenuOpen, subtitleMenuOpen])
+
+  useEffect(() => {
+    const label = audioMenuOpen ? 'Audio tracks' : subtitleMenuOpen ? 'Subtitles' : null
+    if (!label) return
+    const menu = controlsLayerRef.current?.querySelector<HTMLElement>(`[role="menu"][aria-label="${label}"]`)
+    const option = menu?.querySelector<HTMLButtonElement>('[aria-checked="true"]') ?? menu?.querySelector<HTMLButtonElement>('button')
+    option?.focus()
+  }, [audioMenuOpen, subtitleMenuOpen])
 
   return (
     <>
@@ -1095,6 +1066,9 @@ function DesktopPlayerChrome({
                       setSpeedMenuOpen(false)
                       setSubtitleMenuOpen(false)
                     }}
+                    ref={audioTriggerRef}
+                    aria-haspopup="menu"
+                    aria-expanded={audioMenuOpen}
                     aria-label="Audio track"
                   >
                     <Languages aria-hidden="true" className="size-3.5" />
@@ -1102,9 +1076,10 @@ function DesktopPlayerChrome({
                   </Button>
                 </TooltipButton>
                 {audioMenuOpen ? (
-                  <div className="player-menu absolute left-0 bottom-full z-20 mb-2 grid min-w-[220px] gap-1 rounded-md border border-white/18 bg-black/88 p-1 text-xs shadow-lg backdrop-blur">
+                  <div role="menu" aria-label="Audio tracks" onKeyDown={navigateTrackMenu} className="player-menu absolute left-0 bottom-full z-20 mb-2 grid min-w-[220px] gap-1 rounded-md border border-white/18 bg-black/88 p-1 text-xs shadow-lg backdrop-blur">
                     <button
                       type="button"
+                      role="menuitem"
                       className={cn(
                         "rounded px-2 py-1 text-left text-white/90 hover:bg-white/14",
                         !state.selectedAudioTrackId && "bg-white/20",
@@ -1112,6 +1087,7 @@ function DesktopPlayerChrome({
                       onClick={() => {
                         onSelectAudioTrack(null)
                         setAudioMenuOpen(false)
+                        audioTriggerRef.current?.focus()
                       }}
                     >
                       Default audio
@@ -1119,6 +1095,8 @@ function DesktopPlayerChrome({
                     {state.audioTracks.map((track) => (
                       <button
                         key={track.id}
+                        role="menuitemradio"
+                        aria-checked={state.selectedAudioTrackId === track.id}
                         type="button"
                         className={cn(
                           "rounded px-2 py-1 text-left text-white/90 hover:bg-white/14",
@@ -1127,6 +1105,7 @@ function DesktopPlayerChrome({
                         onClick={() => {
                           onSelectAudioTrack(track.id)
                           setAudioMenuOpen(false)
+                          audioTriggerRef.current?.focus()
                         }}
                       >
                         {track.label}
@@ -1164,18 +1143,21 @@ function DesktopPlayerChrome({
                       setSpeedMenuOpen(false)
                       setAudioMenuOpen(false)
                     }}
+                    ref={subtitleTriggerRef}
+                    aria-haspopup="menu"
+                    aria-expanded={subtitleMenuOpen}
                     aria-label="Subtitles"
                   >
                     <Captions aria-hidden="true" />
                   </Button>
                 </TooltipButton>
                 {subtitleMenuOpen ? (
-                  <div className="player-menu absolute right-0 bottom-full z-20 mb-2 grid min-w-[250px] gap-2 rounded-md border border-white/18 bg-black/88 p-2 text-xs shadow-lg backdrop-blur">
+                  <div role="menu" aria-label="Subtitles" onKeyDown={navigateTrackMenu} className="player-menu absolute right-0 bottom-full z-20 mb-2 grid min-w-[250px] gap-2 rounded-md border border-white/18 bg-black/88 p-2 text-xs shadow-lg backdrop-blur">
                     <div className="px-2 py-1 text-xs font-medium text-white/50">Subtitles</div>
                     <div role="group" aria-label="Subtitle tracks" className="grid max-h-[min(300px,40dvh)] gap-0.5 overflow-y-auto">
-                      <button type="button" aria-pressed={!selectedSubtitleId} className="player-track-option" onClick={() => onSelectSubtitle(null)}>No subtitles{!selectedSubtitleId ? ' ✓' : ''}</button>
+                      <button type="button" role="menuitemradio" aria-checked={!selectedSubtitleId} className="player-track-option" onClick={() => onSelectSubtitle(null)}>No subtitles{!selectedSubtitleId ? ' ✓' : ''}</button>
                       {[...subtitleTracks].sort((a, b) => (languageName(a.language) === 'English' ? -1 : languageName(b.language) === 'English' ? 1 : languageName(a.language).localeCompare(languageName(b.language)))).map((track, index, tracks) => (
-                        <button type="button" key={track.id} aria-pressed={selectedSubtitleId === track.id} className="player-track-option" onClick={() => onSelectSubtitle(track.id)}>
+                        <button type="button" role="menuitemradio" key={track.id} aria-checked={selectedSubtitleId === track.id} className="player-track-option" onClick={() => onSelectSubtitle(track.id)}>
                           <span>{languageName(track.language)}{selectedSubtitleId === track.id ? ' ✓' : ''}</span>
                           <span className="text-[11px] text-white/45">{track.source}{tracks.filter(t => t.language === track.language).length > 1 ? ` · ${tracks.slice(0, index + 1).filter(t => t.language === track.language).length}` : ''}</span>
                         </button>
@@ -1185,6 +1167,7 @@ function DesktopPlayerChrome({
                       type="button"
                       variant="ghost"
                       className="h-8 justify-start text-white hover:bg-white/12"
+                      role="menuitem"
                       onClick={() => { setSubtitleMenuOpen(false); setSubtitleSettingsOpen(true) }}
                     >
                       <Settings2 className="size-3.5" />
@@ -1193,6 +1176,7 @@ function DesktopPlayerChrome({
                   </div>
                 ) : null}
               </div>
+              <CopyStreamLink url={streamLink} />
               <TooltipButton label="Fullscreen">
                 <Button
                   variant="ghost"
@@ -1261,6 +1245,15 @@ function DesktopPlayerChrome({
     </div>
     </>
   )
+}
+
+function navigateTrackMenu(event: React.KeyboardEvent<HTMLDivElement>) {
+  if (!['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return
+  event.preventDefault(); event.stopPropagation()
+  const options = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'))
+  const index = options.indexOf(document.activeElement as HTMLButtonElement)
+  const next = event.key === 'Home' ? 0 : event.key === 'End' ? options.length - 1 : (index + (event.key === 'ArrowUp' ? -1 : 1) + options.length) % options.length
+  options[next]?.focus()
 }
 
 function TooltipButton({ label, children }: { label: string; children: React.ReactNode }) {
