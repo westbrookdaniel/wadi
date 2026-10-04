@@ -53,7 +53,20 @@ jobs:
           WADI_WEB_ORIGIN: https://watchwadi.com
       - run: pnpm --filter frontend build
       - run: node scripts/browser-qa/build-bundle.mjs "$RUNNER_TEMP/web-player-qa"
+      - name: Archive exact web QA handoff
+        run: |
+          tar -czf "$RUNNER_TEMP/web-player-qa.tar.gz" -C "$RUNNER_TEMP/web-player-qa" .
+          (cd "$RUNNER_TEMP" && sha256sum web-player-qa.tar.gz > web-player-qa.SHA256SUMS)
       - run: pnpm test:player-smoke web "$RUNNER_TEMP/web-player-qa"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: synthetic-web-qa-${{ github.event.pull_request.head.sha || github.sha }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            ${{ runner.temp }}/web-player-qa.tar.gz
+            ${{ runner.temp }}/web-player-qa.SHA256SUMS
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -63,6 +76,7 @@ jobs:
           path: |
             player-smoke-results/**/*.json
             player-smoke-results/**/*.log
+            player-smoke-results/**/*.png
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -158,6 +172,7 @@ jobs:
           path: |
             player-smoke-results/**/*.json
             player-smoke-results/**/*.log
+            player-smoke-results/**/*.png
       - uses: actions/upload-artifact@v4
         if: always() && runner.os == 'macOS'
         with:

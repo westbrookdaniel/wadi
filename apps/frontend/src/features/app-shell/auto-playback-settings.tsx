@@ -17,7 +17,6 @@ export function AutoPlaybackSettings() {
   return <section className="grid gap-5 rounded-xl border border-border bg-card/60 p-5">
     <div><h2 className="text-lg font-medium">Auto-pick streams</h2><p className="mt-1 text-sm text-muted-foreground">Choose how streams are selected on this device.</p></div>
     <Checkbox label="Recommend a stream" description="Wait for providers, then put the best match first." checked={settings.enabled} onChange={enabled => update({ enabled })} />
-    <Checkbox label="Skip stream selection" description="Open the recommendation directly in Wadi. If nothing matches, show the stream list." checked={settings.skipSelection} disabled={!settings.enabled} onChange={skipSelection => update({ skipSelection })} />
     <fieldset disabled={!settings.enabled} className="grid gap-5 border-t border-border pt-5 disabled:opacity-50">
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="grid gap-2 text-sm">Preferred resolution<SettingsSelect aria-label="Preferred resolution" value={String(settings.preferredResolution)} onValueChange={value => update({ preferredResolution: Number(value) })}>{[480,720,1080,1440,2160].map(value => <option key={value} value={value}>{value === 2160 ? '4K / 2160p' : `${value}p`}</option>)}</SettingsSelect></label>

@@ -131,6 +131,7 @@ export const streamsQuery = (contentType: string, mediaId: string, enabled = tru
       const data = await apiRequest<ApiResponses<{ streams?: StreamInfo[] }>>(
         `/api/streams/${contentType}/${mediaId}`,
       )
+      if (!data.responses.some(item => item.response.streams?.length) && data.errors?.length) throw new Error('Please try again.')
       return data.responses.flatMap((item) =>
         (item.response.streams ?? []).map((stream) => ({ ...stream, addon_id: item.addon_id, parsedMetadata: parseStreamMetadata(stream) })),
       )

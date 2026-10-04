@@ -12,6 +12,7 @@ await cp('apps/frontend/public', output, { recursive: true });
 await cp('apps/frontend/.next/server/pages/[[...path]].html', join(output, 'index.html'));
 await cp('scripts/browser-qa/server.mjs', join(output, 'server.mjs'));
 await cp('scripts/browser-qa/README.md', join(output, 'README.md'));
+await cp('scripts/browser-qa/DETAIL-QA.md', join(output, 'DETAIL-QA.md'));
 await writeFile(join(output, 'REVISION'), revision + '\n');
 execFileSync('git', ['archive', '--format=tar.gz', '-o', join(output, 'source.tar.gz'), revision]);
 // One versioned fixture generator for the web and desktop engines.

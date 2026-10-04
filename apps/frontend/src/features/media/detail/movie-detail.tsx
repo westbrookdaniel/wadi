@@ -4,20 +4,20 @@ import { defaultWatchState, findWatchState, streamsQuery, watchDataQuery } from 
 import type { MediaPreview } from '@/api/types'
 
 import { DetailShell } from './detail-shell'
-import { StreamList } from './stream-list'
+import { DetailStreamControls } from './detail-stream-controls'
 import type { PlaybackTarget, PlayableStream } from './types'
 import { useWatchToggle } from './use-watch-toggle'
 import { WatchedButton } from './watch-state'
 
 export function MovieDetailPage({
   media,
-  autoPickAllowed = true,
+  preferredStream,
   listAction,
   onBack,
   onPlay,
 }: {
-  autoPickAllowed?: boolean
   media: MediaPreview
+  preferredStream?: PlayableStream
   listAction?: React.ReactNode
   onBack: () => void
   onPlay: (stream: PlayableStream, target: PlaybackTarget) => void
@@ -34,9 +34,11 @@ export function MovieDetailPage({
       sideLabel="Available streams"
       sideTitle="Streams"
       sideContent={
-        <StreamList
-          selectionKey={media.id}
-          autoPickAllowed={autoPickAllowed && !streams.error}
+        <DetailStreamControls
+          key={`${media.type}:${media.id}`}
+          preferredStream={preferredStream}
+          error={streams.error}
+          onRetry={() => void streams.refetch()}
           streams={streams.data ?? []}
           isLoading={streams.isFetching}
           onPlay={(stream) =>
@@ -61,7 +63,7 @@ export function MovieDetailPage({
       ) : null}
       {listAction}
       </div>
-      {toggleWatched.error || watchData.error || streams.error ? <p role="alert" className="text-xs text-destructive">{(toggleWatched.error ?? watchData.error ?? streams.error)?.message}</p> : null}
+      {toggleWatched.error || watchData.error ? <p role="alert" className="text-xs text-destructive">{(toggleWatched.error ?? watchData.error)?.message}</p> : null}
     </DetailShell>
   )
 }

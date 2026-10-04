@@ -23,14 +23,14 @@ import { cn } from "@/lib/utils";
 import { useAppStore } from '@/store/app-store'
 import { readLastSeason, saveLastSeason, formatEpisodeReleaseDate } from './series-url-state'
 import { DetailShell } from "./detail-shell";
-import { StreamList } from "./stream-list";
+import { DetailStreamControls } from "./detail-stream-controls";
 import type { Episode, PlaybackTarget, PlayableStream } from "./types";
 
 type SeriesStep = "episodes" | "streams";
 
 export function SeriesDetailPage({
   media,
-  autoPickAllowed = true,
+  previousPlayback,
   listAction,
   preferredVideoId,
   preferredSeason,
@@ -38,8 +38,8 @@ export function SeriesDetailPage({
   onBack,
   onPlay,
 }: {
-  autoPickAllowed?: boolean
   media: MediaPreview;
+  previousPlayback?: { stream: PlayableStream; target: PlaybackTarget } | null;
   listAction?: React.ReactNode;
   preferredVideoId?: string | null;
   preferredSeason?: string;
@@ -75,10 +75,10 @@ export function SeriesDetailPage({
     (episode) => episode.season === selectedSeason,
   );
   const [selectedEpisodeIdOverride, setSelectedEpisodeIdOverride] = useState<
-    string | null
-  >(null);
+    string | null | undefined
+  >(undefined);
   const selectedEpisodeId =
-    selectedEpisodeIdOverride ?? (preferredEpisode ? preferredVideoId ?? preferredEpisode.id : null);
+    selectedEpisodeIdOverride !== undefined ? selectedEpisodeIdOverride : (preferredEpisode ? preferredVideoId ?? preferredEpisode.id : null);
   const [stepOverride, setStepOverride] = useState<SeriesStep | null>(null);
   const step = stepOverride ?? (preferredEpisode ? "streams" : "episodes");
   const selectedEpisode =
@@ -103,6 +103,7 @@ export function SeriesDetailPage({
 
   const onSeasonChange = (season: number | null) => {
     setSelectedSeasonOverride(season);
+    setStepOverride("episodes");
     setSelectedEpisodeIdOverride((currentEpisodeId) => {
       if (!currentEpisodeId) {
         return null;
@@ -149,10 +150,11 @@ export function SeriesDetailPage({
               <ChevronLeft aria-hidden="true" />
               Change Episode
             </Button>
-            {streams.error ? <p role="alert" className="text-xs text-destructive">{streams.error.message}</p> : null}
-            <StreamList
-              selectionKey={selectedEpisode.id}
-              autoPickAllowed={autoPickAllowed && !streams.error}
+            <DetailStreamControls
+              key={`${media.id}:${selectedEpisodeId ?? selectedEpisode.id}`}
+              preferredStream={previousPlayback?.target.videoId && matchesEpisode(selectedEpisode, previousPlayback.target.videoId) ? previousPlayback.stream : undefined}
+              error={streams.error}
+              onRetry={() => void streams.refetch()}
               streams={streams.data ?? []}
               isLoading={streams.isFetching}
               onPlay={(stream) =>

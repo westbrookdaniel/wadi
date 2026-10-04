@@ -47,7 +47,7 @@ app.on('browser-window-created', (_event, window) => {
       sessionStorage.setItem('wadi.profile.selected_token', 'synthetic-qa-only');
       localStorage.setItem('wadi.device', JSON.stringify({state:{tvMode:false,askForProfile:false,theme:'dark',conversionEnabled:true},version:0}));
       for (const [key, source] of [['qa-session',1],['qa-session-b',2]]) {
-        sessionStorage.setItem(`wadi.playback.qa-profile.${key}`, JSON.stringify({stream:{url:`${origin}/multitrack.webm?token=synthetic-only&source=${source}`,subtitles:[{id:'qa-en',lang:'eng',url:`${origin}/english.srt`},{id:'qa-fr',lang:'fra',url:`${origin}/french.srt`},{id:'qa-en-alt',lang:'eng',url:`${origin}/english-alternate.srt`}]},target:{mediaType:'movie',mediaId:'qa-film',videoId:null}}));
+        sessionStorage.setItem(`wadi.playback.qa-profile.${key}`, JSON.stringify({stream:{addon_id:'qa-addon',url:`${origin}/multitrack.webm?token=synthetic-only&source=${source}`,subtitles:[{id:'qa-en',lang:'eng',url:`${origin}/english.srt`},{id:'qa-fr',lang:'fra',url:`${origin}/french.srt`},{id:'qa-en-alt',lang:'eng',url:`${origin}/english-alternate.srt`}]},target:{mediaType:'movie',mediaId:'qa-film',videoId:null}}));
       }
       location.replace('/media/movie/qa-film?playback=qa-session');
     };

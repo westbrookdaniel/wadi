@@ -136,7 +136,7 @@ export function TvNavigation() {
       }
       if (isBack) {
         stop(event)
-        const back = targets().find(element => element.hasAttribute('data-tv-back')) ?? targets().find(element => /^back/i.test(element.getAttribute('aria-label') ?? element.textContent ?? ''))
+        const back = targets().find(element => element.closest('[data-stream-selector]') && element.hasAttribute('data-tv-back')) ?? targets().find(element => element.hasAttribute('data-tv-back')) ?? targets().find(element => /^back/i.test(element.getAttribute('aria-label') ?? element.textContent ?? ''))
         if (back) back.click()
         else {
           const home = document.querySelector<HTMLElement>('[data-tv-home]')
