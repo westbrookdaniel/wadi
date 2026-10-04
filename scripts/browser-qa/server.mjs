@@ -31,7 +31,7 @@ const server = createServer(async (req, res) => {
     }
     if (path === '/qa/control' && req.method === 'POST') { if (Number.isFinite(body.position)) watch = { ...watch, position_seconds: body.position, updated_at: body.updated_at || new Date().toISOString() }; delayWatchMs = Math.max(0, Math.min(5000, Number(body.delayWatchMs) || 0)); if (body.clearWrites) writes = []; return json(res, state()); }
     if (path.startsWith('/api/')) {
-      const method = path === '/api/watch-progress' || path === '/api/profiles/select' || ['/api/auth/login','/api/auth/register'].includes(path) ? 'POST' : 'GET';
+      const method = path === '/api/watch-progress' ? 'PUT' : path === '/api/profiles/select' || ['/api/auth/login','/api/auth/register'].includes(path) ? 'POST' : 'GET';
       const progressValid = path !== '/api/watch-progress' || (body.media_type === 'movie' && body.media_id === 'qa-film' && (body.video_id === null || body.video_id === undefined) && Number.isFinite(body.position_seconds) && body.position_seconds >= 0 && body.position_seconds <= 121 && (body.duration_seconds === undefined || body.duration_seconds === null || Number.isFinite(body.duration_seconds)));
       if(req.method !== method || !progressValid){unexpected.push({path,method:req.method,reason:'Fixture contract mismatch'});return json(res,{error:'Fixture contract mismatch'},400);}
     }

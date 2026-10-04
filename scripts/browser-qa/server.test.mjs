@@ -28,6 +28,12 @@ test('held response retains its failure snapshot until explicitly released', () 
 
 test('wrong method and invalid progress fail the fixture contract', () => withServer(async origin => {
   assert.equal((await fetch(origin+'/api/meta/movie/qa-film',{method:'POST'})).status,400);
-  assert.equal((await fetch(origin+'/api/watch-progress',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({position_seconds:-1})})).status,400);
+  assert.equal((await fetch(origin+'/api/watch-progress',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({position_seconds:-1})})).status,400);
   assert.equal((await (await fetch(origin+'/qa/state')).json()).unexpected.length,2);
+}));
+
+test('real PUT progress commits are retained for persistence assertions', () => withServer(async origin => {
+  const body={media_type:'movie',media_id:'qa-film',video_id:null,position_seconds:65,duration_seconds:120};
+  assert.equal((await fetch(origin+'/api/watch-progress',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(body)})).status,200);
+  const state=await (await fetch(origin+'/qa/state')).json();assert.equal(state.watch.position_seconds,65);assert.equal(state.writes.length,1);assert.deepEqual(state.unexpected,[]);
 }));
