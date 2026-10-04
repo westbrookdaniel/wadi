@@ -85,7 +85,7 @@ export function useDesktopPlayer({ videoRef, source, hints, savedPosition, watch
       }
       audio.current=result.selectedAudioTrackId
       update({duration,hasVideo:result.hasVideo,hasAudio:result.hasAudio,audioTracks:result.audioTracks,selectedAudioTrackId:result.selectedAudioTrackId,warning:null})
-      video.volume=stateRef.current.volume;video.muted=stateRef.current.muted;video.playbackRate=speed.current
+      video.volume=stateRef.current.volume;video.muted=stateRef.current.muted;video.defaultPlaybackRate=speed.current;video.playbackRate=speed.current
       if (result.mode === 'direct') {
         video.src=result.url
         video.onloadedmetadata=()=>{video.currentTime=launchPosition;ready()}
@@ -150,7 +150,9 @@ export function useDesktopPlayer({ videoRef, source, hints, savedPosition, watch
     restart(n=>n+1)
   },[videoRef,update])
   const setAudioTrack=useCallback((id:string|null)=>{if(id!==audio.current){audio.current=id;restart(n=>n+1)}},[])
-  const setPlaybackSpeed=useCallback((value:number)=>{if(value!==speed.current){speed.current=value;if(videoRef.current)videoRef.current.playbackRate=value;update({playbackSpeed:value})}},[videoRef,update])
+  // MediaSource reload resets playbackRate to defaultPlaybackRate. Keep both
+  // synchronized so audio switches and unbuffered seeks retain the chosen rate.
+  const setPlaybackSpeed=useCallback((value:number)=>{if(value!==speed.current){speed.current=value;if(videoRef.current){videoRef.current.defaultPlaybackRate=value;videoRef.current.playbackRate=value;}update({playbackSpeed:value})}},[videoRef,update])
   const setVolume=useCallback((value:number)=>{const volume=Math.min(1,Math.max(0,value));if(videoRef.current){videoRef.current.volume=volume;videoRef.current.muted=volume===0}update({volume,muted:volume===0})},[videoRef,update])
   const toggleMute=useCallback(()=>{const muted=!stateRef.current.muted;if(videoRef.current)videoRef.current.muted=muted;update({muted})},[videoRef,update])
   const toggle=useCallback(()=>{if(stateRef.current.playing)pause(true);else void play()},[pause,play])

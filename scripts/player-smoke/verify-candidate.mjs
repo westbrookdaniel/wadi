@@ -13,11 +13,15 @@ if(asar.extractFile(archive,'REVISION').toString().trim()!==revision)throw new E
 let files=0;
 for(const line of (await readFile(join(bundle,'SHA256SUMS'),'utf8')).trim().split('\n')) {
   const [expected,name]=line.split('  ');
-  if(name==='launch.mjs'||name==='app/desktop-config.json'||/^app\/(src|dist|resources)\//.test(name)&&!name.endsWith('.test.mjs')) {
+  if(name==='launch.mjs'||name==='app/desktop-config.json'||(name.startsWith('node_modules/zod/')&&/\.(js|cjs|mjs)$/.test(name)&&!/(?:^|\/)(tests?|__tests__)\//.test(name))||/^app\/(src|dist|resources)\//.test(name)&&!name.endsWith('.test.mjs')) {
     const actual=createHash('sha256').update(asar.extractFile(archive,name)).digest('hex');
     if(actual!==expected)throw new Error(`Sealed QA module mismatch: ${name}`);
     files++;
   }
 }
 if(files<10)throw new Error('Missing production module identity checks');
-console.log(JSON.stringify({revision,files,archive}));
+const manifest=JSON.parse(asar.extractFile(archive,'package.json'));
+const expectedManifest=JSON.parse(await readFile(join(bundle,'package.json'),'utf8'));
+if(manifest.main!==expectedManifest.main||manifest.version!==expectedManifest.version||manifest.dependencies?.zod!=='4.3.6')throw new Error('Sealed QA entry/version/dependency mismatch');
+const media={};for(const name of ['ffmpeg','ffprobe'])media[name]=createHash('sha256').update(await readFile(join(app,'Contents/Resources/media-bin',name))).digest('hex');
+console.log(JSON.stringify({revision,files,archive,media,main:manifest.main,zod:manifest.dependencies.zod}));

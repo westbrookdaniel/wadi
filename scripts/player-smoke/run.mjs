@@ -3,6 +3,7 @@ import { chromium, expect } from '@playwright/test';
 import { spawn, execFileSync } from 'node:child_process';
 import { once } from 'node:events';
 import { createServer } from 'node:net';
+import { appendFileSync } from 'node:fs';
 import { mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { join, resolve } from 'node:path';
@@ -14,7 +15,7 @@ const bundle = resolve(bundleArgument), output = resolve('player-smoke-results',
 await mkdir(output,{recursive:true});
 const started = Date.now(), revision = execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim();
 const evidence = {engine,revision,platform:process.platform,arch:process.arch,fixture:'tones-v2-440-880-660',started:new Date().toISOString(),phases:[],console:[],pageErrors:[],network:[],samples:[],limitations:['decoded audio graph is not physical speakers','synthetic authentication/API only','native OS write-denial injection is not physical OS denial']};
-const owned = [];
+const owned = [], ownedPorts = [];
 let browser, context, page, isolated;
 const save = () => writeFile(join(output,'evidence.json'),JSON.stringify(evidence,null,2));
 const sleep = ms => new Promise(resolve => setTimeout(resolve,ms));
@@ -34,15 +35,26 @@ function start(command,args,env={}) {
   const child = spawn(command,args,{env:{...process.env,...env},stdio:['ignore','pipe','pipe']});
   owned.push(child);
   const chunks=[];
-  for(const stream of [child.stdout,child.stderr]) stream.on('data',chunk => {
-    chunks.push(chunk.toString());
-    evidence.processEvents ??= [];evidence.processEvents.push({at:Date.now(),phase:evidence.phases.at(-1)?.name,text:chunk.toString()});
-    const match = chunk.toString().match(/"isolated":"([^"\n]+)"/);
-    if(match) isolated = match[1];
-  });
+  for(const stream of [child.stdout,child.stderr]) {
+    let pending='';
+    const record=text=>{
+      if(!text)return;
+      evidence.processEvents ??= [];evidence.processEvents.push({at:Date.now(),phase:evidence.phases.at(-1)?.name,text});
+      const match=text.match(/"isolated":"([^"\n]+)"/);if(match)isolated=match[1];
+    };
+    stream.on('data',chunk=>{
+      chunks.push(chunk.toString());appendFileSync(join(output,`process-${child.pid}.log`),chunk);
+      pending+=chunk.toString();const lines=pending.split(/\r?\n/);pending=lines.pop();for(const line of lines)record(line);
+    });
+    stream.on('end',()=>record(pending));
+  }
   child.on('error',error=>chunks.push(String(error)));
   child.log = chunks;
   return child;
+}
+function nativeErrors() {
+  evidence.navigationDiagnostics=(evidence.processEvents||[]).filter(x=>/^Error occurred in handler for 'media': Error: Could not inspect this stream\. Check the provider or choose another stream\.$/.test(x.text.trim())&&evidence.navigationWindows?.some(w=>w.finished&&x.at>=w.started&&x.at<=w.finished));
+  return (evidence.processEvents||[]).filter(x=>/Error occurred in handler|InputDisposedError|UnhandledPromiseRejection|Conversion stopped|Could not start the bundled media converter/.test(x.text)&&!evidence.navigationDiagnostics.includes(x));
 }
 async function phase(name,run) {
   const stamp = Date.now(), entry={name}; evidence.phases.push(entry);
@@ -59,16 +71,17 @@ try {
     expect(createHash('sha256').update(await readFile(join(bundle,name))).digest('hex')).toBe(hash);
   }
   const port = await freePort(engine==='native'?4173:0), origin=`http://127.0.0.1:${port}`;
+  ownedPorts.push(port);
   const fixture = start(process.execPath,[join(bundle,engine==='native'?'fixtures/server.mjs':'server.mjs')],{PORT:String(port)});
-  await waitUntil(async()=> {if(fixture.exitCode!==null) throw new Error(fixture.log.join(''));try{return (await fetch(origin+'/qa/state')).ok;}catch{return false;}});
+  await waitUntil(async()=> {if(fixture.exitCode!==null||fixture.signalCode!==null) throw new Error(fixture.log.join(''));try{return (await fetch(origin+'/qa/state')).ok;}catch{return false;}});
   const state = async()=> (await fetch(origin+'/qa/state')).json();
   const control = async body => {const response=await fetch(origin+'/qa/control',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});expect(response.ok).toBe(true);};
   if(engine==='native') {
     const appRoot=resolve(executable,'../../..');
     evidence.sealedIdentity=JSON.parse(execFileSync(process.execPath,['scripts/player-smoke/verify-candidate.mjs',appRoot,bundle],{encoding:'utf8'}));
-    const cdp=await freePort();
+    const cdp=await freePort();ownedPorts.push(cdp);
     const app=start(resolve(executable),[],{WADI_QA_CDP_PORT:String(cdp)});
-    await waitUntil(async()=>{if(app.exitCode!==null)throw new Error(app.log.join(''));try{return (await fetch(`http://127.0.0.1:${cdp}/json/version`)).ok;}catch{return false;}},30000);
+    await waitUntil(async()=>{if(app.exitCode!==null||app.signalCode!==null)throw new Error(app.log.join(''));try{return (await fetch(`http://127.0.0.1:${cdp}/json/version`)).ok;}catch{return false;}},30000);
     browser=await chromium.connectOverCDP(`http://127.0.0.1:${cdp}`);
     context=browser.contexts()[0];
     page=await waitUntil(()=>context.pages().find(p=>p.url().startsWith('wadi://app/')));
@@ -83,7 +96,7 @@ try {
   page.setDefaultTimeout(15000);
   await context.tracing.start({screenshots:true,snapshots:true,sources:true});
   page.on('pageerror',error=>evidence.pageErrors.push({at:Date.now(),error:String(error)}));
-  page.on('console',message=>{if(['error','warning'].includes(message.type()))evidence.console.push({at:Date.now(),type:message.type(),text:message.text()});});
+  page.on('console',message=>{if(['error','warning'].includes(message.type()))evidence.console.push({at:Date.now(),type:message.type(),phase:evidence.phases.at(-1)?.name,text:message.text()});});
   page.on('requestfailed',request=>evidence.network.push({at:Date.now(),url:request.url(),error:request.failure()?.errorText}));
   const reveal=async()=>{await page.mouse.move(300,250);await page.mouse.move(310,250);};
   const button=name=>page.getByRole('button',{name,exact:true});
@@ -112,7 +125,7 @@ try {
   async function subtitle(name,text) {
     await reveal();await button('Subtitles').click();await option('Subtitles',name).click();await page.keyboard.press('Escape');
     if(text) await expect(page.getByText(text,{exact:true})).toBeVisible();
-    else {await expect(page.getByText('ENGLISH QA CAPTION',{exact:true})).toBeHidden();await expect(page.getByText('FRENCH QA CAPTION',{exact:true})).toBeHidden();}
+    else {for(const caption of ['ENGLISH QA CAPTION','FRENCH QA CAPTION','ALTERNATE ENGLISH QA CAPTION'])await expect(page.getByText(caption,{exact:true})).toBeHidden();}
     await reveal();await button('Subtitles').click();await expect(option('Subtitles',name)).toHaveAttribute('aria-checked','true');await page.keyboard.press('Escape');
   }
   const clipboard = async()=> engine==='native'?execFileSync('/usr/bin/pbpaste',{encoding:'utf8'}):page.evaluate(()=>navigator.clipboard.readText());
@@ -154,7 +167,9 @@ try {
     await subtitle(/^French/,'FRENCH QA CAPTION');await reveal();await button('Fullscreen').click();
     await expect.poll(()=>page.evaluate(()=>Boolean(document.fullscreenElement))).toBe(true);
     await expect(page.getByText('FRENCH QA CAPTION',{exact:true})).toBeVisible();
-    await page.keyboard.press('Escape');await expect.poll(()=>page.evaluate(()=>Boolean(document.fullscreenElement))).toBe(false);
+    // CDP Escape does not invoke Chromium's browser-level fullscreen accelerator.
+    // Wadi's real F shortcut deterministically exercises its exit handler.
+    await page.keyboard.press('f');await expect.poll(()=>page.evaluate(()=>Boolean(document.fullscreenElement))).toBe(false);
     if(engine==='web'){await page.setViewportSize({width:390,height:844});await reveal();await button('Subtitles').click();await expect(option('Subtitles',/^French/)).toHaveAttribute('aria-checked','true');await page.keyboard.press('Escape');await page.setViewportSize({width:1280,height:800});}
   });
   await phase('delayed stale subtitle and HTTP failure leave no stale cues',async()=>{
@@ -174,11 +189,13 @@ try {
   await phase('real clipboard pointer and keyboard preserve source query exactly',async()=>{
     await reveal();await button('Copy stream link').click();await expect(page.getByRole('status').filter({hasText:'Stream link copied.'})).toBeVisible();expect(await clipboard()).toBe(source(1));
     await audio(/^Japanese/,880);
+    const reloadWindow={started:Date.now()};(evidence.navigationWindows??=[]).push(reloadWindow);
     await page.reload();await expect(seek).toHaveAttribute('aria-disabled','false');await startPlaying();
     if(engine==='native')await attachNative();
-    await frequency(880);await reveal();await button('Audio track').click();await expect(option('Audio tracks',/^Japanese/)).toHaveAttribute('aria-checked','true');await page.keyboard.press('Escape');
+    await frequency(880);reloadWindow.finished=Date.now();await reveal();await button('Audio track').click();await expect(option('Audio tracks',/^Japanese/)).toHaveAttribute('aria-checked','true');await page.keyboard.press('Escape');
+    const sourceWindow={started:Date.now()};evidence.navigationWindows.push(sourceWindow);
     await page.goto(engine==='native'?'wadi://app/media/movie/qa-film?playback=qa-session-b':origin+'/media/movie/qa-film?playback=qa-session-b');
-    await expect(seek).toHaveAttribute('aria-disabled','false');await startPlaying();if(engine==='native')await attachNative();await frequency(880);
+    await expect(seek).toHaveAttribute('aria-disabled','false');await startPlaying();if(engine==='native')await attachNative();await frequency(880);sourceWindow.finished=Date.now();
     await reveal();await button('Copy stream link').focus();await page.keyboard.press('Enter');await expect(page.getByRole('status').filter({hasText:'Stream link copied.'})).toBeVisible();expect(await clipboard()).toBe(source(2));
     evidence.clipboard={pointer:source(1),keyboard:source(2),real:true};
     if(engine==='native') {
@@ -196,16 +213,14 @@ try {
   evidence.fixture=await state();expect(evidence.fixture.unexpected).toEqual([]);expect(evidence.pageErrors).toEqual([]);
   // Keep every console entry in evidence. Only the specifically exercised HTTP
   // subtitle failure and blocked optional Cast bootstrap are expected.
-  const unexpectedErrors=evidence.console.filter(x=>x.type==='error'&&!(/cast_sender\.js/.test(x.text)&&/Content Security Policy/.test(x.text))&&!(/Failed to load resource: the server responded with a status of 503 \(Service Unavailable\)/.test(x.text)&&evidence.phases.some(p=>p.name==='delayed stale subtitle and HTTP failure leave no stale cues'&&p.result==='pass')));
+  const unexpectedErrors=evidence.console.filter(x=>x.type==='error'&&!(/cast_sender\.js/.test(x.text)&&/Content Security Policy/.test(x.text))&&!(/Failed to load resource: the server responded with a status of 503 \(Service Unavailable\)/.test(x.text)&&x.phase==='delayed stale subtitle and HTTP failure leave no stale cues'));
   expect(unexpectedErrors).toEqual([]);
   const unexpectedRequests=evidence.network.filter(x=>!x.error?.includes('ERR_ABORTED')&&!(/cast_sender\.js/.test(x.url)&&x.error?.includes('ERR_BLOCKED_BY_CSP')));
   expect(unexpectedRequests).toEqual([]);
   // Native service errors must not disappear into the attached-process log.
   // The prior cancelled-probe navigation diagnostic is retained separately,
   // only during the source/reload phase that subsequently proves real output.
-  evidence.navigationDiagnostics=(evidence.processEvents||[]).filter(x=>x.phase==='real clipboard pointer and keyboard preserve source query exactly'&&/Could not inspect this stream/.test(x.text));
-  const nativeErrors=(evidence.processEvents||[]).filter(x=>/Error occurred in handler|InputDisposedError|UnhandledPromiseRejection|Conversion stopped|Could not start the bundled media converter/.test(x.text)&&!evidence.navigationDiagnostics.includes(x));
-  expect(nativeErrors).toEqual([]);
+  expect(nativeErrors()).toEqual([]);
   evidence.result='pass';
 } catch(error) {
   evidence.result='fail';evidence.error=error.stack;process.exitCode=1;
@@ -216,9 +231,13 @@ try {
   if(engine==='native'&&page)await page.close({runBeforeUnload:false}).catch(()=>{});
   if(browser)await browser.close().catch(()=>{});
   for(const child of owned.reverse()) {
-    if(child.exitCode===null) {child.kill('SIGTERM');await Promise.race([once(child,'exit'),sleep(3000)]);if(child.exitCode===null){child.kill('SIGKILL');await Promise.race([once(child,'exit'),sleep(3000)]);}}
+    if(child.exitCode===null&&child.signalCode===null) {child.kill('SIGTERM');await Promise.race([once(child,'exit'),sleep(3000)]);if(child.exitCode===null&&child.signalCode===null){child.kill('SIGKILL');await Promise.race([once(child,'exit'),sleep(3000)]);}}
     await writeFile(join(output,`process-${child.pid}.log`),child.log.join(''));
+    if(child.exitCode===null&&child.signalCode===null){evidence.result='fail';process.exitCode=1;(evidence.cleanupErrors??=[]).push(`Owned process ${child.pid} did not exit`);}
   }
+  for(const port of ownedPorts){try{await freePort(port);}catch(error){evidence.result='fail';process.exitCode=1;(evidence.cleanupErrors??=[]).push(`Owned port ${port} remained occupied: ${error}`);}}
   if(isolated&&/^\/.*\/wadi-native-qa-[^/]+$/.test(isolated))await rm(isolated,{recursive:true,force:true});
+  const lateErrors=nativeErrors();
+  if(lateErrors.length){evidence.result='fail';process.exitCode=1;evidence.lateErrors=lateErrors;}
   evidence.seconds=(Date.now()-started)/1000;await save();console.log(JSON.stringify({engine,result:evidence.result,seconds:evidence.seconds,output}));
 }
