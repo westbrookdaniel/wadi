@@ -1,7 +1,8 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { CopyStreamLink } from './copy-stream-link'
-afterEach(() => vi.unstubAllGlobals())
+import type { DesktopBridge } from '@/lib/desktop'
+afterEach(() => { delete window.wadiDesktop; vi.unstubAllGlobals() })
 it('copies the actual current playable URL, including its query, and clears stale feedback on change', async () => {
   let complete!: () => void
   const writeText = vi.fn().mockImplementationOnce(() => new Promise<void>(resolve => { complete = resolve })).mockResolvedValue(undefined)
@@ -17,6 +18,30 @@ it('copies the actual current playable URL, including its query, and clears stal
   await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Copy stream link' })))
   expect(writeText).toHaveBeenLastCalledWith(second)
   expect(screen.getByRole('status')).toHaveTextContent('Stream link copied')
+})
+it('uses the native write-only bridge on explicit action and keeps fallback on native rejection', async () => {
+  const writeText = vi.fn()
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+  const copyStreamLink = vi.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('OS denied'))
+  window.wadiDesktop = { copyStreamLink } as unknown as DesktopBridge
+  const url = 'https://example.invalid/a?token=signed%2Fvalue&source=2'
+  render(<CopyStreamLink url={url} />)
+  expect(copyStreamLink).not.toHaveBeenCalled()
+  await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Copy stream link' })))
+  expect(copyStreamLink).toHaveBeenCalledWith(url)
+  expect(screen.getByRole('status')).toHaveTextContent('Stream link copied')
+  await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Copy stream link' })))
+  expect(screen.getByRole('textbox', { name: 'Stream link' })).toHaveValue(url)
+  expect(writeText).not.toHaveBeenCalled()
+})
+it('offers the manual link on older desktop bridges without requesting browser permissions', async () => {
+  const writeText = vi.fn()
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+  window.wadiDesktop = {} as DesktopBridge
+  render(<CopyStreamLink url="https://example.invalid/a" />)
+  await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Copy stream link' })))
+  expect(screen.getByRole('alert')).toHaveTextContent('Could not copy automatically')
+  expect(writeText).not.toHaveBeenCalled()
 })
 it('shows an honest failure and selectable manual fallback; missing URL is unavailable', async () => {
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: vi.fn().mockRejectedValue(new Error('Denied')) } })

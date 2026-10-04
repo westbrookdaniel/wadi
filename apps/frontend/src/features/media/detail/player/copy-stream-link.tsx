@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { desktopBridge } from '@/lib/desktop'
 
 export function CopyStreamLink({ url }: { url?: string | null }) {
   return <CopyCurrentLink key={url ?? ''} url={url} />
@@ -16,7 +17,11 @@ function CopyCurrentLink({ url }: { url?: string | null }) {
       const request = ++attempt.current
       setStatus('copying')
       try {
-        await navigator.clipboard.writeText(url)
+        const desktop = desktopBridge()
+        if (desktop) {
+          if (!desktop.copyStreamLink) throw new Error('Desktop copy unavailable')
+          await desktop.copyStreamLink(url)
+        } else await navigator.clipboard.writeText(url)
         if (alive.current && request === attempt.current) setStatus('copied')
       } catch {
         if (alive.current && request === attempt.current) setStatus('fallback')

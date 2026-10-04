@@ -14,5 +14,9 @@ contextBridge.exposeInMainWorld('wadiDesktop', {
   signIn: () => ipcRenderer.invoke('sign-in'),
   request: (path, options) => ipcRenderer.invoke('api', path, options),
   media: (action, payload) => ipcRenderer.invoke('media', action, payload),
+  copyStreamLink: url => {
+    if (!navigator.userActivation?.isActive) return Promise.reject(new Error('Copy requires a user action'));
+    return ipcRenderer.invoke('copy-stream-link', url);
+  },
   openExternal: url => ipcRenderer.invoke('external', url),
 });
