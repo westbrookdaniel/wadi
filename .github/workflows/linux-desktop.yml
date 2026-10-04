@@ -111,6 +111,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @wadi/desktop package --publish never
+      - name: Verify production package excludes synthetic credentials
+        run: node scripts/native-qa/verify-production-isolation.mjs
       - run: pnpm --filter @wadi/desktop test
       - name: Verify finished macOS architecture and signatures
         if: runner.os == 'macOS'
@@ -246,6 +248,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: bash -n apps/desktop/scripts/setup-linux.sh
       - run: pnpm --filter @wadi/desktop package --linux deb AppImage --publish never
+      - name: Verify production package excludes synthetic credentials
+        run: node scripts/native-qa/verify-production-isolation.mjs
       - run: pnpm --filter @wadi/desktop test
       - name: Verify Linux desktop package
         shell: bash
