@@ -20,6 +20,20 @@ const register = ipcMain.handle.bind(ipcMain);
 ipcMain.handle = (name, handler) => {
   if (name === 'session') {
     register(name, (event, ...args) => { handler(event, ...args); return true; });
+  } else if (name === 'media') {
+    // Observe IDs/outcomes only. The original trusted production handler runs
+    // unchanged, and every rejection is rethrown to Electron and the caller.
+    register(name, async (event, ...args) => {
+      const [action, payload] = args;
+      const observed = action === 'start' || action === 'stop';
+      const id = action === 'start' ? payload?.id : payload;
+      const record = (outcome, message) => { if (observed) console.log(JSON.stringify({ qaMedia: { action, id, outcome, ...(message ? { message } : {}) } })); };
+      record('called');
+      try { const result = await handler(event, ...args); record('resolved'); return result; }
+      catch (error) { record('rejected', String(error?.message ?? error)); throw error; }
+    });
+    // Production startup registers session before media, asynchronously after
+    // main module evaluation. Restore only after both were captured.
     ipcMain.handle = register;
   } else register(name, handler);
 };
@@ -33,7 +47,7 @@ app.on('browser-window-created', (_event, window) => {
       sessionStorage.setItem('wadi.profile.selected_token', 'synthetic-qa-only');
       localStorage.setItem('wadi.device', JSON.stringify({state:{tvMode:false,askForProfile:false,theme:'dark',conversionEnabled:true},version:0}));
       for (const [key, source] of [['qa-session',1],['qa-session-b',2]]) {
-        sessionStorage.setItem(`wadi.playback.qa-profile.${key}`, JSON.stringify({stream:{url:`${origin}/multitrack.webm?token=synthetic-only&source=${source}`,subtitles:[{id:'qa-en',lang:'eng',url:`${origin}/english.srt`},{id:'qa-fr',lang:'fra',url:`${origin}/french.srt`}]},target:{mediaType:'movie',mediaId:'qa-film',videoId:null}}));
+        sessionStorage.setItem(`wadi.playback.qa-profile.${key}`, JSON.stringify({stream:{url:`${origin}/multitrack.webm?token=synthetic-only&source=${source}`,subtitles:[{id:'qa-en',lang:'eng',url:`${origin}/english.srt`},{id:'qa-fr',lang:'fra',url:`${origin}/french.srt`},{id:'qa-en-alt',lang:'eng',url:`${origin}/english-alternate.srt`}]},target:{mediaType:'movie',mediaId:'qa-film',videoId:null}}));
       }
       location.replace('/media/movie/qa-film?playback=qa-session');
     };

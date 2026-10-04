@@ -12,7 +12,12 @@
     "db:migrate": "node scripts/migrate-postgres.mjs",
     "db:import": "node scripts/import-sqlite.mjs",
     "desktop:dev": "pnpm --filter @wadi/desktop dev",
-    "desktop:package": "pnpm --filter @wadi/desktop package"
+    "desktop:package": "pnpm --filter @wadi/desktop package",
+    "test:player-smoke": "node scripts/player-smoke/run.mjs",
+    "test:qa-fixtures": "node --test scripts/browser-qa/server.test.mjs scripts/player-smoke/native-errors.test.mjs"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
 }
