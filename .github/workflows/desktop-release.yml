@@ -84,6 +84,27 @@ jobs:
           pattern: wadi-*
           merge-multiple: true
           path: release
+      - name: Verify complete installer set and record checksums
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          expected=(
+            "Wadi-${version}-linux-amd64.deb"
+            "Wadi-${version}-linux-x86_64.AppImage"
+            "Wadi-${version}-mac-arm64.dmg"
+            "Wadi-${version}-mac-arm64.zip"
+            "Wadi-${version}-win-x64.exe"
+          )
+          test "$(find release -maxdepth 1 -type f | wc -l)" -eq "${#expected[@]}"
+          for filename in "${expected[@]}"; do test -s "release/$filename"; done
+          (
+            cd release
+            sha256sum "${expected[@]}" > SHA256SUMS
+            sha256sum --check SHA256SUMS
+          )
+          cat release/SHA256SUMS
       - name: Create draft release with installers
         shell: bash
         env:
