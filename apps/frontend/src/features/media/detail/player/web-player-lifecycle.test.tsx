@@ -2,13 +2,30 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { useMediabunnyPlayer } from './use-mediabunny-player'
 
-const mocks = vi.hoisted(() => ({ reads: [] as Array<PromiseWithResolvers<void>>, disposed: vi.fn(), resume: vi.fn(), close: vi.fn(), inputs: 0 }))
+const mocks = vi.hoisted(() => ({ reads: [] as Array<PromiseWithResolvers<void>>, disposed: vi.fn(), resume: vi.fn(), close: vi.fn(), inputs: 0, audioReads: [] as Array<PromiseWithResolvers<void>>, audio: false, pacing: false, audioNext: vi.fn() }))
 vi.mock('mediabunny', () => ({
-  ALL_FORMATS: [], UrlSource: class {}, AudioBufferSink: class {},
+  ALL_FORMATS: [], UrlSource: class {},
+  AudioBufferSink: class {
+    buffers() {
+      return {
+        next: async () => {
+          mocks.audioNext()
+          if (mocks.pacing) return { done: false, value: { timestamp: 62, buffer: {} } }
+          const read = Promise.withResolvers<void>(); mocks.audioReads.push(read)
+          await read.promise
+          if (mocks.disposed.mock.calls.length) throw new Error('InputDisposedError: disposed during audio read')
+          return { done: true, value: undefined }
+        },
+        // Mediabunny's mapped iterator return does not await an outstanding next.
+        return: async () => ({ done: true, value: undefined }),
+        [Symbol.asyncIterator]() { return this },
+      }
+    }
+  },
   Input: class {
     constructor() { mocks.inputs++ }
     computeDuration = async () => 120
-    getAudioTracks = async () => []
+    getAudioTracks = async () => mocks.audio ? [{ id: 1, languageCode: "eng", sampleRate: 48000, codec: "opus", canDecode: async () => true }] : []
     getPrimaryVideoTrack = async () => ({ codec: 'vp9', displayWidth: 320, displayHeight: 180, canDecode: async () => true, canBeTransparent: async () => false })
     dispose = mocks.disposed
   },
@@ -24,15 +41,16 @@ vi.mock('mediabunny', () => ({
   },
 }))
 beforeEach(() => {
-  mocks.reads = []; mocks.inputs = 0
+  mocks.reads = []; mocks.inputs = 0; mocks.audioReads = []; mocks.audio = false; mocks.pacing = false
   mocks.resume.mockResolvedValue(undefined); mocks.close.mockResolvedValue(undefined)
   vi.stubGlobal('AudioContext', class {
     state = 'suspended'; currentTime = 0; destination = {}
     createGain() { return { gain: { value: 0 }, connect() {} } }
+    createBufferSource() { return { playbackRate: { value: 1 }, connect() {}, start() {}, stop() {} } }
     resume = mocks.resume; close = mocks.close
   })
 })
-afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks() })
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.clearAllMocks() })
 function mount() {
   const onProgressCommit = vi.fn()
   const options = { canvasRef: { current: null }, url: '/fixture.webm', authToken: null, savedPosition: 60, watched: false, preferredAudioLanguage: null, selectedAudioTrackId: null, initialPlaybackSpeed: 1, onProgressCommit }
@@ -107,4 +125,30 @@ it('reports a real decoder failure instead of hiding it as cancellation', async 
     expect(hook.result.current.state.error).toBe('decoder failed')
     expect(report).toHaveBeenCalledWith(error)
   } finally { hook.unmount(); report.mockRestore() }
+})
+
+it('keeps input alive until a pending audio read settles after iterator return on Back', async () => {
+  mocks.audio = true
+  const hook = mount(); await ready(hook)
+  await act(async () => hook.result.current.play())
+  await waitFor(() => expect(mocks.audioReads).toHaveLength(1))
+  hook.unmount()
+  await act(async () => { await Promise.resolve() })
+  expect(mocks.disposed).not.toHaveBeenCalled()
+  await act(async () => mocks.audioReads[0].resolve())
+  await waitFor(() => expect(mocks.disposed).toHaveBeenCalledTimes(1))
+})
+
+it('cancels a paced audio consumer before its next read and then disposes on Back', async () => {
+  mocks.audio = true; mocks.pacing = true
+  const hook = mount(); await ready(hook)
+  vi.useFakeTimers()
+  await act(async () => hook.result.current.play())
+  expect(mocks.audioNext).toHaveBeenCalledTimes(1)
+  hook.unmount()
+  await act(async () => { await Promise.resolve() })
+  expect(mocks.disposed).not.toHaveBeenCalled()
+  await act(async () => vi.advanceTimersByTimeAsync(100))
+  expect(mocks.audioNext).toHaveBeenCalledTimes(1)
+  expect(mocks.disposed).toHaveBeenCalledTimes(1)
 })

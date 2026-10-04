@@ -12,7 +12,7 @@ for (const name of ['src','dist','resources','package.json']) await cp(`apps/des
 await cp('apps/desktop/node_modules/zod',join(output,'app/node_modules/zod'),{recursive:true,dereference:true});
 await writeFile(join(output,'app/desktop-config.json'),JSON.stringify({origin:'http://127.0.0.1:4173',releaseRepository:'westbrookdaniel/wadi'}));
 await writeFile(join(output,'package.json'),JSON.stringify({name:'wadi-native-synthetic-qa',version:JSON.parse(await readFile('apps/desktop/package.json')).version,private:true,type:'module',main:'launch.mjs'}));
-for(const name of ['launch.mjs','README.md']) await cp(`scripts/native-qa/${name}`,join(output,name));
+for(const name of ['launch.mjs','credential-adapter.mjs','README.md']) await cp(`scripts/native-qa/${name}`,join(output,name));
 await mkdir(join(output,'fixtures'));
 await cp('scripts/browser-qa/server.mjs',join(output,'fixtures/server.mjs'));
 for(const name of ['multitrack.webm','fixture.webm','english.srt','french.srt','fixture.srt','english-alternate.srt','index.html']) await cp(join(fixtures,name),join(output,'fixtures',name));

@@ -1,10 +1,14 @@
 // Test-only entry. Never included in the desktop package or production entrypoint.
-import { app, ipcMain } from 'electron';
+import { app, ipcMain, safeStorage } from 'electron';
+import { installSyntheticCredentials } from './credential-adapter.mjs';
 import { mkdtemp, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const root = dirname(fileURLToPath(import.meta.url));
+// Must precede importing main: startup probes safeStorage before session IPC.
+// No original OS credential method may be reached by this synthetic process.
+const credentials = installSyntheticCredentials(safeStorage);
 const isolated = await mkdtemp(join(tmpdir(), 'wadi-native-qa-'));
 await mkdir(join(isolated, 'appData'));
 await mkdir(join(isolated, 'userData'));
@@ -19,7 +23,7 @@ app.commandLine.appendSwitch('remote-debugging-port', String(port));
 const register = ipcMain.handle.bind(ipcMain);
 ipcMain.handle = (name, handler) => {
   if (name === 'session') {
-    register(name, (event, ...args) => { handler(event, ...args); return true; });
+    register(name, credentials.session(handler));
   } else if (name === 'media') {
     // Observe IDs/outcomes only. The original trusted production handler runs
     // unchanged, and every rejection is rethrown to Electron and the caller.
@@ -47,7 +51,7 @@ app.on('browser-window-created', (_event, window) => {
       sessionStorage.setItem('wadi.profile.selected_token', 'synthetic-qa-only');
       localStorage.setItem('wadi.device', JSON.stringify({state:{tvMode:false,askForProfile:false,theme:'dark',conversionEnabled:true},version:0}));
       for (const [key, source] of [['qa-session',1],['qa-session-b',2]]) {
-        sessionStorage.setItem(`wadi.playback.qa-profile.${key}`, JSON.stringify({stream:{url:`${origin}/multitrack.webm?token=synthetic-only&source=${source}`,subtitles:[{id:'qa-en',lang:'eng',url:`${origin}/english.srt`},{id:'qa-fr',lang:'fra',url:`${origin}/french.srt`},{id:'qa-en-alt',lang:'eng',url:`${origin}/english-alternate.srt`}]},target:{mediaType:'movie',mediaId:'qa-film',videoId:null}}));
+        sessionStorage.setItem(`wadi.playback.qa-profile.${key}`, JSON.stringify({stream:{addon_id:'qa-addon',url:`${origin}/multitrack.webm?token=synthetic-only&source=${source}`,subtitles:[{id:'qa-en',lang:'eng',url:`${origin}/english.srt`},{id:'qa-fr',lang:'fra',url:`${origin}/french.srt`},{id:'qa-en-alt',lang:'eng',url:`${origin}/english-alternate.srt`}]},target:{mediaType:'movie',mediaId:'qa-film',videoId:null}}));
       }
       location.replace('/media/movie/qa-film?playback=qa-session');
     };
@@ -55,5 +59,5 @@ app.on('browser-window-created', (_event, window) => {
     catch (error) { console.error('QA seed failed', error); app.quit(); }
   });
 });
-console.log(JSON.stringify({ isolated, cdp:`http://127.0.0.1:${port}`, mocked:'session authentication only' }));
+console.log(JSON.stringify({ isolated, cdp:`http://127.0.0.1:${port}`, mocked:credentials.kind }));
 await import(join(root, 'app/src/main.mjs'));

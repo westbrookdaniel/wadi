@@ -1,5 +1,4 @@
 import { useDeviceStore } from '@/store/device-store'
-import { useAutoPlayback } from '@/store/auto-playback'
 /* eslint-disable react-refresh/only-export-components */
 import {
   Navigate,
@@ -291,12 +290,14 @@ function BrowseRoute({
 }
 
 function MediaRoute() {
+  const profileId = useAppStore(state => state.activeProfileId)
+  const [detailPlayback, setDetailPlayback] = useState<{ profileId: string | null; stream: PlayableStream; target: PlaybackTarget } | null>(null)
   const playbackPrefs = useQuery(playbackPreferencesQuery)
   const [launchFailure, setLaunchFailure] = useState<{ stream: PlayableStream; message: string } | null>(null)
   const [chosenPlayer, setChosenPlayer] = useState("vlc")
   const navigate = useNavigate()
   const { type, id } = mediaRoute.useParams()
-  const { videoId, episode, season, from, playback, manual } = mediaRoute.useSearch()
+  const { videoId, episode, season, from, playback } = mediaRoute.useSearch()
   const session = useMemo(() => readPlaybackSession(playback, type, id), [playback, type, id])
   const selectedStream = session?.stream
   const selectedPlaybackTarget = session?.target
@@ -311,6 +312,7 @@ function MediaRoute() {
     if (!playbackPrefs.data) {
       setLaunchFailure({ stream, message: 'Playback preferences are not ready. Choose a player below or try again.' }); return
     }
+    setDetailPlayback({ profileId, stream, target })
     if (!useDeviceStore.getState().tvMode && playbackPrefs.data.stream_action === 'external') {
       const url = getStreamUrl(stream)
       if (!url) { setLaunchFailure({ stream, message: 'This stream has no playable link.' }); return }
@@ -318,7 +320,7 @@ function MediaRoute() {
       return
     }
     const key = savePlaybackSession(stream, target)
-    void navigate({ to: '/media/$type/$id', params: { type, id }, search: previous => ({ ...previous, manual: true, playback: key, episode: target.videoId ?? undefined, season: target.episodeContext?.season?.toString() }), replace: Boolean(playback) || useAutoPlayback.getState().settings.enabled && useAutoPlayback.getState().settings.skipSelection })
+    void navigate({ to: '/media/$type/$id', params: { type, id }, search: previous => ({ ...previous, manual: true, playback: key, episode: target.videoId ?? undefined, season: target.episodeContext?.season?.toString() }), replace: Boolean(playback) })
   }
 
   const updateSeriesSelection = ({
@@ -375,6 +377,7 @@ function MediaRoute() {
               target={selectedPlaybackTarget}
               onPlaybackChange={playStream}
               onBack={() => {
+                setDetailPlayback({ profileId, stream: selectedStream, target: selectedPlaybackTarget })
                 void navigate({ to: '/media/$type/$id', params: { type, id }, search: previous => ({ ...previous, playback: undefined, manual: true }), replace: true })
               }}
             />
@@ -382,8 +385,8 @@ function MediaRoute() {
             <DetailShellSkeleton onBack={() => navigate({ to: backPath, search: backSearch })} />
           ) : (
             <MediaDetailPage
-              autoPickAllowed={!manual}
               media={displayMedia}
+              previousPlayback={detailPlayback?.profileId === profileId ? detailPlayback : null}
               preferredVideoId={preferredEpisodeIdFromSearch({ episode, videoId })}
               preferredSeason={season}
               onSeriesSelectionChange={updateSeriesSelection}

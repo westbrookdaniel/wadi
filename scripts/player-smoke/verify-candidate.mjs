@@ -13,7 +13,7 @@ if(asar.extractFile(archive,'REVISION').toString().trim()!==revision)throw new E
 let files=0;
 for(const line of (await readFile(join(bundle,'SHA256SUMS'),'utf8')).trim().split('\n')) {
   const [expected,name]=line.split('  ');
-  if(name==='launch.mjs'||name==='app/desktop-config.json'||(name.startsWith('node_modules/zod/')&&/\.(js|cjs|mjs)$/.test(name)&&!/(?:^|\/)(tests?|__tests__)\//.test(name))||/^app\/(src|dist|resources)\//.test(name)&&!name.endsWith('.test.mjs')) {
+  if(name==='launch.mjs'||name==='credential-adapter.mjs'||name==='app/desktop-config.json'||(name.startsWith('node_modules/zod/')&&/\.(js|cjs|mjs)$/.test(name)&&!/(?:^|\/)(tests?|__tests__)\//.test(name))||/^app\/(src|dist|resources)\//.test(name)&&!name.endsWith('.test.mjs')) {
     const actual=createHash('sha256').update(asar.extractFile(archive,name)).digest('hex');
     if(actual!==expected)throw new Error(`Sealed QA module mismatch: ${name}`);
     files++;

@@ -1,9 +1,7 @@
-import { useDeviceStore } from '@/store/device-store'
 import { useAutoPlayback } from '@/store/auto-playback'
 import { rankStreams } from './auto-pick'
-import { playbackPreferencesQuery } from '@/api/queries'
 import { useQuery } from '@tanstack/react-query'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 
 import { addonsQuery } from '@/api/queries'
 import {
@@ -29,29 +27,21 @@ type StreamRow = {
 
 export function StreamList({
   streams,
-  selectionKey,
-  autoPickAllowed = true,
   isLoading,
   onPlay,
+  selectedStream,
+  selectionOnly = false,
 }: {
-  selectionKey?: string
-  autoPickAllowed?: boolean
   streams: PlayableStream[]
   isLoading: boolean
   onPlay: (stream: PlayableStream) => void
+  selectedStream?: PlayableStream
+  selectionOnly?: boolean
 }) {
-  const tvMode = useDeviceStore(state => state.tvMode)
   const settings = useAutoPlayback(state => state.settings)
-  const playback = useQuery(playbackPreferencesQuery)
   const ranked = useMemo(() => rankStreams(streams, settings), [streams, settings])
   const recommendation = settings.enabled && !isLoading ? ranked.find(row => row.eligible) : undefined
   const orderedStreams = settings.enabled ? ranked.map(row => row.stream) : streams
-  const attempted = useRef<string | null>(null)
-  useEffect(() => {
-    if (!selectionKey || !autoPickAllowed || !settings.enabled || !settings.skipSelection || isLoading || (!tvMode && playback.data?.stream_action !== 'internal') || !recommendation || attempted.current === selectionKey) return
-    attempted.current = selectionKey
-    onPlay(recommendation.stream)
-  }, [selectionKey, autoPickAllowed, settings.enabled, settings.skipSelection, isLoading, playback.data, recommendation, onPlay, tvMode])
   const addons = useQuery(addonsQuery)
   const sourceLabelsById = useMemo(() => {
     const map = new Map<string, string>()
@@ -119,11 +109,13 @@ export function StreamList({
             <button
               className="grid min-w-0 h-fit cursor-pointer content-between gap-1 rounded-lg border border-border bg-card/80 p-2.5 text-xs leading-relaxed text-left text-card-foreground hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/30 focus-visible:outline-none [&_small]:text-[0.76rem] [&_small]:text-primary [&_span]:text-muted-foreground"
               type="button"
+              aria-pressed={selectionOnly ? stream === selectedStream : undefined}
               key={`${i}-${stream.addon_id}-${stream.title ?? stream.name ?? index}`}
               data-tv-default={stream === recommendation?.stream || !recommendation && i === 0 ? '' : undefined}
               data-tv-focus-key={`stream:${stream.addon_id}:${stream.title ?? stream.name ?? index}`}
               onClick={() => onPlay(stream)}
             >
+              {selectionOnly && stream === selectedStream ? <strong className="text-primary">Selected</strong> : null}
               {stream === recommendation?.stream ? <span className="!text-primary text-xs font-medium">Recommended{recommendation.reasons.length ? ' · ' + recommendation.reasons.join(' · ') : ''}</span> : null}
               <p className="font-medium text-sm leading-snug whitespace-pre-line [overflow-wrap:anywhere]">{stream.title ?? stream.name ?? `Stream ${index + 1}`}</p>
               <p className="max-w-full whitespace-pre-wrap [overflow-wrap:anywhere] text-sm leading-relaxed text-muted-foreground">{streamDetail(stream)}</p>

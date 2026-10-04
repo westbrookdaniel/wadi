@@ -61,6 +61,7 @@ export function useMediabunnyPlayer({
   useEffect(() => { initialAudioPreference.current = { selectedAudioTrackId, preferredAudioLanguage } }, [selectedAudioTrackId, preferredAudioLanguage])
   const initializationRef = useRef<Promise<void> | null>(null)
   const closingIteratorsRef = useRef(new Set<Promise<unknown>>())
+  const audioConsumersRef = useRef(new Set<Promise<void>>())
   const animationFrameRef = useRef<number | null>(null)
   const renderIntervalRef = useRef<number | null>(null)
   const renderRef = useRef<(requestNextFrame?: boolean) => void>(() => undefined)
@@ -190,41 +191,53 @@ export function useMediabunnyPlayer({
     }
   }, [drawWrappedCanvas, getPlaybackTime])
 
-  const runAudioIterator = useCallback(async () => {
-    const audioContext = audioContextRef.current
-    const gainNode = gainNodeRef.current
-    const iterator = audioBufferIteratorRef.current
-    if (!audioContext || !gainNode || !iterator) {
-      return
+  const runAudioIterator = useCallback(() => {
+    const consume = async () => {
+      const audioContext = audioContextRef.current
+      const gainNode = gainNodeRef.current
+      const iterator = audioBufferIteratorRef.current
+      if (!audioContext || !gainNode || !iterator) {
+        return
+      }
+
+      for await (const { buffer, timestamp } of iterator) {
+        if (!playingRef.current || iterator !== audioBufferIteratorRef.current) {
+          break
+        }
+
+        const node = audioContext.createBufferSource()
+        node.buffer = buffer
+        node.playbackRate.value = playbackRateRef.current
+        node.connect(gainNode)
+        const startTimestamp = audioContextStartTimeRef.current!
+          + (timestamp - playbackTimeAtStartRef.current) / playbackRateRef.current
+
+        if (startTimestamp >= audioContext.currentTime) {
+          node.start(startTimestamp)
+        } else {
+          node.start(audioContext.currentTime, audioContext.currentTime - startTimestamp)
+        }
+
+        queuedAudioNodesRef.current.add(node)
+        node.onended = () => {
+          queuedAudioNodesRef.current.delete(node)
+        }
+
+        if (timestamp - getPlaybackTime() >= 1) {
+          await waitUntilNearPlaybackTime(timestamp, getPlaybackTime, () => playingRef.current && iterator === audioBufferIteratorRef.current)
+        }
+        // Mapped iterator return() can finish before this consumer. Exit before
+        // requesting another buffer from a replaced or stopped input.
+        if (!playingRef.current || iterator !== audioBufferIteratorRef.current) break
+      }
     }
-
-    for await (const { buffer, timestamp } of iterator) {
-      if (!playingRef.current || iterator !== audioBufferIteratorRef.current) {
-        break
-      }
-
-      const node = audioContext.createBufferSource()
-      node.buffer = buffer
-      node.playbackRate.value = playbackRateRef.current
-      node.connect(gainNode)
-      const startTimestamp = audioContextStartTimeRef.current!
-        + (timestamp - playbackTimeAtStartRef.current) / playbackRateRef.current
-
-      if (startTimestamp >= audioContext.currentTime) {
-        node.start(startTimestamp)
-      } else {
-        node.start(audioContext.currentTime, audioContext.currentTime - startTimestamp)
-      }
-
-      queuedAudioNodesRef.current.add(node)
-      node.onended = () => {
-        queuedAudioNodesRef.current.delete(node)
-      }
-
-      if (timestamp - getPlaybackTime() >= 1) {
-        await waitUntilNearPlaybackTime(timestamp, getPlaybackTime, () => playingRef.current && iterator === audioBufferIteratorRef.current)
-      }
-    }
+    const task = consume()
+    audioConsumersRef.current.add(task)
+    void task.then(
+      () => audioConsumersRef.current.delete(task),
+      error => { audioConsumersRef.current.delete(task); console.error(error) },
+    )
+    return task
   }, [getPlaybackTime])
 
   const play = useCallback(async () => {
@@ -341,10 +354,11 @@ export function useMediabunnyPlayer({
     const audioContext = audioContextRef.current
     const initialization = initializationRef.current
     initializationRef.current = null
-    // return() drains pending generator reads. Keep their input alive until
-    // they finish; disposing first makes Mediabunny throw InputDisposedError.
+    // A mapped audio iterator's return() does not drain its consumer. Keep the
+    // input alive until initialization, iterator closure and consumers finish.
     const closing = [...closingIteratorsRef.current]
-    void Promise.allSettled([initialization, ...closing]).then(async () => {
+    const consumers = [...audioConsumersRef.current]
+    void Promise.allSettled([initialization, ...closing, ...consumers]).then(async () => {
       input?.dispose()
       await audioContext?.close()
     }).catch(error => console.error(error))

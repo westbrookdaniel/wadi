@@ -740,7 +740,7 @@ export function MediaPlayerPage({
                 onSeasonChange={season => { setSelectedSwapSeason(season); saveLastSeason(useAppStore.getState().activeProfileId, activeTarget.mediaId, season) }}
                 onSelectEpisode={episode => { setUpNext(null); setPendingEpisode(episode) }}
               />
-              {pendingEpisode && !episodeStreams.isFetching ? <div className="grid gap-3"><p className="text-sm">Choose a stream for {pendingEpisode.title}</p>{episodeStreams.error ? <><p role="alert" className="text-sm text-destructive">Could not load streams.</p><Button onClick={() => void episodeStreams.refetch()}>Retry</Button></> : <StreamList autoPickAllowed={false} streams={episodeStreams.data ?? []} isLoading={false} onPlay={changeEpisode} />}</div> : null}
+              {pendingEpisode && !episodeStreams.isFetching ? <div className="grid gap-3"><p className="text-sm">Choose a stream for {pendingEpisode.title}</p>{episodeStreams.error ? <><p role="alert" className="text-sm text-destructive">Could not load streams.</p><Button onClick={() => void episodeStreams.refetch()}>Retry</Button></> : <StreamList streams={episodeStreams.data ?? []} isLoading={false} onPlay={changeEpisode} />}</div> : null}
               {pendingEpisode && episodeStreams.isFetching ? (
                 <p className="text-sm text-muted-foreground">Loading streams for {pendingEpisode.title}…</p>
               ) : null}
