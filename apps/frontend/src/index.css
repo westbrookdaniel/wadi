@@ -332,7 +332,7 @@ select {
 .player-captions { line-height: 1.35; font-weight: 500; transition: bottom 180ms ease; padding-inline: 4vw; }
 .player-track-option { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-radius: 5px; padding: .6rem .65rem; text-align: left; font-size: 13px; }
 .player-track-option:hover { background: #ffffff14; }
-.player-track-option[aria-pressed="true"] { background: #ffffff20; color: white; }
+.player-track-option[aria-checked="true"] { background: #ffffff20; color: white; }
 .player-menu { background: #14171bf5; border-color: #ffffff18; border-radius: 10px; box-shadow: 0 12px 48px #0008; }
 .player-loading-mark { animation: player-breathe 1.8s ease-in-out infinite; }
 @keyframes player-breathe { 0%, 100% { opacity: .45; transform: scale(.98); } 50% { opacity: 1; transform: scale(1); } }

@@ -49,3 +49,24 @@ it('keeps intended playback through rapid switches while resume is pending', asy
   expect(view.result.current.state).toMatchObject({ selectedAudioTrackId: '1', playing: true, currentTime: 60 })
   expect(fixture.inputs).toBe(1)
 })
+
+it('duplicate selection during resume cannot retain stale pause intent after explicit Pause/Play', async () => {
+  const view = renderPlayer()
+  await waitFor(() => expect(view.result.current.state.status).toBe('ready'))
+  await act(async () => view.result.current.play())
+  const context = AudioContextFixture.instances[0]
+  context.state = 'suspended'
+  let resume!: () => void
+  context.resume.mockImplementationOnce(() => new Promise<void>(resolve => { resume = resolve }))
+  let change!: Promise<void>
+  await act(async () => { change = view.result.current.setAudioTrack('2') })
+  await waitFor(() => expect(resume).toBeDefined())
+  await act(async () => view.result.current.setAudioTrack('2'))
+  act(() => view.result.current.pause())
+  await act(async () => { resume(); await change })
+  expect(view.result.current.state.playing).toBe(false)
+  await act(async () => view.result.current.play())
+  await act(async () => view.result.current.setAudioTrack('1'))
+  expect(view.result.current.state.playing).toBe(true)
+  expect(fixture.inputs).toBe(1)
+})

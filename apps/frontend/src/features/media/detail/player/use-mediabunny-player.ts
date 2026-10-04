@@ -56,7 +56,7 @@ export function useMediabunnyPlayer({
   const asyncIdRef = useRef(0)
   const playbackCommandRef = useRef(0)
   const audioSelectionRef = useRef(0)
-  const audioSwitchPlayingRef = useRef<boolean | null>(null)
+  const playbackIntentRef = useRef(false)
   const initialAudioPreference = useRef({ selectedAudioTrackId, preferredAudioLanguage })
   useEffect(() => { initialAudioPreference.current = { selectedAudioTrackId, preferredAudioLanguage } }, [selectedAudioTrackId, preferredAudioLanguage])
   const initializationRef = useRef<Promise<void> | null>(null)
@@ -118,7 +118,7 @@ export function useMediabunnyPlayer({
   }, [])
 
   const pause = useCallback((commit = true) => {
-    if (commit && audioSwitchPlayingRef.current !== null) audioSwitchPlayingRef.current = false
+    if (commit) playbackIntentRef.current = false
     playbackCommandRef.current += 1
     playbackTimeAtStartRef.current = Math.min(getPlaybackTime(), durationRef.current)
     playingRef.current = false
@@ -237,6 +237,7 @@ export function useMediabunnyPlayer({
       return
     }
 
+    playbackIntentRef.current = true
     const command = ++playbackCommandRef.current
     if (audioContext.state === 'suspended') {
       await audioContext.resume()
@@ -321,7 +322,7 @@ export function useMediabunnyPlayer({
 
   const dispose = useCallback((commit = true) => {
     audioSelectionRef.current += 1
-    audioSwitchPlayingRef.current = null
+    playbackIntentRef.current = false
     if (commit && stateRef.current.status === 'ready') {
       onProgressCommitRef.current(getPlaybackTime(), durationRef.current)
     }
@@ -568,14 +569,12 @@ export function useMediabunnyPlayer({
       if (!track || !(await track.canDecode())) throw new Error('Unsupported audio track')
       if (request !== audioSelectionRef.current || input !== inputRef.current) return
       if (stateRef.current.selectedAudioTrackId === String(track.id)) return
-      const wasPlaying = audioSwitchPlayingRef.current ?? playingRef.current
-      audioSwitchPlayingRef.current = wasPlaying
+      const wasPlaying = playbackIntentRef.current
       pause(false)
       // Keep video decoding, live position, volume/mute and playback rate.
       audioSinkRef.current = new AudioBufferSink(track)
       updateState({ selectedAudioTrackId: String(track.id), hasAudio: true, warning: null })
       if (wasPlaying) await play()
-      if (request === audioSelectionRef.current) audioSwitchPlayingRef.current = null
     } catch {
       if (request === audioSelectionRef.current && input === inputRef.current) updateState({ warning: 'Could not change audio track. Choose another track.' })
     }

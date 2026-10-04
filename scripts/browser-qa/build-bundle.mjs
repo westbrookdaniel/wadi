@@ -16,8 +16,8 @@ await writeFile(join(output, 'REVISION'), revision + '\n');
 execFileSync('git', ['archive', '--format=tar.gz', '-o', join(output, 'source.tar.gz'), revision]);
 execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=320x180:rate=10:duration=120', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=120', '-c:v', 'libvpx-vp9', '-b:v', '150k', '-c:a', 'libopus', '-b:a', '32k', '-metadata:s:a:0', 'language=jpn', join(output, 'fixture.webm')]);
 execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=320x180:rate=10:duration=120', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=120', '-f', 'lavfi', '-i', 'sine=frequency=880:duration=120', '-map', '0:v:0', '-map', '1:a:0', '-map', '2:a:0', '-c:v', 'libvpx-vp9', '-b:v', '150k', '-c:a', 'libopus', '-b:a', '32k', '-metadata:s:a:0', 'language=eng', '-metadata:s:a:0', 'title=English 440 Hz', '-metadata:s:a:1', 'language=jpn', '-metadata:s:a:1', 'title=Japanese 880 Hz', join(output, 'multitrack.webm')]);
-await writeFile(join(output, 'english.srt'), '1\n00:00:00,000 --> 00:02:00,000\nENGLISH SYNTHETIC CAPTION\n');
-await writeFile(join(output, 'french.srt'), '1\n00:00:00,000 --> 00:02:00,000\nFRENCH SYNTHETIC CAPTION\n');
+await writeFile(join(output, 'english.srt'), '1\n00:00:00,000 --> 00:02:00,000\nENGLISH QA CAPTION\n');
+await writeFile(join(output, 'french.srt'), '1\n00:00:00,000 --> 00:02:00,000\nFRENCH QA CAPTION\n');
 await writeFile(join(output, 'fixture.srt'), '1\n00:00:00,000 --> 00:02:00,000\nThe world is full of stories.\n');
 async function files(directory, prefix = '') {
   const result = [];
