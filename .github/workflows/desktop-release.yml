@@ -57,6 +57,7 @@ jobs:
           apps=(apps/desktop/release/mac*/Wadi.app)
           test "${#apps[@]}" -gt 0
           for app in "${apps[@]}"; do
+            node apps/desktop/scripts/verify-mac-package.mjs "$app"
             codesign --verify --deep --strict --verbose=2 "$app"
             codesign --verify --strict --verbose=2 "$app/Contents/Resources/media-bin/ffmpeg"
             codesign --verify --strict --verbose=2 "$app/Contents/Resources/media-bin/ffprobe"

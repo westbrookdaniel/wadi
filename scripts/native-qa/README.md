@@ -19,10 +19,16 @@ From the handoff directory:
 
 Record all unsupported checks honestly. Official runtime provenance is not packaged release acceptance or notarization. The fixture API is mocked; authentication and live providers are untested.
 
-## Known binary architecture mismatch
+## Production media dependency correction
 
-The pinned ffprobe-static@3.1.0 npm tarball passes its registry integrity check, but `package/bin/darwin/arm64/ffprobe` is actually an x86_64 Mach-O binary. SHA256: `5b592e56f87ff754d94dadf99f38b4d0fb7d463eb780b50e0ca061d668d0e3f7`. Production packaging selects that exact path. Do not describe it as arm64 or install Rosetta implicitly. The runtime handoff retains this original as `production-media/ffprobe`; use only if the QA owner confirms an already available compatible runtime and signature checks pass.
+Production now pins @derhuerst/ffprobe-static@5.3.0. Its registry-integrity-verified installation metadata downloads ffprobe from eugeneware/ffmpeg-static b6.1.1, matching production ffmpeg-static5.3.0. Darwin arm64 ffprobe SHA256: `bb2db6f5d8cef919da12fbf592119a987202a8c060a886f3cab091f9cab90b64`; ffmpeg SHA256: `a90e3db6a3fd35f6074b013f948b1aa45b31c6375489d39e572bea3f18336584`. Both are arm64 and QA has reported strict signature verification passing on these raw binaries. Delivered `production-media` now contains this exact dependency pair; it is not a media override. Pre-copy Mac architecture checks reject mismatches, and finished app architecture checks precede the existing strict signature gates.
 
-A separately identified true arm64 ffprobe from eugeneware/ffmpeg-static b6.1.1 is supplied in `arm64-media` alongside the production-pinned ffmpeg from the same release. Its SHA256 is `bb2db6f5d8cef919da12fbf592119a987202a8c060a886f3cab091f9cab90b64`. This is an explicit test media-binary override, not the packaged ffprobe-static dependency. Parent must approve compatibility/use; successful testing with it does not certify the original packaged binary. No production dependency or binary path was changed by this hotfix.
+Prior released v0.1.11 shipped an ad-hoc-signed x86_64 ffprobe inside its arm64 package. Its former ffprobe-static3.1.0 arm64-directory input was x86_64 and unsigned. This evidence is retained in the readiness report; do not use that old input, install Rosetta, or re-sign binaries to work around it.
+
+## Electron runtime acceptance gate
+
+The official Electron41.10.7 Darwin arm64 archive matches upstream SHASUMS256.txt, but physical QA reports its raw development Electron.app fails deep/strict verification with “code has no resources but signature indicates they must be present,” linker ad-hoc signing and no sealed resources. Archive provenance alone does not close the finished-bundle signature gate. Do not launch the raw runtime under the current hold, remove quarantine, re-sign it manually, or weaken release checks.
+
+Prefer an exact-candidate Mac artifact built and signed by Wadi's established packaging workflow, whose finished app and media binaries must pass architecture and signature verification. Production packaging uses identity '-' and seals the finished app. A separate QA owner decision is required if accepting the hash-verified development runtime instead. No new runtime launch permission is implied by this source handoff.
 
 Bridge contract: `window.wadiDesktop.copyStreamLink(url): Promise<void>` invokes only `copy-stream-link` after active user interaction. Main accepts one bounded HTTP(S) URL without credentials/whitespace/control characters from the owned window's exact wadi://app/ main frame, then writes original URL text to Electron clipboard. Clipboard reads and arbitrary IPC are not exposed; global browser permission callbacks remain fullscreen-only.

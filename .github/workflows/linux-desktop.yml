@@ -17,6 +17,67 @@ on:
 permissions:
   contents: read
 jobs:
+  native-candidate:
+    # Artifact-only candidate verification. No tags, releases or publication.
+    if: github.event_name == 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      WADI_WEB_ORIGIN: https://watchwadi.com
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @wadi/desktop package --publish never
+      - run: pnpm --filter @wadi/desktop test
+      - name: Verify finished macOS architecture and signatures
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          shopt -s nullglob
+          apps=(apps/desktop/release/mac*/Wadi.app)
+          test "${#apps[@]}" -gt 0
+          for app in "${apps[@]}"; do
+            node apps/desktop/scripts/verify-mac-package.mjs "$app"
+            codesign --verify --deep --strict --verbose=2 "$app"
+            codesign --verify --strict --verbose=2 "$app/Contents/Resources/media-bin/ffmpeg"
+            codesign --verify --strict --verbose=2 "$app/Contents/Resources/media-bin/ffprobe"
+          done
+      - name: Record exact candidate revision and checksums
+        shell: bash
+        run: |
+          git rev-parse HEAD > apps/desktop/release/REVISION
+          node --input-type=module <<'JS'
+          import { readdir, readFile, writeFile } from 'node:fs/promises';
+          import { createHash } from 'node:crypto';
+          const root = 'apps/desktop/release';
+          const names = (await readdir(root)).filter(name => /\.(zip|dmg|exe)$/.test(name)).sort();
+          if (!names.length) throw new Error('Missing candidate artifacts');
+          const sums = await Promise.all(names.map(async name => `${createHash('sha256').update(await readFile(`${root}/${name}`)).digest('hex')}  ${name}`));
+          await writeFile(`${root}/SHA256SUMS`, sums.join('\n') + '\n');
+          JS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-candidate-${{ matrix.os }}-${{ github.event.pull_request.head.sha }}
+          if-no-files-found: error
+          path: |
+            apps/desktop/release/REVISION
+            apps/desktop/release/SHA256SUMS
+            apps/desktop/release/*.dmg
+            apps/desktop/release/*.zip
+            apps/desktop/release/*.exe
   frontend-api:
     runs-on: ubuntu-latest
     services:
