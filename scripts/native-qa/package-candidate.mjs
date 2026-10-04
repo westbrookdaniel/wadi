@@ -17,7 +17,7 @@ const configuration = {
   // Prevent builder's conventional ./app autodetection from skipping the
   // wrapper entry; ./app here contains the unchanged production modules.
   directories: { app: root, output: resolve('apps/desktop/native-qa-release') },
-  files: ['launch.mjs', 'app/src/**', '!app/src/**/*.test.mjs', 'app/dist/**', 'app/desktop-config.json', 'app/resources/**', 'package.json', 'REVISION'],
+  files: ['launch.mjs', 'credential-adapter.mjs', 'app/src/**', '!app/src/**/*.test.mjs', 'app/dist/**', 'app/desktop-config.json', 'app/resources/**', 'package.json', 'REVISION'],
   extraResources: [{ from: resolve('apps/desktop/assets'), to: 'media-bin' }],
   mac: { ...production.build.mac, target: ['zip'], icon: resolve('apps/desktop/resources/icon-mac.png'), identity: '-', hardenedRuntime: false, notarize: false },
   artifactName: 'Wadi-NativeQA-${arch}.${ext}', publish: null,
