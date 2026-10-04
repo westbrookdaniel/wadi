@@ -70,6 +70,7 @@ jobs:
           if (!names.length) throw new Error('Missing candidate artifacts');
           const sums = await Promise.all(names.map(async name => `${createHash('sha256').update(await readFile(`${root}/${name}`)).digest('hex')}  ${name}`));
           await writeFile(`${root}/SHA256SUMS`, sums.join('\n') + '\n');
+          console.log(sums.join('\n'));
           JS
       - name: Package isolated synthetic native QA entry
         if: runner.os == 'macOS'
@@ -87,6 +88,7 @@ jobs:
           tar -czf apps/desktop/native-qa-release/fixtures.tar.gz -C "$RUNNER_TEMP/native-qa" fixtures
           cd apps/desktop/native-qa-release
           shasum -a 256 *.zip fixtures.tar.gz REVISION > SHA256SUMS
+          cat SHA256SUMS
       - uses: actions/upload-artifact@v4
         if: runner.os == 'macOS'
         with:

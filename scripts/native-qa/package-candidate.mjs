@@ -14,7 +14,9 @@ await writeFile(join(root, 'package.json'), JSON.stringify(manifest, null, 2));
 const production = JSON.parse(await readFile('apps/desktop/package.json'));
 const configuration = {
   appId: 'com.wadi.nativeqa', productName: 'Wadi', electronVersion: '41.10.7',
-  directories: { output: resolve('apps/desktop/native-qa-release') },
+  // Prevent builder's conventional ./app autodetection from skipping the
+  // wrapper entry; ./app here contains the unchanged production modules.
+  directories: { app: root, output: resolve('apps/desktop/native-qa-release') },
   files: ['launch.mjs', 'app/src/**', '!app/src/**/*.test.mjs', 'app/dist/**', 'app/desktop-config.json', 'app/resources/**', 'package.json', 'REVISION'],
   extraResources: [{ from: resolve('apps/desktop/assets'), to: 'media-bin' }],
   mac: { ...production.build.mac, target: ['zip'], icon: resolve('apps/desktop/resources/icon-mac.png'), identity: '-', hardenedRuntime: false, notarize: false },
