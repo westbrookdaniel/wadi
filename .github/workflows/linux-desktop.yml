@@ -17,6 +17,98 @@ on:
 permissions:
   contents: read
 jobs:
+  native-candidate:
+    # Artifact-only candidate verification. No tags, releases or publication.
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      # No signing secrets: use the existing identity '-' packaging seal on
+      # same-repository candidates; electron-builder otherwise skips PR signing.
+      CSC_FOR_PULL_REQUEST: 'true'
+      WADI_WEB_ORIGIN: https://watchwadi.com
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @wadi/desktop package --publish never
+      - run: pnpm --filter @wadi/desktop test
+      - name: Verify finished macOS architecture and signatures
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          shopt -s nullglob
+          apps=(apps/desktop/release/mac*/Wadi.app)
+          test "${#apps[@]}" -gt 0
+          for app in "${apps[@]}"; do
+            node apps/desktop/scripts/verify-mac-package.mjs "$app"
+            codesign --verify --deep --strict --verbose=2 "$app"
+            codesign --verify --strict --verbose=2 "$app/Contents/Resources/media-bin/ffmpeg"
+            codesign --verify --strict --verbose=2 "$app/Contents/Resources/media-bin/ffprobe"
+          done
+      - name: Record exact candidate revision and checksums
+        shell: bash
+        run: |
+          git rev-parse HEAD > apps/desktop/release/REVISION
+          node --input-type=module <<'JS'
+          import { readdir, readFile, writeFile } from 'node:fs/promises';
+          import { createHash } from 'node:crypto';
+          const root = 'apps/desktop/release';
+          const names = (await readdir(root)).filter(name => /\.(zip|dmg|exe)$/.test(name)).sort();
+          if (!names.length) throw new Error('Missing candidate artifacts');
+          const sums = await Promise.all(names.map(async name => `${createHash('sha256').update(await readFile(`${root}/${name}`)).digest('hex')}  ${name}`));
+          await writeFile(`${root}/SHA256SUMS`, sums.join('\n') + '\n');
+          console.log(sums.join('\n'));
+          JS
+      - name: Package isolated synthetic native QA entry
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          node scripts/native-qa/build-fixtures.mjs "$RUNNER_TEMP/native-fixtures" apps/desktop/assets/ffmpeg
+          node scripts/native-qa/build-bundle.mjs "$RUNNER_TEMP/native-qa" "$RUNNER_TEMP/native-fixtures"
+          node scripts/native-qa/package-candidate.mjs "$RUNNER_TEMP/native-qa"
+          pnpm --filter @wadi/desktop exec electron-builder --projectDir "$RUNNER_TEMP/native-qa" --config "$RUNNER_TEMP/native-qa/electron-builder.json" --mac zip --arm64 --publish never
+          node apps/desktop/scripts/verify-mac-package.mjs apps/desktop/native-qa-release/mac-arm64/Wadi.app arm64
+          codesign --verify --deep --strict --verbose=2 apps/desktop/native-qa-release/mac-arm64/Wadi.app
+          codesign --verify --strict --verbose=2 apps/desktop/native-qa-release/mac-arm64/Wadi.app/Contents/Resources/media-bin/ffmpeg
+          codesign --verify --strict --verbose=2 apps/desktop/native-qa-release/mac-arm64/Wadi.app/Contents/Resources/media-bin/ffprobe
+          cp "$RUNNER_TEMP/native-qa/REVISION" apps/desktop/native-qa-release/REVISION
+          tar -czf apps/desktop/native-qa-release/fixtures.tar.gz -C "$RUNNER_TEMP/native-qa" fixtures
+          cd apps/desktop/native-qa-release
+          shasum -a 256 *.zip fixtures.tar.gz REVISION > SHA256SUMS
+          cat SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'macOS'
+        with:
+          name: synthetic-native-qa-${{ github.event.pull_request.head.sha }}
+          if-no-files-found: error
+          path: |
+            apps/desktop/native-qa-release/REVISION
+            apps/desktop/native-qa-release/SHA256SUMS
+            apps/desktop/native-qa-release/*.zip
+            apps/desktop/native-qa-release/fixtures.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-candidate-${{ matrix.os }}-${{ github.event.pull_request.head.sha }}
+          if-no-files-found: error
+          path: |
+            apps/desktop/release/REVISION
+            apps/desktop/release/SHA256SUMS
+            apps/desktop/release/*.dmg
+            apps/desktop/release/*.zip
+            apps/desktop/release/*.exe
   frontend-api:
     runs-on: ubuntu-latest
     services:

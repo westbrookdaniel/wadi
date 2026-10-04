@@ -5,7 +5,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { PlayerChrome } from './media-player-page'
 import { initialLocalPlaybackState, initialPlayerState } from './state'
 
-afterEach(() => vi.useRealTimers())
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals() })
 
 function props(): ComponentProps<typeof PlayerChrome> {
   return {
@@ -87,10 +87,43 @@ it('opens subtitle preview and exposes an explicit title reset alongside outline
   const input = props()
   render(<TooltipProvider><PlayerChrome {...input} state={{ ...input.state, status: 'ready' }} /></TooltipProvider>)
   fireEvent.click(screen.getByRole('button', { name: 'Subtitles' }))
-  fireEvent.click(screen.getByRole('button', { name: 'Subtitle settings' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Subtitle settings' }))
   expect(screen.getByLabelText('Subtitle preview')).toBeInTheDocument()
   fireEvent.change(screen.getByRole('spinbutton', { name: 'Outline weight' }), { target: { value: '3' } })
   expect(input.onSubtitleOutlineWidthChange).toHaveBeenCalledWith(3)
   fireEvent.click(screen.getByRole('button', { name: 'Use device defaults' }))
   expect(input.onUseDefaults).toHaveBeenCalledOnce()
+})
+
+it('audio/subtitle menus accept repeated pointer changes and keep keyboard navigation in the menu', () => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
+  const input = props()
+  input.state = { ...input.state, status: 'ready', audioTracks: [{ id: 'a', label: 'English audio', language: 'eng' }, { id: 'b', label: 'Spanish audio', language: 'spa' }], selectedAudioTrackId: 'a' }
+  input.subtitleTracks = [{ id: 'en', language: 'eng', source: 'Synthetic' }, { id: 'es', language: 'spa', source: 'Synthetic' }]
+  input.selectedSubtitleId = 'en'
+  const view = render(<TooltipProvider><PlayerChrome {...input} /></TooltipProvider>)
+  const audio = screen.getByRole('button', { name: 'Audio track' })
+  fireEvent.click(audio)
+  expect(screen.getByRole('menu', { name: 'Audio tracks' })).toBeInTheDocument()
+  const english = screen.getByRole('menuitemradio', { name: 'English audio' })
+  english.focus(); fireEvent.keyDown(english, { key: 'ArrowDown', code: 'ArrowDown' })
+  expect(screen.getByRole('menuitemradio', { name: 'Spanish audio' })).toHaveFocus()
+  fireEvent.click(screen.getByRole('menuitemradio', { name: 'Spanish audio' }))
+  expect(input.onSelectAudioTrack).toHaveBeenCalledWith('b')
+  expect(audio).toHaveFocus()
+  view.rerender(<TooltipProvider><PlayerChrome {...input} state={{ ...input.state, selectedAudioTrackId: 'b' }} /></TooltipProvider>)
+  fireEvent.click(audio)
+  expect(screen.getByRole('menuitemradio', { name: 'Spanish audio' })).toHaveAttribute('aria-checked', 'true')
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Default audio' }))
+  expect(input.onSelectAudioTrack).toHaveBeenLastCalledWith(null)
+  const subtitles = screen.getByRole('button', { name: 'Subtitles' })
+  fireEvent.click(subtitles)
+  fireEvent.click(screen.getByRole('menuitemradio', { name: /Spanish.*Synthetic/ }))
+  expect(input.onSelectSubtitle).toHaveBeenCalledWith('es')
+  fireEvent.click(screen.getByRole('menuitemradio', { name: 'No subtitles' }))
+  expect(input.onSelectSubtitle).toHaveBeenLastCalledWith(null)
+  fireEvent.keyDown(screen.getByRole('menu', { name: 'Subtitles' }), { key: 'Escape' })
+  expect(subtitles).toHaveFocus()
+  expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  expect(input.onTogglePlay).not.toHaveBeenCalled()
 })

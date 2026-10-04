@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, protocol, net, shell, safeStorage, session, dialog, Menu } from 'electron';
+import { app, BrowserWindow, ipcMain, protocol, net, shell, safeStorage, session, dialog, Menu, clipboard } from 'electron';
 import { existsSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { randomBytes, createHash } from 'node:crypto';
@@ -8,6 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { z } from 'zod';
 import { createMediaService } from './media.mjs';
 import { createUpdates } from './updates.mjs';
+import { assertTrustedMainFrame, registerCopyStreamLink } from './clipboard.mjs';
 const here = dirname(fileURLToPath(import.meta.url));
 const config = JSON.parse(await readFile(join(here, '../desktop-config.json'), 'utf8'));
 const origin = new URL(config.origin).origin;
@@ -64,7 +65,7 @@ async function api(path, options = {}) {
   return { status: response.status, body: data };
 }
 function trusted(event) {
-  if (event.sender !== window?.webContents || !event.senderFrame || event.senderFrame !== window.webContents.mainFrame || !event.senderFrame.url.startsWith('wadi://app/')) throw new Error('Untrusted caller');
+  assertTrustedMainFrame(event, window);
 }
 async function openExternal(url) {
   const value = z.string().max(10000).parse(url);
@@ -135,6 +136,7 @@ session.defaultSession.setPermissionCheckHandler((webContents, permission, reque
 session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) =>
   callback(permission === 'fullscreen' && webContents === window?.webContents && details.isMainFrame && details.requestingUrl.startsWith('wadi://app/')));
 media = await createMediaService({ directory: join(app.getPath('userData'), 'media-cache'), binaries: process.env.WADI_MEDIA_BIN_DIR || (app.isPackaged ? join(process.resourcesPath, 'media-bin') : join(here, '../assets')) });
+registerCopyStreamLink({ ipcMain, clipboard, trusted });
 for (const [name, handler] of Object.entries({
   'open-page': path => shell.openExternal(new URL(z.enum(['/terms','/privacy']).parse(path), origin).href),
   'app-version': () => app.getVersion(),

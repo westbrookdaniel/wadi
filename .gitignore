@@ -27,6 +27,7 @@ work/
 !.env.example
 apps/desktop/assets/
 apps/desktop/release/
+apps/desktop/native-qa-release/
 apps/desktop/desktop-config.json
 .vercel
 .env*

@@ -1,3 +1,4 @@
+import { CopyStreamLink } from '@/features/media/detail/player/copy-stream-link'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { SubtitlePreview } from '@/features/media/detail/player/subtitle-appearance'
 import { initialLocalPlaybackState } from '@/features/media/detail/player/state'
@@ -17,6 +18,7 @@ type Props = Partial<SubtitleAppearance> & {
   skipSegment?: SkipSegment
   mediaName: string; state: PlayerState; warning: string | null; hasEpisodeSwapper: boolean
   onBack: () => void; onTogglePlay: () => void; onSeek: (value: number) => void; onOpenEpisodeSwapper: () => void
+  streamLink?: string | null
   subtitleTracks: { id: string; language: string; source: string }[]; selectedSubtitleId: string | null
   onSelectSubtitle: (id: string | null) => void; onSelectAudioTrack: (id: string | null) => void
   playbackSpeed: number; onPlaybackSpeedChange: (value: number) => void
@@ -119,6 +121,7 @@ export function TvPlayerChrome(props: Props) {
         </div> : <div className="tv-player-actions">
           <button ref={play} type="button" data-tv-default className="tv-primary" disabled={disabled} onClick={props.onTogglePlay}>{state.playing ? 'Pause' : 'Play'}</button>
           {props.hasEpisodeSwapper ? <button type="button" onClick={props.onOpenEpisodeSwapper}>Episodes</button> : null}
+          <CopyStreamLink url={props.streamLink} />
           <TvPicker label="Audio" value={state.selectedAudioTrackId ?? ''} disabled={!state.audioTracks.length} options={state.audioTracks.map(track => ({ value: track.id, label: track.label || track.language }))} onChange={props.onSelectAudioTrack} />
           <TvPicker label="Subtitles" value={props.selectedSubtitleId ?? '__off'} options={[{ value: '__off', label: 'Subtitles off' }, ...props.subtitleTracks.map(track => ({ value: track.id, label: `${track.language} · ${track.source}` }))]} onChange={value => props.onSelectSubtitle(value === '__off' ? null : value)} />
           <TvPicker label="Playback speed" value={String(props.playbackSpeed)} options={[0.5, 0.75, 1, 1.25, 1.5, 2].map(value => ({ value: String(value), label: `${value}× speed` }))} onChange={value => props.onPlaybackSpeedChange(Number(value))} />

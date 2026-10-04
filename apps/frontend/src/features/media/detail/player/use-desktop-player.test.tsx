@@ -10,7 +10,7 @@ vi.mock('hls.js', () => ({ default: class {
   listeners = new Map<string, () => void>()
   on(event: string, callback: () => void) { this.listeners.set(event, callback) }
   loadSource() {}
-  attachMedia() { queueMicrotask(() => this.listeners.get('ready')?.()) }
+  attachMedia(video: HTMLVideoElement) { video.currentTime = 0; queueMicrotask(() => this.listeners.get('ready')?.()) }
   destroy() {}
 } }))
 
@@ -27,8 +27,8 @@ it('keeps the conversion session on pause, resume, buffered seek and speed chang
   const load = vi.spyOn(video, 'load').mockImplementation(() => {})
   const media = vi.fn<DesktopBridge['media']>(async (action, payload) => {
     if (action !== 'start') return { error: null }
-    const input = z.object({ id: z.string(), position: z.number() }).parse(payload)
-    return { id: input.id, url: 'http://127.0.0.1/session/index.m3u8', offset: input.position, duration: 180, mode: 'audio', hasVideo: true, hasAudio: true, audioTracks: [], selectedAudioTrackId: null }
+    const input = z.object({ id: z.string(), position: z.number(), audio: z.string().nullable() }).parse(payload)
+    return { id: input.id, url: 'http://127.0.0.1/session/index.m3u8', offset: input.position, duration: 180, mode: 'audio', hasVideo: true, hasAudio: true, audioTracks: [], selectedAudioTrackId: input.audio }
   })
   window.wadiDesktop = {
     getStartFullscreen: async () => false, setStartFullscreen: async value => value, onStartFullscreenChanged: () => () => {}, appVersion: async () => '0.1.0', updateState: async () => ({ kind: 'idle' }), checkUpdates: async () => ({ kind: 'idle' }), downloadUpdate: async () => {}, onUpdate: () => () => {},
@@ -51,14 +51,21 @@ it('keeps the conversion session on pause, resume, buffered seek and speed chang
   expect(video.playbackRate).toBe(2)
   expect(media.mock.calls.filter(([action]) => action === 'start')).toHaveLength(1)
   expect(media.mock.calls.filter(([action]) => action === 'stop')).toHaveLength(0)
+  act(() => result.current.setAudioTrack('2'))
+  await waitFor(() => expect(result.current.state.status).toBe('ready'))
+  expect(media.mock.calls.filter(([action]) => action === 'start').at(-1)?.[1]).toMatchObject({ audio: '2', position: 20 })
+  act(() => result.current.setAudioTrack(null))
+  await waitFor(() => expect(result.current.state.status).toBe('ready'))
+  expect(media.mock.calls.filter(([action]) => action === 'start').at(-1)?.[1]).toMatchObject({ audio: null, position: 20 })
+
   act(() => result.current.pause())
   await act(() => result.current.seek(100))
   await waitFor(() => expect(result.current.state.status).toBe('ready'))
   expect(result.current.state.playing).toBe(false)
-  expect(media.mock.calls.filter(([action]) => action === 'start')).toHaveLength(2)
+  expect(media.mock.calls.filter(([action]) => action === 'start')).toHaveLength(4)
   await act(() => result.current.seek(180))
   expect(result.current.state).toMatchObject({ currentTime: 180, playing: false, status: 'ready' })
-  expect(media.mock.calls.filter(([action]) => action === 'start')).toHaveLength(2)
+  expect(media.mock.calls.filter(([action]) => action === 'start')).toHaveLength(4)
   expect(ended).toHaveBeenCalledOnce()
   ended.mockClear()
   await act(() => result.current.seek(110))
@@ -67,7 +74,7 @@ it('keeps the conversion session on pause, resume, buffered seek and speed chang
   act(() => { video.currentTime = 80; video.dispatchEvent(new Event('ended')) })
   expect(ended).toHaveBeenCalledOnce()
   unmount()
-  expect(media.mock.calls.filter(([action]) => action === 'stop')).toHaveLength(2)
+  expect(media.mock.calls.filter(([action]) => action === 'stop')).toHaveLength(4)
 })
 
 it('honors pause, resume and a newer seek while an earlier conversion is still loading', async () => {
