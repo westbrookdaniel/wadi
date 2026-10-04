@@ -49,6 +49,7 @@ function start(command,args,env={}) {
     stream.on('end',()=>record(pending));
   }
   child.on('error',error=>chunks.push(String(error)));
+  child.closed=false;child.once('close',()=>{child.closed=true;});
   child.log = chunks;
   return child;
 }
@@ -85,7 +86,6 @@ try {
     browser=await chromium.connectOverCDP(`http://127.0.0.1:${cdp}`);
     context=browser.contexts()[0];
     page=await waitUntil(()=>context.pages().find(p=>p.url().startsWith('wadi://app/')));
-    expect(await page.evaluate(()=>Boolean(window.wadiDesktop?.media && window.wadiDesktop?.copyStreamLink))).toBe(true);
     // macOS OS clipboard stays behind real UI/production IPC. No read bridge.
   } else {
     browser=await chromium.launch();
@@ -94,6 +94,15 @@ try {
     page=await context.newPage();
   }
   page.setDefaultTimeout(15000);
+  // Playwright evaluate uses userGesture:true. Observations and the negative
+  // activation check must not manufacture or refresh a user gesture.
+  const session=await context.newCDPSession(page);
+  const passive=async(fn,arg)=>{
+    const result=await session.send('Runtime.evaluate',{expression:`(${fn.toString()})(${JSON.stringify(arg) ?? 'undefined'})`,awaitPromise:true,returnByValue:true,userGesture:false});
+    if(result.exceptionDetails)throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text);
+    return result.result.value;
+  };
+  if(engine==='native')expect(await passive(()=>Boolean(window.wadiDesktop?.media && window.wadiDesktop?.copyStreamLink))).toBe(true);
   await context.tracing.start({screenshots:true,snapshots:true,sources:true});
   page.on('pageerror',error=>evidence.pageErrors.push({at:Date.now(),error:String(error)}));
   page.on('console',message=>{if(['error','warning'].includes(message.type()))evidence.console.push({at:Date.now(),type:message.type(),phase:evidence.phases.at(-1)?.name,text:message.text()});});
@@ -101,14 +110,14 @@ try {
   const reveal=async()=>{await page.mouse.move(300,250);await page.mouse.move(310,250);};
   const button=name=>page.getByRole('button',{name,exact:true});
   const seek=page.getByRole('slider',{name:'Seek Synthetic QA film',exact:true});
-  const mediaProperties=()=>page.evaluate(()=>{const video=document.querySelector('video');if(video)return {volume:video.volume,muted:video.muted,speed:video.playbackRate};const analyser=globalThis.__wadiAudioProbe?.probes.find(a=>a.context.state!=='closed');return {gain:analyser?.__wadiOutputNode?.gain?.value};});
+  const mediaProperties=()=>passive(()=>{const video=document.querySelector('video');if(video)return {volume:video.volume,muted:video.muted,speed:video.playbackRate};const analyser=globalThis.__wadiAudioProbe?.probes.find(a=>a.context.state!=='closed');return {gain:analyser?.__wadiOutputNode?.gain?.value};});
   const position=async()=>Number(await seek.getAttribute('aria-valuenow'));
-  const attachNative=async()=>{await reveal();if(await button('Pause').count())await button('Pause').click();await page.evaluate(observeNativeAudio);await button('Play').click();await expect(button('Pause')).toBeEnabled();};
+  const attachNative=async()=>{await reveal();if(await button('Pause').count())await button('Pause').click();await passive(observeNativeAudio);await button('Play').click();await expect(button('Pause')).toBeEnabled();};
   const startPlaying=async()=>{await reveal();if(await button('Play').count())await button('Play').click();await expect(button('Pause')).toBeEnabled();};
   async function frequency(expected) {
     let consecutive=0;
     await expect.poll(async()=>{
-      const sample=await page.evaluate(readFrequency);evidence.samples.push({at:Date.now(),expected,...sample});
+      const sample=await passive(readFrequency);evidence.samples.push({at:Date.now(),expected,...sample});
       consecutive=sample.db>-70&&Math.abs(sample.hz-expected)<20?consecutive+1:0;return consecutive;
     },{timeout:15000,intervals:[100,200,300]}).toBeGreaterThanOrEqual(3);
   }
@@ -128,7 +137,7 @@ try {
     else {for(const caption of ['ENGLISH QA CAPTION','FRENCH QA CAPTION','ALTERNATE ENGLISH QA CAPTION'])await expect(page.getByText(caption,{exact:true})).toBeHidden();}
     await reveal();await button('Subtitles').click();await expect(option('Subtitles',name)).toHaveAttribute('aria-checked','true');await page.keyboard.press('Escape');
   }
-  const clipboard = async()=> engine==='native'?execFileSync('/usr/bin/pbpaste',{encoding:'utf8'}):page.evaluate(()=>navigator.clipboard.readText());
+  const clipboard = async()=> engine==='native'?execFileSync('/usr/bin/pbpaste',{encoding:'utf8'}):passive(()=>navigator.clipboard.readText());
   const source=id=>`${origin}/multitrack.webm?token=synthetic-only&source=${id}`;
   await phase('production player starts synthetic resume with decoded English',async()=>{
     if(engine==='web')await page.goto(origin+'/qa/bootstrap?tracks=1');
@@ -165,11 +174,11 @@ try {
   });
   await phase('fullscreen caption and menu close',async()=>{
     await subtitle(/^French/,'FRENCH QA CAPTION');await reveal();await button('Fullscreen').click();
-    await expect.poll(()=>page.evaluate(()=>Boolean(document.fullscreenElement))).toBe(true);
+    await expect.poll(()=>passive(()=>Boolean(document.fullscreenElement))).toBe(true);
     await expect(page.getByText('FRENCH QA CAPTION',{exact:true})).toBeVisible();
     // CDP Escape does not invoke Chromium's browser-level fullscreen accelerator.
     // Wadi's real F shortcut deterministically exercises its exit handler.
-    await page.keyboard.press('f');await expect.poll(()=>page.evaluate(()=>Boolean(document.fullscreenElement))).toBe(false);
+    await page.keyboard.press('f');await expect.poll(()=>passive(()=>Boolean(document.fullscreenElement))).toBe(false);
     if(engine==='web'){await page.setViewportSize({width:390,height:844});await reveal();await button('Subtitles').click();await expect(option('Subtitles',/^French/)).toHaveAttribute('aria-checked','true');await page.keyboard.press('Escape');await page.setViewportSize({width:1280,height:800});}
   });
   await phase('delayed stale subtitle and HTTP failure leave no stale cues',async()=>{
@@ -183,8 +192,9 @@ try {
     await expect(page.getByText('FRENCH QA CAPTION',{exact:true})).toBeHidden();
     await control({rules:{'/french.srt':{status:503}}});
     await reveal();await button('Subtitles').click();await option('Subtitles',/^French/).click();await page.keyboard.press('Escape');
-    await expect(page.getByRole('alert')).toContainText('Could not load subtitles');
-    await control({rules:{'/french.srt':{}}});await subtitle(/^English.*Stream · 2|^English.*Stream 2/,'ENGLISH QA CAPTION');await expect(page.getByRole('alert')).toBeHidden();
+    const subtitleError=page.getByRole('alert').filter({hasText:'Could not load subtitles'});
+    await expect(subtitleError).toContainText('Could not load subtitles');
+    await control({rules:{'/french.srt':{}}});await subtitle(/^English.*Stream · 2|^English.*Stream 2/,'ENGLISH QA CAPTION');await expect(subtitleError).toBeHidden();
   });
   await phase('real clipboard pointer and keyboard preserve source query exactly',async()=>{
     await reveal();await button('Copy stream link').click();await expect(page.getByRole('status').filter({hasText:'Stream link copied.'})).toBeVisible();expect(await clipboard()).toBe(source(1));
@@ -199,13 +209,13 @@ try {
     await reveal();await button('Copy stream link').focus();await page.keyboard.press('Enter');await expect(page.getByRole('status').filter({hasText:'Stream link copied.'})).toBeVisible();expect(await clipboard()).toBe(source(2));
     evidence.clipboard={pointer:source(1),keyboard:source(2),real:true};
     if(engine==='native') {
-      await expect.poll(()=>page.evaluate(()=>navigator.userActivation.isActive)).toBe(false);
-      const rejection=await page.evaluate(async url=>{try{await window.wadiDesktop.copyStreamLink(url);return 'unexpected success';}catch(error){return String(error);}},source(1));
+      await expect.poll(()=>passive(()=>navigator.userActivation.isActive),{timeout:10000,intervals:[100,250,500]}).toBe(false);
+      const rejection=await passive(async url=>{try{await window.wadiDesktop.copyStreamLink(url);return 'unexpected success';}catch(error){return String(error);}},source(1));
       expect(rejection).toContain('Copy requires a user action');expect(await clipboard()).toBe(source(2));evidence.noGesture=rejection;
     }
   });
   if(engine==='web') await phase('separate injected clipboard failure has selectable fallback and close',async()=>{
-    await page.evaluate(()=>{navigator.clipboard.writeText=async()=>{throw new Error('Synthetic write denial');};});
+    await passive(()=>{navigator.clipboard.writeText=async()=>{throw new Error('Synthetic write denial');};});
     await reveal();await button('Copy stream link').click();await expect(page.getByRole('textbox',{name:'Stream link',exact:true})).toHaveValue(source(2));
     await page.getByRole('textbox',{name:'Stream link',exact:true}).focus();expect(await page.getByRole('textbox',{name:'Stream link',exact:true}).evaluate(node=>node.selectionEnd-node.selectionStart)).toBe(source(2).length);
     await button('Close link').click();await expect(page.getByRole('textbox',{name:'Stream link',exact:true})).toBeHidden();
@@ -231,9 +241,12 @@ try {
   if(engine==='native'&&page)await page.close({runBeforeUnload:false}).catch(()=>{});
   if(browser)await browser.close().catch(()=>{});
   for(const child of owned.reverse()) {
-    if(child.exitCode===null&&child.signalCode===null) {child.kill('SIGTERM');await Promise.race([once(child,'exit'),sleep(3000)]);if(child.exitCode===null&&child.signalCode===null){child.kill('SIGKILL');await Promise.race([once(child,'exit'),sleep(3000)]);}}
+    const closed=child.closed?Promise.resolve():once(child,'close');
+    if(child.exitCode===null&&child.signalCode===null)child.kill('SIGTERM');
+    await Promise.race([closed,sleep(3000)]);
+    if(!child.closed){child.kill('SIGKILL');await Promise.race([closed,sleep(3000)]);}
     await writeFile(join(output,`process-${child.pid}.log`),child.log.join(''));
-    if(child.exitCode===null&&child.signalCode===null){evidence.result='fail';process.exitCode=1;(evidence.cleanupErrors??=[]).push(`Owned process ${child.pid} did not exit`);}
+    if(!child.closed){evidence.result='fail';process.exitCode=1;(evidence.cleanupErrors??=[]).push(`Owned process ${child.pid} did not exit`);}
   }
   for(const port of ownedPorts){try{await freePort(port);}catch(error){evidence.result='fail';process.exitCode=1;(evidence.cleanupErrors??=[]).push(`Owned port ${port} remained occupied: ${error}`);}}
   if(isolated&&/^\/.*\/wadi-native-qa-[^/]+$/.test(isolated))await rm(isolated,{recursive:true,force:true});

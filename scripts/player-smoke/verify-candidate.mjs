@@ -23,5 +23,8 @@ if(files<10)throw new Error('Missing production module identity checks');
 const manifest=JSON.parse(asar.extractFile(archive,'package.json'));
 const expectedManifest=JSON.parse(await readFile(join(bundle,'package.json'),'utf8'));
 if(manifest.main!==expectedManifest.main||manifest.version!==expectedManifest.version||manifest.dependencies?.zod!=='4.3.6')throw new Error('Sealed QA entry/version/dependency mismatch');
+const zod=JSON.parse(asar.extractFile(archive,'node_modules/zod/package.json'));
+const expectedZod=JSON.parse(await readFile(join(bundle,'node_modules/zod/package.json'),'utf8'));
+for(const field of ['version','type','main','module','exports'])if(JSON.stringify(zod[field])!==JSON.stringify(expectedZod[field]))throw new Error(`Sealed Zod ${field} mismatch`);
 const media={};for(const name of ['ffmpeg','ffprobe'])media[name]=createHash('sha256').update(await readFile(join(app,'Contents/Resources/media-bin',name))).digest('hex');
 console.log(JSON.stringify({revision,files,archive,media,main:manifest.main,zod:manifest.dependencies.zod}));
