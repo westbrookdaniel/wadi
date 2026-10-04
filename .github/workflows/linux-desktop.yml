@@ -19,7 +19,7 @@ permissions:
 jobs:
   native-candidate:
     # Artifact-only candidate verification. No tags, releases or publication.
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     strategy:
       fail-fast: false
       matrix:
@@ -27,6 +27,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      # No signing secrets: use the existing identity '-' packaging seal on
+      # same-repository candidates; electron-builder otherwise skips PR signing.
+      CSC_FOR_PULL_REQUEST: 'true'
       WADI_WEB_ORIGIN: https://watchwadi.com
     steps:
       - uses: actions/checkout@v4
