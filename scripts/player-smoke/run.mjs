@@ -16,7 +16,7 @@ await mkdir(output,{recursive:true});
 const started = Date.now(), revision = execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim();
 const evidence = {engine,revision,platform:process.platform,arch:process.arch,fixture:'tones-v2-440-880-660',started:new Date().toISOString(),phases:[],console:[],pageErrors:[],network:[],samples:[],limitations:['decoded audio graph is not physical speakers','synthetic authentication/API only','native OS write-denial injection is not physical OS denial']};
 const owned = [], ownedPorts = [];
-let browser, context, page, isolated;
+let browser, context, page, isolated, passive;
 const save = () => writeFile(join(output,'evidence.json'),JSON.stringify(evidence,null,2));
 const sleep = ms => new Promise(resolve => setTimeout(resolve,ms));
 async function waitUntil(fn, timeout=15000) {
@@ -97,7 +97,7 @@ try {
   // Playwright evaluate uses userGesture:true. Observations and the negative
   // activation check must not manufacture or refresh a user gesture.
   const session=await context.newCDPSession(page);
-  const passive=async(fn,arg)=>{
+  passive=async(fn,arg)=>{
     const result=await session.send('Runtime.evaluate',{expression:`(${fn.toString()})(${JSON.stringify(arg) ?? 'undefined'})`,awaitPromise:true,returnByValue:true,userGesture:false});
     if(result.exceptionDetails)throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text);
     return result.result.value;
@@ -112,8 +112,8 @@ try {
   const seek=page.getByRole('slider',{name:'Seek Synthetic QA film',exact:true});
   const mediaProperties=()=>passive(()=>{const video=document.querySelector('video');if(video)return {volume:video.volume,muted:video.muted,speed:video.playbackRate};const analyser=globalThis.__wadiAudioProbe?.probes.find(a=>a.context.state!=='closed');return {gain:analyser?.__wadiOutputNode?.gain?.value};});
   const position=async()=>Number(await seek.getAttribute('aria-valuenow'));
-  const attachNative=async()=>{await reveal();if(await button('Pause').count())await button('Pause').click();await passive(observeNativeAudio);await button('Play').click();await expect(button('Pause')).toBeEnabled();};
-  const startPlaying=async()=>{await reveal();if(await button('Play').count())await button('Play').click();await expect(button('Pause')).toBeEnabled();};
+  const attachNative=async()=>{await expect(page.getByRole('status',{name:'Loading stream',exact:true})).toBeHidden();await reveal();if(await button('Pause').count())await button('Pause').click();await passive(observeNativeAudio);await button('Play').click();await expect(button('Pause')).toBeEnabled();await expect(page.getByRole('status',{name:'Loading stream',exact:true})).toBeHidden();};
+  const startPlaying=async()=>{await reveal();if(await button('Play').count())await button('Play').click();await expect(button('Pause')).toBeEnabled();await expect(page.getByRole('status',{name:'Loading stream',exact:true})).toBeHidden();};
   async function frequency(expected) {
     let consecutive=0;
     await expect.poll(async()=>{
@@ -171,6 +171,8 @@ try {
     await subtitle(/^English.*Stream · 1|^English.*Stream 1/,'ALTERNATE ENGLISH QA CAPTION');await subtitle(/^No subtitles/,null);await subtitle(/^French/,'FRENCH QA CAPTION');
     await reveal();await button('Audio track').click();await page.keyboard.press('Home');await expect(option('Audio tracks',/^Default audio/)).toBeFocused();await page.keyboard.press('End');await expect(option('Audio tracks',/^English.*alternate/)).toBeFocused();await page.keyboard.press('Escape');await expect(button('Audio track')).toBeFocused();
     await button('Audio track').click();await page.mouse.click(600,200);await expect(page.getByRole('menu',{name:'Audio tracks',exact:true})).toBeHidden();
+    // Clicking the media surface also toggles playback; restore via real UI.
+    await startPlaying();
   });
   await phase('fullscreen caption and menu close',async()=>{
     await subtitle(/^French/,'FRENCH QA CAPTION');await reveal();await button('Fullscreen').click();
@@ -214,6 +216,16 @@ try {
       expect(rejection).toContain('Copy requires a user action');expect(await clipboard()).toBe(source(2));evidence.noGesture=rejection;
     }
   });
+  await phase('Back and explicit source reopen retain resume and audio preference',async()=>{
+    await reveal();await button('Pause').click();const box=await seek.boundingBox();await seek.click({position:{x:box.width*65/120,y:box.height/2}});await expect.poll(position).toBe(65);
+    await reveal();await button('Back').click();await expect(seek).toBeHidden();
+    await expect(page.locator('[aria-label="Synthetic QA film details"]')).toBeVisible();
+    await expect.poll(async()=> (await state()).watch.position_seconds).toBeGreaterThanOrEqual(64);
+    await page.getByRole('button').filter({has:page.getByText('QA 2',{exact:true})}).click();
+    await expect(seek).toHaveAttribute('aria-disabled','false');await startPlaying();if(engine==='native')await attachNative();await frequency(880);
+    expect(await position()).toBeGreaterThanOrEqual(64);expect(await position()).toBeLessThan(75);
+    await reveal();await button('Audio track').click();await expect(option('Audio tracks',/^Japanese/)).toHaveAttribute('aria-checked','true');await page.keyboard.press('Escape');
+  });
   if(engine==='web') await phase('separate injected clipboard failure has selectable fallback and close',async()=>{
     await passive(()=>{navigator.clipboard.writeText=async()=>{throw new Error('Synthetic write denial');};});
     await reveal();await button('Copy stream link').click();await expect(page.getByRole('textbox',{name:'Stream link',exact:true})).toHaveValue(source(2));
@@ -225,7 +237,7 @@ try {
   // subtitle failure and blocked optional Cast bootstrap are expected.
   const unexpectedErrors=evidence.console.filter(x=>x.type==='error'&&!(/cast_sender\.js/.test(x.text)&&/Content Security Policy/.test(x.text))&&!(/Failed to load resource: the server responded with a status of 503 \(Service Unavailable\)/.test(x.text)&&x.phase==='delayed stale subtitle and HTTP failure leave no stale cues'));
   expect(unexpectedErrors).toEqual([]);
-  const unexpectedRequests=evidence.network.filter(x=>!x.error?.includes('ERR_ABORTED')&&!(/cast_sender\.js/.test(x.url)&&x.error?.includes('ERR_BLOCKED_BY_CSP')));
+  const unexpectedRequests=evidence.network.filter(x=>!x.error?.includes('ERR_ABORTED')&&!(/cast_sender\.js/.test(x.url)&&(x.error==='csp'||x.error?.includes('ERR_BLOCKED_BY_CSP'))));
   expect(unexpectedRequests).toEqual([]);
   // Native service errors must not disappear into the attached-process log.
   // The prior cancelled-probe navigation diagnostic is retained separately,
@@ -235,6 +247,8 @@ try {
 } catch(error) {
   evidence.result='fail';evidence.error=error.stack;process.exitCode=1;
   if(page)await page.screenshot({path:join(output,'failure.png')}).catch(()=>{});
+  if(passive)evidence.failureState=await passive(()=>({video:document.querySelector('video')?{paused:document.querySelector('video').paused,time:document.querySelector('video').currentTime,ready:document.querySelector('video').readyState,volume:document.querySelector('video').volume,muted:document.querySelector('video').muted,speed:document.querySelector('video').playbackRate}:null,contexts:globalThis.__wadiAudioProbe?.probes.map(a=>({state:a.context.state,time:a.context.currentTime})),controls:document.querySelector('.player-chrome')?.innerText})).catch(error=>({error:String(error)}));
+  console.error(JSON.stringify({lastSamples:evidence.samples.slice(-6),failureState:evidence.failureState,console:evidence.console,pageErrors:evidence.pageErrors}));
   console.error(error);
 } finally {
   if(context)await context.tracing.stop({path:join(output,'trace.zip')}).catch(error=>{evidence.traceError=String(error);});

@@ -62,7 +62,7 @@ const server = createServer(async (req, res) => {
     if (path === '/api/watch-progress') { watch = { ...watch, ...body, updated_at: new Date().toISOString() }; writes.push({ position: body.position_seconds, updated_at: watch.updated_at }); return json(res, watch); }
     if (path === '/api/meta/movie/qa-film') return json(res, { responses: [{ addon_id: 'qa-addon', response: { meta } }] });
     if (path === '/api/subtitles/movie/qa-film') return json(res, { responses: [] });
-    if (path === '/api/streams/movie/qa-film') return json(res, { responses: [{ addon_id: 'qa-addon', response: { streams: [1,2].map(source => ({ name: `QA ${source}`, url: `http://127.0.0.1:${port}/multitrack.webm?token=synthetic-only&source=${source}` })) } }] });
+    if (path === '/api/streams/movie/qa-film') return json(res, { responses: [{ addon_id: 'qa-addon', response: { streams: [1,2].map(source => ({ name: `QA ${source}`, url: `http://127.0.0.1:${port}/multitrack.webm?token=synthetic-only&source=${source}`, subtitles: [['qa-en','eng','english.srt'],['qa-fr','fra','french.srt'],['qa-en-alt','eng','english-alternate.srt']].map(([id,lang,file])=>({id,lang,url:`http://127.0.0.1:${port}/${file}`})) })) } }] });
     if (['/api/addons','/api/catalogs','/api/lists','/api/continue-watching'].includes(path) && req.method === 'GET') return json(res, {items:[]});
     if (path.startsWith('/api/')) { unexpected.push({path,method:req.method}); return json(res, {error:`Unexpected fixture API: ${req.method} ${path}`}, 501); }
     let file = path.startsWith('/_next/static/') ? join(root, 'static', path.slice('/_next/static/'.length)) : join(root, path.slice(1));

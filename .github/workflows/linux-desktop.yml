@@ -57,6 +57,15 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
+          name: web-player-diagnostics-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            player-smoke-results/**/*.json
+            player-smoke-results/**/*.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
           name: web-player-smoke-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_attempt }}
           if-no-files-found: warn
           path: player-smoke-results/
@@ -140,6 +149,15 @@ jobs:
         run: |
           (cd apps/desktop/native-qa-release && shasum -a 256 -c SHA256SUMS)
           pnpm test:player-smoke native "$RUNNER_TEMP/native-qa" apps/desktop/native-qa-release/mac-arm64/Wadi.app/Contents/MacOS/Wadi
+      - uses: actions/upload-artifact@v4
+        if: always() && runner.os == 'macOS'
+        with:
+          name: native-player-diagnostics-${{ github.event.pull_request.head.sha }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            player-smoke-results/**/*.json
+            player-smoke-results/**/*.log
       - uses: actions/upload-artifact@v4
         if: always() && runner.os == 'macOS'
         with:
