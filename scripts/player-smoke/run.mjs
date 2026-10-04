@@ -106,7 +106,7 @@ try {
   };
   if(engine==='native')expect(await passive(()=>Boolean(window.wadiDesktop?.media && window.wadiDesktop?.copyStreamLink))).toBe(true);
   await context.tracing.start({screenshots:true,snapshots:true,sources:true});
-  page.on('pageerror',error=>evidence.pageErrors.push({at:Date.now(),error:String(error)}));
+  page.on('pageerror',error=>evidence.pageErrors.push({at:Date.now(),error:String(error),stack:error.stack}));
   page.on('console',message=>{if(['error','warning'].includes(message.type()))evidence.console.push({at:Date.now(),type:message.type(),phase:evidence.phases.at(-1)?.name,text:message.text()});});
   page.on('requestfailed',request=>evidence.network.push({at:Date.now(),url:request.url(),error:request.failure()?.errorText}));
   const reveal=async()=>{await page.mouse.move(300,250);await page.mouse.move(310,250);};
@@ -284,8 +284,8 @@ try {
     });
     await phase('show seasons episode-bound choices ignore late responses and restore Back',async()=>{
       const oldPath='/api/streams/series/qa-episode-1';await control({rules:{[oldPath]:{hold:true}}});await page.goto(origin+'/media/series/qa-show');
-      await expect(detail('Synthetic QA show')).toBeVisible();await page.getByRole('button',{name:/^Synthetic episode 1/}).click();await expect.poll(async()=> (await state()).pending).toContain(oldPath);await expect(button('Watch')).toBeDisabled();
-      await button('Change Episode').click();await button('Next season').click();await page.getByRole('button',{name:/^Synthetic episode 2/}).click();await expect(button('Watch')).toBeEnabled();await expect(anySeek).toBeHidden();
+      await expect(detail('Synthetic QA show')).toBeVisible();await page.getByRole('button').filter({has:page.getByText('Synthetic episode 1',{exact:true})}).click();await expect.poll(async()=> (await state()).pending).toContain(oldPath);await expect(button('Watch')).toBeDisabled();
+      await button('Change Episode').click();await button('Next season').click();await page.getByRole('button').filter({has:page.getByText('Synthetic episode 2',{exact:true})}).click();await expect(button('Watch')).toBeEnabled();await expect(anySeek).toBeHidden();
       const completedBefore=(await state()).completed.filter(row=>row.path===oldPath).length;await control({rules:{[oldPath]:{}},release:oldPath});await expect.poll(async()=> (await state()).completed.filter(row=>row.path===oldPath).length).toBeGreaterThan(completedBefore);
       await button('See streams').click();await expect(streamRow(7)).toHaveAttribute('aria-pressed','true');await expect(streamRow(5)).toBeHidden();await streamRow(8).click();await streamRow(8).click();await expect(streamRow(8)).toHaveAttribute('aria-pressed','true');await expect(anySeek).toBeHidden();await button('Close streams').click();
       await button('Watch').click();await expect(anySeek).toHaveAttribute('aria-disabled','false');await startPlaying();await frequency(440);
@@ -296,7 +296,7 @@ try {
       await expect.poll(async()=> (await state()).writes.some(write=>write.media_type==='series'&&write.media_id==='qa-show'&&write.video_id==='qa-episode-2'&&write.position>=20&&write.position<=22)).toBe(true);
       expect((await state()).watches.find(watch=>watch.media_type==='series'&&watch.media_id==='qa-show'&&watch.video_id==='qa-episode-1').position_seconds).toBe(15);
       await button('Change stream').click();await expect(streamRow(8)).toHaveAttribute('aria-pressed','true');await button('Close streams').click();
-      await button('Change Episode').click();await expect(page.getByRole('combobox',{name:'Season',exact:true})).toContainText('Season 2');await button('Previous season').click();await page.getByRole('button',{name:/^Synthetic episode 1/}).click();await expect(button('Watch')).toBeEnabled();await button('See streams').click();await expect(streamRow(5)).toHaveAttribute('aria-pressed','true');await expect(streamRow(8)).toBeHidden();await expect(anySeek).toBeHidden();
+      await button('Change Episode').click();await expect(page.getByRole('combobox',{name:'Season',exact:true})).toContainText('Season 2');await button('Previous season').click();await page.getByRole('button').filter({has:page.getByText('Synthetic episode 1',{exact:true})}).click();await expect(button('Watch')).toBeEnabled();await button('See streams').click();await expect(streamRow(5)).toHaveAttribute('aria-pressed','true');await expect(streamRow(8)).toBeHidden();await expect(anySeek).toBeHidden();
     });
   }
   evidence.fixture=await state();expect(evidence.fixture.unexpected).toEqual([]);expect(evidence.pageErrors).toEqual([]);
@@ -314,7 +314,7 @@ try {
 } catch(error) {
   evidence.result='fail';evidence.error=error.stack;process.exitCode=1;
   if(page)await page.screenshot({path:join(output,'failure.png')}).catch(()=>{});
-  if(passive)evidence.failureState=await passive(()=>({video:document.querySelector('video')?{paused:document.querySelector('video').paused,time:document.querySelector('video').currentTime,ready:document.querySelector('video').readyState,volume:document.querySelector('video').volume,muted:document.querySelector('video').muted,speed:document.querySelector('video').playbackRate}:null,contexts:globalThis.__wadiAudioProbe?.probes.map(a=>({state:a.context.state,time:a.context.currentTime})),controls:document.querySelector('.player-chrome')?.innerText})).catch(error=>({error:String(error)}));
+  if(passive)evidence.failureState=await passive(()=>({video:document.querySelector('video')?{paused:document.querySelector('video').paused,time:document.querySelector('video').currentTime,ready:document.querySelector('video').readyState,volume:document.querySelector('video').volume,muted:document.querySelector('video').muted,speed:document.querySelector('video').playbackRate}:null,contexts:globalThis.__wadiAudioProbe?.probes.map(a=>({state:a.context.state,time:a.context.currentTime})),controls:document.querySelector('.player-chrome')?.innerText})).catch(error=>({error:String(error),stack:error.stack}));
   console.error(JSON.stringify({lastSamples:evidence.samples.slice(-6),failureState:evidence.failureState,console:evidence.console,pageErrors:evidence.pageErrors}));
   console.error(error);
 } finally {
