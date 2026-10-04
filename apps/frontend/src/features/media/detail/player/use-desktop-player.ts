@@ -43,7 +43,13 @@ export function useDesktopPlayer({ videoRef, source, hints, savedPosition, watch
     if(!desktop||!source||!video)return
     const sourceKey=JSON.stringify([source,headers])
     const sourceChanged=activeSource.current!==sourceKey
-    if(sourceChanged){activeSource.current=sourceKey;started.current=false;playing.current=true;audio.current=null;forceVideo.current=false}
+    if(sourceChanged){
+      // The saved preference can arrive before resume data makes the first
+      // source available. Keep it for that initial launch; later sources must
+      // discard track IDs belonging to the previous stream.
+      if(activeSource.current!==null)audio.current=null
+      activeSource.current=sourceKey;started.current=false;playing.current=true;forceVideo.current=false
+    }
     if(!started.current){position.current=restore.current;started.current=true}
     let cancelled=false,hls:Hls|null=null
     const id=crypto.randomUUID()

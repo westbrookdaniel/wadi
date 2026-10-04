@@ -163,7 +163,9 @@ try {
     await audio(/^Japanese/,880,false);
     await expect(button('Play')).toBeEnabled();await expect(button('Unmute')).toBeVisible();await expect.poll(position).toBe(65);await expect(button('Playback speed')).toContainText('1.25x');if(engine==='native')expect(await mediaProperties()).toMatchObject({muted:true,speed:1.25});
     await button('Unmute').click();await expect.poll(mediaProperties).toMatchObject(engine==='native'?{volume:selectedVolume.volume,muted:false,speed:1.25}:{gain:selectedVolume.gain});await startPlaying();
-    // Restore speed through the UI before the frequency oracle.
+    // Preservation is proved above. Restore normal volume and speed through
+    // the UI before measuring decoded output at the fixed amplitude floor.
+    await volume.focus();await page.keyboard.press('End');
     await button('Playback speed').click();await button('1x').click();await frequency(880);
   });
   await phase('real captions repeated language alternative off on and keyboard close',async()=>{
@@ -218,13 +220,15 @@ try {
   });
   await phase('Back and explicit source reopen retain resume and audio preference',async()=>{
     await reveal();await button('Pause').click();const box=await seek.boundingBox();await seek.click({position:{x:box.width*65/120,y:box.height/2}});await expect.poll(position).toBe(65);
+    await control({clearWrites:true});
     await reveal();await button('Back').click();await expect(seek).toBeHidden();
     await expect(page.locator('[aria-label="Synthetic QA film details"]')).toBeVisible();
-    await expect.poll(async()=> (await state()).watch.position_seconds).toBeGreaterThanOrEqual(64);
+    await expect.poll(async()=> (await state()).writes.some(write=>write.position>=64&&write.position<=66)).toBe(true);
     await page.getByRole('button').filter({has:page.getByText('QA 2',{exact:true})}).click();
     await expect(seek).toHaveAttribute('aria-disabled','false');await startPlaying();if(engine==='native')await attachNative();await frequency(880);
     expect(await position()).toBeGreaterThanOrEqual(64);expect(await position()).toBeLessThan(75);
     await reveal();await button('Audio track').click();await expect(option('Audio tracks',/^Japanese/)).toHaveAttribute('aria-checked','true');await page.keyboard.press('Escape');
+    await button('Copy stream link').click();await expect(page.getByRole('status').filter({hasText:'Stream link copied.'})).toBeVisible();expect(await clipboard()).toBe(source(2));
   });
   if(engine==='web') await phase('separate injected clipboard failure has selectable fallback and close',async()=>{
     await passive(()=>{navigator.clipboard.writeText=async()=>{throw new Error('Synthetic write denial');};});

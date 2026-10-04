@@ -16,6 +16,35 @@ vi.mock('hls.js', () => ({ default: class {
 
 afterEach(() => { delete window.wadiDesktop; vi.restoreAllMocks() })
 
+it('applies a restored audio preference before the initial source is ready and resets it for a different source', async () => {
+  const video = document.createElement('video')
+  vi.spyOn(video, 'play').mockResolvedValue()
+  vi.spyOn(video, 'pause').mockImplementation(() => {})
+  vi.spyOn(video, 'load').mockImplementation(() => {})
+  const media = vi.fn<DesktopBridge['media']>(async (action, payload) => {
+    if (action !== 'start') return { error: null }
+    const input = z.object({ id: z.string(), audio: z.string().nullable() }).parse(payload)
+    return { id: input.id, url: 'http://127.0.0.1/session/index.m3u8', offset: 60, duration: 180, mode: 'audio', hasVideo: true, hasAudio: true, audioTracks: [], selectedAudioTrackId: input.audio }
+  })
+  window.wadiDesktop = {
+    getStartFullscreen: async () => false, setStartFullscreen: async value => value, onStartFullscreenChanged: () => () => {}, appVersion: async () => '0.1.0', updateState: async () => ({ kind: 'idle' }), checkUpdates: async () => ({ kind: 'idle' }), downloadUpdate: async () => {}, onUpdate: () => () => {},
+    media, onOpenSettings: () => () => {}, openPage: async () => {}, session: async () => true,
+    signIn: async () => true, request: async () => ({ status: 200, body: null }), openExternal: async () => {},
+  }
+  const videoRef = { current: video }
+  const { result, rerender, unmount } = renderHook(({ source }: { source?: string }) => useDesktopPlayer({ videoRef, source, hints: {}, savedPosition: 60, watched: false, onProgressCommit: () => {} }), { initialProps: {} })
+  act(() => result.current.setAudioTrack('2'))
+  expect(media).not.toHaveBeenCalled()
+  rerender({ source: 'https://example.com/movie.mkv' })
+  await waitFor(() => expect(result.current.state.status).toBe('ready'))
+  expect(media.mock.calls.filter(([action]) => action === 'start').at(-1)?.[1]).toMatchObject({ audio: '2' })
+  expect(result.current.state.selectedAudioTrackId).toBe('2')
+  rerender({ source: 'https://example.com/other-movie.mkv' })
+  await waitFor(() => expect(result.current.state.status).toBe('ready'))
+  expect(media.mock.calls.filter(([action]) => action === 'start').at(-1)?.[1]).toMatchObject({ audio: null })
+  unmount()
+})
+
 it('keeps the conversion session on pause, resume, buffered seek and speed changes', async () => {
   const ended = vi.fn()
   const video = document.createElement('video')
