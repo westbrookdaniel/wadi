@@ -47,7 +47,8 @@ const server = createServer(async (req, res) => {
       const method = path === '/api/watch-progress' ? 'PUT' : path === '/api/profiles/select' || ['/api/auth/login','/api/auth/register'].includes(path) ? 'POST' : 'GET';
       const progressTarget = body.media_type === 'movie' && ['qa-film','qa-film-b'].includes(body.media_id) && body.video_id == null || body.media_type === 'series' && body.media_id === 'qa-show' && episodes.some(episode=>episode.id===body.video_id);
       const progressValid = path !== '/api/watch-progress' || (progressTarget && Number.isFinite(body.position_seconds) && body.position_seconds >= 0 && body.position_seconds <= 121 && (body.duration_seconds === undefined || body.duration_seconds === null || Number.isFinite(body.duration_seconds)));
-      if(req.method !== method || !progressValid){unexpected.push({path,method:req.method,reason:'Fixture contract mismatch'});return json(res,{error:'Fixture contract mismatch'},400);}
+      const allowedMethods = path === '/api/profiles/qa-profile/playback-settings' ? ['GET','PUT','DELETE'] : [method];
+      if(!allowedMethods.includes(req.method) || !progressValid){unexpected.push({path,method:req.method,reason:'Fixture contract mismatch'});return json(res,{error:'Fixture contract mismatch'},400);}
     }
     if (!path.startsWith('/qa/')) {
       requests.push({path, method:req.method, at:Date.now()});

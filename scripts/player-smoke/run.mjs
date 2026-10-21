@@ -267,8 +267,8 @@ try {
       await page.goto(origin+'/media/movie/qa-film');await expect.poll(async()=> (await state()).pending).toContain(path);await expect(button('Watch')).toBeDisabled();
       await button('Home').click();await button('Continue Synthetic second film').click();
       await expect(detail('Synthetic second film')).toBeVisible();await expect(button('Watch')).toBeEnabled();await expect(anySeek).toBeHidden();
-      const completedBefore=(await state()).completed.filter(row=>row.path===path).length;
-      await control({rules:{[path]:{}},release:path});await expect.poll(async()=> (await state()).completed.filter(row=>row.path===path).length).toBeGreaterThan(completedBefore);
+      const requestedBefore=(await state()).requests.filter(row=>row.path===path).length;
+      await control({rules:{[path]:{}},release:path});await expect.poll(async()=> { const value=await state(); return [...value.completed,...value.aborted].filter(row=>row.path===path).length; }).toBeGreaterThanOrEqual(requestedBefore);
       await button('See streams').click();await expect(streamRow(3)).toHaveAttribute('aria-pressed','true');await expect(streamRow(1)).toBeHidden();await expect(streamRow(2)).toBeHidden();await button('Close streams').click();
       await button('Watch').click();await expect(anySeek).toHaveAttribute('aria-disabled','false');await startPlaying();await frequency(440);
       const selected=await selectedSession();expect(selected.target).toMatchObject({mediaType:'movie',mediaId:'qa-film-b',videoId:null});expect(selected.stream.url).toBe(source(3));await button('Back').click();
@@ -286,7 +286,7 @@ try {
       const oldPath='/api/streams/series/qa-episode-1';await control({rules:{[oldPath]:{hold:true}}});await page.goto(origin+'/media/series/qa-show');
       await expect(detail('Synthetic QA show')).toBeVisible();await page.getByRole('button').filter({has:page.getByText('Synthetic episode 1',{exact:true})}).click();await expect.poll(async()=> (await state()).pending).toContain(oldPath);await expect(button('Watch')).toBeDisabled();
       await button('Change Episode').click();await button('Next season').click();await page.getByRole('button').filter({has:page.getByText('Synthetic episode 2',{exact:true})}).click();await expect(button('Watch')).toBeEnabled();await expect(anySeek).toBeHidden();
-      const completedBefore=(await state()).completed.filter(row=>row.path===oldPath).length;await control({rules:{[oldPath]:{}},release:oldPath});await expect.poll(async()=> (await state()).completed.filter(row=>row.path===oldPath).length).toBeGreaterThan(completedBefore);
+      const requestedBefore=(await state()).requests.filter(row=>row.path===oldPath).length;await control({rules:{[oldPath]:{}},release:oldPath});await expect.poll(async()=> { const value=await state(); return [...value.completed,...value.aborted].filter(row=>row.path===oldPath).length; }).toBeGreaterThanOrEqual(requestedBefore);
       await button('See streams').click();await expect(streamRow(7)).toHaveAttribute('aria-pressed','true');await expect(streamRow(5)).toBeHidden();await streamRow(8).click();await streamRow(8).click();await expect(streamRow(8)).toHaveAttribute('aria-pressed','true');await expect(anySeek).toBeHidden();await button('Close streams').click();
       await button('Watch').click();await expect(anySeek).toHaveAttribute('aria-disabled','false');await startPlaying();await frequency(440);
       const selected=await selectedSession();expect(selected.target).toMatchObject({mediaType:'series',mediaId:'qa-show',videoId:'qa-episode-2',episodeContext:{season:2,episode:2}});expect(selected.stream.url).toBe(source(8));evidence.detailEpisode={target:selected.target,source:selected.stream.url};
