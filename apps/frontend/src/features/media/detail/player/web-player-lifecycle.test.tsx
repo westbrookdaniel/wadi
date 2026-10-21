@@ -51,9 +51,9 @@ beforeEach(() => {
   })
 })
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.clearAllMocks() })
-function mount() {
+function mount(autoPlay?: boolean) {
   const onProgressCommit = vi.fn()
-  const options = { canvasRef: { current: null }, url: '/fixture.webm', authToken: null, savedPosition: 60, watched: false, preferredAudioLanguage: null, selectedAudioTrackId: null, initialPlaybackSpeed: 1, onProgressCommit }
+  const options = { canvasRef: { current: null }, url: '/fixture.webm', authToken: null, savedPosition: 60, watched: false, preferredAudioLanguage: null, selectedAudioTrackId: null, initialPlaybackSpeed: 1, onProgressCommit, autoPlay }
   return { ...renderHook(() => useMediabunnyPlayer(options)), onProgressCommit }
 }
 async function ready(hook: ReturnType<typeof mount>) {
@@ -151,4 +151,17 @@ it('cancels a paced audio consumer before its next read and then disposes on Bac
   await act(async () => vi.advanceTimersByTimeAsync(100))
   expect(mocks.audioNext).toHaveBeenCalledTimes(1)
   expect(mocks.disposed).toHaveBeenCalledTimes(1)
+})
+
+it('keeps explicitly paused source switches paused even when the audio context is already running', async () => {
+  vi.stubGlobal('AudioContext', class {
+    state = 'running'; currentTime = 0; destination = {}
+    createGain() { return { gain: { value: 0 }, connect() {} } }
+    resume = mocks.resume; close = mocks.close
+  })
+  const hook = mount(false)
+  await ready(hook)
+  expect(hook.result.current.state.playing).toBe(false)
+  expect(mocks.resume).not.toHaveBeenCalled()
+  hook.unmount()
 })

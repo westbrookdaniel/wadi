@@ -11,6 +11,7 @@ import { canControlPlayback, type PlayerState } from '@/features/media/detail/pl
 import { TvPicker } from './tv-picker'
 
 type Props = Partial<SubtitleAppearance> & {
+  onOpenSources?: () => void
   onUseDefaults?: () => void
   onSubtitleOutlineWidthChange?: (value: number) => void
   onSubtitleOutlineColorChange?: (value: string) => void
@@ -120,6 +121,7 @@ export function TvPlayerChrome(props: Props) {
           <div><button type="button" onClick={() => setSeek(Math.max(0, seek - 10))}>−10 seconds</button><button type="button" onClick={() => { props.onSeek(seek); setSeek(null) }}>Apply seek</button><button type="button" onClick={() => setSeek(Math.min(state.duration, seek + 10))}>+10 seconds</button><button type="button" onClick={() => setSeek(null)}>Cancel</button></div>
         </div> : <div className="tv-player-actions">
           <button ref={play} type="button" data-tv-default className="tv-primary" disabled={disabled} onClick={props.onTogglePlay}>{state.playing ? 'Pause' : 'Play'}</button>
+          {props.onOpenSources ? <button type="button" onClick={props.onOpenSources}>Quality & sources</button> : null}
           {props.hasEpisodeSwapper ? <button type="button" onClick={props.onOpenEpisodeSwapper}>Episodes</button> : null}
           <CopyStreamLink url={props.streamLink} />
           <TvPicker label="Audio" value={state.selectedAudioTrackId ?? ''} disabled={!state.audioTracks.length} options={state.audioTracks.map(track => ({ value: track.id, label: track.label || track.language }))} onChange={props.onSelectAudioTrack} />

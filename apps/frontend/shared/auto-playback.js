@@ -1,0 +1,33 @@
+import { z } from 'zod'
+
+export const autoPlaybackSchema = z.object({
+  enabled: z.boolean().default(false),
+  skipSelection: z.boolean().default(false),
+  autoplayNext: z.boolean().default(false),
+  nextEpisodeLeadSeconds: z.number().int().min(0).max(600).default(0),
+  ignoreStartSeconds: z.number().int().min(0).max(300).default(0),
+  finishRemainingSeconds: z.number().int().min(0).max(600).default(0),
+  countdownSeconds: z.number().int().min(3).max(30).default(10),
+  preferredResolution: z.number().int().min(480).max(2160).default(1080),
+  maxResolution: z.number().int().min(480).max(2160).default(2160),
+  maxSizeGB: z.number().min(0).max(100).default(0),
+  qualityWeight: z.number().min(0).max(100).default(70),
+  sizeWeight: z.number().min(0).max(100).default(30),
+  codec: z.enum(['any', 'H.264', 'HEVC', 'AV1']).default('any'),
+  language: z.string().max(20).default('any'),
+  cachedMode: z.enum(['any', 'prefer', 'only']).default('any'),
+  cachedIndicator: z.string().max(80).default('⚡'),
+  preferredAddon: z.string().max(512).default(''),
+  excludeCam: z.boolean().default(true),
+  allowHdr: z.boolean().default(true),
+  allowUnknown: z.boolean().default(true),
+  autoRecover: z.boolean().default(true),
+  recoveryAttempts: z.number().int().min(1).max(5).default(2),
+  startupTimeoutSeconds: z.number().int().min(10).max(120).default(30),
+  prefetchNext: z.boolean().default(true),
+  preferBingeGroup: z.boolean().default(true),
+  preferCompatible: z.boolean().default(true),
+  learnSourceReliability: z.boolean().default(true),
+  excludedWords: z.string().max(500).default(''),
+})
+export const defaultAutoPlayback = autoPlaybackSchema.parse({})

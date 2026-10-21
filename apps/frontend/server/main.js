@@ -1,3 +1,4 @@
+import { autoPlaybackSchema } from '../shared/auto-playback.js';
 import { authThrottle } from './auth-throttle.js';
 import { addIntegrations } from './integrations.js';
 import { addIntroDbRoutes } from './introdb.js';
@@ -103,6 +104,24 @@ export function createApp({ database = process.env.DATABASE_URL, sessionDays = 3
     });
     app.post('/api/auth/logout', async (req, res) => { (await run('DELETE FROM sessions WHERE token_hash=?', req.tokenHash)); res.sendStatus(204); });
     const ownProfile = async (req, id) => (await get('SELECT * FROM profiles WHERE id=? AND user_id=?', id, req.user.id)) ?? fail(404, 'Profile not found');
+    app.get('/api/profiles/:id/playback-settings', async (req, res) => {
+        await ownProfile(req, req.params.id);
+        const row = await get('SELECT auto_playback_json AS value FROM user_settings WHERE user_id=? AND profile_id=?', req.user.id, req.params.id);
+        const saved = row ? JSON.parse(row.value) : {};
+        res.json({ settings: Object.keys(saved).length ? autoPlaybackSchema.parse(saved) : null });
+    });
+    app.put('/api/profiles/:id/playback-settings', async (req, res) => {
+        await ownProfile(req, req.params.id);
+        const value = autoPlaybackSchema.strict().parse(req.body);
+        if (value.enabled && value.cachedMode !== 'any' && !value.cachedIndicator.replace(/[\uFE0E\uFE0F]/g, '').trim()) fail(400, 'Enter a cached indicator');
+        await run('INSERT INTO user_settings(user_id,profile_id,auto_playback_json) VALUES(?,?,?) ON CONFLICT(user_id,profile_id) DO UPDATE SET auto_playback_json=excluded.auto_playback_json,updated_at=wadi_now()', req.user.id, req.params.id, JSON.stringify(value));
+        res.json({ settings: value });
+    });
+    app.delete('/api/profiles/:id/playback-settings', async (req, res) => {
+        await ownProfile(req, req.params.id);
+        await run("UPDATE user_settings SET auto_playback_json='{}',updated_at=wadi_now() WHERE user_id=? AND profile_id=?", req.user.id, req.params.id);
+        res.json({ settings: null });
+    });
     app.get('/api/profiles', async (req, res) => res.json({ items: (await all('SELECT * FROM profiles WHERE user_id=? ORDER BY created_at', req.user.id)) }));
     app.post('/api/profiles', async (req, res) => {
         const b = profileInput.parse(req.body);

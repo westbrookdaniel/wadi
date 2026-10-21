@@ -96,7 +96,7 @@ const profileSchema = z.object({
   avatarKey: z.string().trim().max(2048).refine(value => PROFILE_AVATAR_OPTIONS.some(option => option.key === value) || isAvatarImageUrl(value), "Choose a colour or enter an HTTP image URL."),
 });
 
-const settingsSections = [['profiles', 'Profiles'], ['home', 'Home'], ['playback', 'Playback on this device'], ['skip-segments', 'Skip segments'], ['auto-pick', 'Auto-pick & autoplay'], ['plugins', 'Plugins'], ['account', 'Account'], ['experimental', 'Experimental']];
+const settingsSections = [['profiles', 'Profiles'], ['home', 'Home'], ['playback', 'Playback on this device'], ['skip-segments', 'Skip segments'], ['auto-pick', 'Playback defaults'], ['plugins', 'Plugins'], ['account', 'Account'], ['experimental', 'Experimental']];
 
 export function ProfileSettingsPage() {
   const tvMode = useDeviceStore(state => state.tvMode);
