@@ -3,7 +3,7 @@ import type { MediaPreview } from '@/api/types'
 import { Artwork } from '@/components/artwork'
 
 export function TvDetail({ media, children, sideTitle, sideContent, sideLabel, onBack }: {
-  media: MediaPreview; children?: ReactNode; sideTitle: string; sideLabel: string; sideContent: ReactNode; onBack: () => void
+  media: MediaPreview; children?: ReactNode; sideTitle: React.ReactNode; sideLabel: string; sideContent: ReactNode; onBack: () => void
 }) {
   return <div className="tv-detail" data-tv-focus-scope={`${media.id}:${sideLabel}`}>
     <header className="tv-detail-hero">

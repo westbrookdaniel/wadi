@@ -22,7 +22,7 @@ export function DetailShell({
   media: MediaPreview;
   children?: React.ReactNode;
   sideLabel: string;
-  sideTitle: string;
+  sideTitle: React.ReactNode;
   sideContent: React.ReactNode;
   onBack: () => void;
 }) {

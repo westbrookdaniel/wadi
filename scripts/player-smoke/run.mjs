@@ -227,9 +227,8 @@ try {
     await reveal();await button('Back').click();await expect(seek).toBeHidden();
     await expect(page.locator('[aria-label="Synthetic QA film details"]')).toBeVisible();
     await expect.poll(async()=> (await state()).writes.some(write=>write.media_type==='movie'&&write.media_id==='qa-film'&&write.video_id===null&&write.position>=64&&write.position<=66)).toBe(true);
-    await button('Change stream').click();
+
     await page.getByRole('button').filter({has:page.getByText('QA 2',{exact:true})}).click();
-    await expect(seek).toBeHidden();await button('Watch').click();
     await expect(seek).toHaveAttribute('aria-disabled','false');await startPlaying();if(engine==='native')await attachNative();await frequency(880);
     expect(await position()).toBeGreaterThanOrEqual(64);expect(await position()).toBeLessThan(75);
     await reveal();await button('Audio track').click();await expect(option('Audio tracks',/^Japanese/)).toHaveAttribute('aria-checked','true');await page.keyboard.press('Escape');
@@ -247,56 +246,55 @@ try {
     const streamRow=id=>page.getByRole('button').filter({has:page.getByText(`QA ${id}`,{exact:true})});
     const anySeek=page.getByRole('slider',{name:/^Seek /});
     const selectedSession=()=>passive(()=>{const key=new URL(location.href).searchParams.get('playback');const raw=key&&sessionStorage.getItem(`wadi.playback.qa-profile.${key}`);return raw?JSON.parse(raw):null;});
-    await phase('movie details auto-select on off explicit Watch and Back keep manual choice',async()=>{
+    await phase('movie details wait for direct stream playback with auto-select on and off',async()=>{
       for(const enabled of [false,true]) {
         await page.goto(origin+`/qa/bootstrap?tracks=1&detail=1&auto=${enabled?1:0}`);
-        await expect(detail('Synthetic QA film')).toBeVisible();await expect(button('Watch')).toBeEnabled();await expect(anySeek).toBeHidden();await expect(page).not.toHaveURL(/playback=/);
-        await button('See streams').click();await expect(streamRow(1)).toHaveAttribute('aria-pressed','true');
-        await streamRow(2).focus();await page.keyboard.press('Enter');await expect(streamRow(2)).toHaveAttribute('aria-pressed','true');await expect(anySeek).toBeHidden();
-        await page.keyboard.press('Escape');await expect(page.getByRole('region',{name:'Choose stream'})).toBeHidden();await expect(button('Change stream')).toBeFocused();
-        await button('Watch').focus();await page.keyboard.press('Enter');await expect(seek).toHaveAttribute('aria-disabled','false');await startPlaying();await frequency(440);
+        await expect(detail('Synthetic QA film')).toBeVisible();await expect(button('Watch')).toHaveCount(0);await expect(anySeek).toBeHidden();await expect(page).not.toHaveURL(/playback=/);
+        await expect(streamRow(1)).toBeEnabled();
+        await streamRow(2).focus();await page.keyboard.press('Enter');await expect(seek).toHaveAttribute('aria-disabled','false');await startPlaying();await frequency(440);
         expect((await selectedSession()).stream.url).toBe(source(2));
         await reveal();await button('Copy stream link').click();await expect(page.getByRole('status').filter({hasText:'Stream link copied.'})).toBeVisible();expect(await clipboard()).toBe(source(2));
-        await button('Back').click();await expect(button('Watch')).toBeEnabled();await expect(detail('Synthetic QA film')).toBeVisible();
-        await button('Change stream').click();await expect(streamRow(2)).toHaveAttribute('aria-pressed','true');await button('Close streams').focus();await page.keyboard.press('Enter');await expect(button('Change stream')).toBeFocused();
+        await button('Back').click();await expect(detail('Synthetic QA film')).toBeVisible();
+        await expect(streamRow(2)).toBeEnabled();
       }
-      await page.setViewportSize({width:390,height:844});await button('Change stream').click();await expect(streamRow(2)).toHaveAttribute('aria-pressed','true');await page.screenshot({path:join(output,'movie-inline-mobile.png')});await button('Close streams').click();await page.setViewportSize({width:1280,height:800});
+      await page.screenshot({path:join(output,'movie-detail.png')});
+      await page.setViewportSize({width:390,height:844});await expect(streamRow(2)).toBeEnabled();await page.screenshot({path:join(output,'movie-inline-mobile.png')});await page.setViewportSize({width:1280,height:800});
     });
     await phase('late movie response cannot replace another title reached through browsing',async()=>{
       const path='/api/streams/movie/qa-film';await control({rules:{[path]:{hold:true}}});
-      await page.goto(origin+'/media/movie/qa-film');await expect.poll(async()=> (await state()).pending).toContain(path);await expect(button('Watch')).toBeDisabled();
+      await page.goto(origin+'/media/movie/qa-film');await expect.poll(async()=> (await state()).pending).toContain(path);await expect(anySeek).toBeHidden();
       await button('Home').click();await button('Continue Synthetic second film').click();
-      await expect(detail('Synthetic second film')).toBeVisible();await expect(button('Watch')).toBeEnabled();await expect(anySeek).toBeHidden();
+      await expect(detail('Synthetic second film')).toBeVisible();await expect(page.getByRole('combobox',{name:'Source filter',exact:true})).toBeVisible();await expect(anySeek).toBeHidden();
       const requestedBefore=(await state()).requests.filter(row=>row.path===path).length;
       await control({rules:{[path]:{}},release:path});await expect.poll(async()=> { const value=await state(); return [...value.completed,...value.aborted].filter(row=>row.path===path).length; }).toBeGreaterThanOrEqual(requestedBefore);
-      await button('See streams').click();await expect(streamRow(3)).toHaveAttribute('aria-pressed','true');await expect(streamRow(1)).toBeHidden();await expect(streamRow(2)).toBeHidden();await button('Close streams').click();
-      await button('Watch').click();await expect(anySeek).toHaveAttribute('aria-disabled','false');await startPlaying();await frequency(440);
+      await expect(streamRow(3)).toBeEnabled();await expect(streamRow(1)).toBeHidden();await expect(streamRow(2)).toBeHidden();
+      await streamRow(3).click();await expect(anySeek).toHaveAttribute('aria-disabled','false');await startPlaying();await frequency(440);
       const selected=await selectedSession();expect(selected.target).toMatchObject({mediaType:'movie',mediaId:'qa-film-b',videoId:null});expect(selected.stream.url).toBe(source(3));await button('Back').click();
     });
     await phase('inline loading errors empty unavailable and explicit retry',async()=>{
       const path='/api/streams/movie/qa-film-b';await control({rules:{[path]:{hold:true}}});await page.goto(origin+'/media/movie/qa-film-b');
-      await expect.poll(async()=> (await state()).pending).toContain(path);await button('See streams').click();await expect(page.getByRole('status').filter({hasText:'Loading streams'})).toBeVisible();await expect(button('Watch')).toBeDisabled();
-      await button('Close streams').click();await expect(button('See streams')).toBeFocused();await control({rules:{[path]:{}},release:path});await expect(button('Watch')).toBeEnabled();
-      await control({rules:{[path]:{empty:true}}});await page.reload();await expect(page.getByRole('status').filter({hasText:'No streams returned.'})).toBeVisible();await expect(button('Watch')).toBeDisabled();await expect(anySeek).toBeHidden();
-      await control({rules:{[path]:{unavailable:true}}});await page.reload();await expect(button('Watch')).toBeDisabled();await button('See streams').click();await page.getByRole('button',{name:/Unavailable synthetic stream/}).click();await expect(page.getByText(/Selected: Unavailable synthetic stream.*Unavailable/)).toBeVisible();await expect(anySeek).toBeHidden();
-      await control({rules:{[path]:{status:503}}});await page.reload();const error=page.getByRole('alert').filter({hasText:'Could not load streams'});await expect(error).toBeVisible();await expect(button('Watch')).toBeDisabled();
-      await control({rules:{[path]:{}}});await button('Retry').click();await expect(error).toBeHidden();await expect(button('Watch')).toBeEnabled();
+      await expect.poll(async()=> (await state()).pending).toContain(path);await expect(page.getByRole('status',{name:'Loading streams',exact:true})).toBeVisible();await expect(anySeek).toBeHidden();
+      await control({rules:{[path]:{}},release:path});await expect(page.getByRole('combobox',{name:'Source filter',exact:true})).toBeVisible();
+      await control({rules:{[path]:{empty:true}}});await page.reload();await expect(page.getByText('No streams returned.',{exact:true})).toBeVisible();await expect(anySeek).toBeHidden();
+      await control({rules:{[path]:{unavailable:true}}});await page.reload();await expect(anySeek).toBeHidden();await expect(page.getByRole('button',{name:/Unavailable synthetic stream/})).toBeDisabled();await expect(anySeek).toBeHidden();
+      await control({rules:{[path]:{status:503}}});await page.reload();const error=page.getByRole('alert').filter({hasText:'Could not load streams'});await expect(error).toBeVisible();await expect(anySeek).toBeHidden();
+      await control({rules:{[path]:{}}});await button('Retry').click();await expect(error).toBeHidden();await expect(page.getByRole('combobox',{name:'Source filter',exact:true})).toBeVisible();
     });
     await phase('show seasons episode-bound choices ignore late responses and restore Back',async()=>{
       const oldPath='/api/streams/series/qa-episode-1';await control({rules:{[oldPath]:{hold:true}}});await page.goto(origin+'/media/series/qa-show');
-      await expect(detail('Synthetic QA show')).toBeVisible();await page.getByRole('button').filter({has:page.getByText('Synthetic episode 1',{exact:true})}).click();await expect.poll(async()=> (await state()).pending).toContain(oldPath);await expect(button('Watch')).toBeDisabled();
-      await button('Change Episode').click();await button('Next season').click();await page.getByRole('button').filter({has:page.getByText('Synthetic episode 2',{exact:true})}).click();await expect(button('Watch')).toBeEnabled();await expect(anySeek).toBeHidden();
+      await expect(detail('Synthetic QA show')).toBeVisible();await page.getByRole('button').filter({has:page.getByText('Synthetic episode 1',{exact:true})}).click();await expect.poll(async()=> (await state()).pending).toContain(oldPath);await expect(anySeek).toBeHidden();
+      await button('Change Episode').click();await button('Next season').click();await page.getByRole('button').filter({has:page.getByText('Synthetic episode 2',{exact:true})}).click();await expect(page.getByRole('combobox',{name:'Source filter',exact:true})).toBeVisible();await expect(anySeek).toBeHidden();
       const requestedBefore=(await state()).requests.filter(row=>row.path===oldPath).length;await control({rules:{[oldPath]:{}},release:oldPath});await expect.poll(async()=> { const value=await state(); return [...value.completed,...value.aborted].filter(row=>row.path===oldPath).length; }).toBeGreaterThanOrEqual(requestedBefore);
-      await button('See streams').click();await expect(streamRow(7)).toHaveAttribute('aria-pressed','true');await expect(streamRow(5)).toBeHidden();await streamRow(8).click();await streamRow(8).click();await expect(streamRow(8)).toHaveAttribute('aria-pressed','true');await expect(anySeek).toBeHidden();await button('Close streams').click();
-      await button('Watch').click();await expect(anySeek).toHaveAttribute('aria-disabled','false');await startPlaying();await frequency(440);
+      await expect(streamRow(7)).toBeEnabled();await expect(streamRow(5)).toBeHidden();await streamRow(8).click();await expect(anySeek).toHaveAttribute('aria-disabled','false');await startPlaying();await frequency(440);
       const selected=await selectedSession();expect(selected.target).toMatchObject({mediaType:'series',mediaId:'qa-show',videoId:'qa-episode-2',episodeContext:{season:2,episode:2}});expect(selected.stream.url).toBe(source(8));evidence.detailEpisode={target:selected.target,source:selected.stream.url};
       await reveal();await button('Copy stream link').click();await expect(page.getByRole('status').filter({hasText:'Stream link copied.'})).toBeVisible();expect(await clipboard()).toBe(source(8));
       await reveal();await button('Pause').click();const box=await anySeek.boundingBox();await anySeek.click({position:{x:box.width*21/120,y:box.height/2}});await expect.poll(async()=>Number(await anySeek.getAttribute('aria-valuenow'))).toBe(21);
-      await control({clearWrites:true});await button('Back').click();await expect(button('Watch')).toBeEnabled();
+      await control({clearWrites:true});await button('Back').click();await expect(page.getByRole('combobox',{name:'Source filter',exact:true})).toBeVisible();
       await expect.poll(async()=> (await state()).writes.some(write=>write.media_type==='series'&&write.media_id==='qa-show'&&write.video_id==='qa-episode-2'&&write.position>=20&&write.position<=22)).toBe(true);
       expect((await state()).watches.find(watch=>watch.media_type==='series'&&watch.media_id==='qa-show'&&watch.video_id==='qa-episode-1').position_seconds).toBe(15);
-      await button('Change stream').click();await expect(streamRow(8)).toHaveAttribute('aria-pressed','true');await button('Close streams').click();
-      await button('Change Episode').click();await expect(page.getByRole('combobox',{name:'Season',exact:true})).toContainText('Season 2');await button('Previous season').click();await page.getByRole('button').filter({has:page.getByText('Synthetic episode 1',{exact:true})}).click();await expect(button('Watch')).toBeEnabled();await button('See streams').click();await expect(streamRow(5)).toHaveAttribute('aria-pressed','true');await expect(streamRow(8)).toBeHidden();await expect(anySeek).toBeHidden();
+      await expect(streamRow(8)).toBeEnabled();
+      await button('Change Episode').click();await expect(page.getByRole('combobox',{name:'Season',exact:true})).toContainText('Season 2');await button('Previous season').click();await page.getByRole('button').filter({has:page.getByText('Synthetic episode 1',{exact:true})}).click();await expect(page.getByRole('combobox',{name:'Source filter',exact:true})).toBeVisible();await expect(streamRow(5)).toBeEnabled();await expect(streamRow(8)).toBeHidden();await expect(anySeek).toBeHidden();
+      await page.screenshot({path:join(output,'series-detail.png')});
     });
   }
   evidence.fixture=await state();expect(evidence.fixture.unexpected).toEqual([]);expect(evidence.pageErrors).toEqual([]);
