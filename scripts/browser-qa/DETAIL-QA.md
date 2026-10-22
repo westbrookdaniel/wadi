@@ -4,7 +4,7 @@ Use the exact CI artifact and its REVISION. Verify the outer web-player-qa.SHA25
 
 Open `/qa/bootstrap?tracks=1&detail=1&auto=1` on the isolated loopback fixture server. Repeat with `auto=0`. Both show Synthetic QA film details and description without playing, even with legacy skip-selection enabled. There is no Watch action. Streams are always visible: the source selector appears above the full list, and choosing a stream starts playback directly. There is no stream expander. Check keyboard Enter and the 390px layout.
 
-Choose QA 2. Copy stream link must equal the source URL with `token=synthetic-only&source=2`. Back returns to details; choose QA 2 again to resume at the saved position. There is no separate selected-stream state to restore. For series, the episode chooser and episode title share one row above the source selector.
+Choose QA 2. Copy stream link must equal the source URL with `token=synthetic-only&source=2`. Back returns to details; choose QA 2 again to resume at the saved position. There is no separate selected-stream state to restore. For series, the episode chooser (Back) and episode title share one row above the source selector.
 
 Home exposes Synthetic QA film (QA 1/2), Synthetic second film (QA 3/4), and Synthetic QA show. Episode 1 in Season 1 uses QA 5/6; episode 2 in Season 2 uses QA 7/8. Choose QA 8 directly, then Back: Season 2 remains active. Change to Season 1 and verify only QA 5/6 appear. Progress must be saved against the correct episode.
 

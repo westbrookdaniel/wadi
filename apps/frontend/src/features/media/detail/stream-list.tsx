@@ -82,8 +82,7 @@ export function StreamList({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      {settings.enabled && !recommendation ? <p className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">No stream matches your auto-pick rules. Choose one below or adjust your settings.</p> : null}
-      <p className="text-xs text-muted-foreground">Choose a source below to use a different version. Playback support depends on the source and your device.</p>
+      {settings.enabled && !recommendation ? <p className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">No stream matches your auto-pick rules.</p> : null}
       <div className="grid gap-2">
         <Select value={activeFilterValue} onValueChange={setFilterValue}>
           <SelectTrigger className="w-full justify-between rounded-lg border border-border bg-card/70 px-2.5 text-sm" aria-label="Source filter">
@@ -160,7 +159,7 @@ function streamDetail(stream: PlayableStream) {
     stream.infoHash ? 'Torrent' : undefined,
   ].filter(Boolean)
 
-  return parts.length ? parts.join(' • ') : stream.url ? 'Direct stream · compatibility varies' : 'Addon stream'
+  return parts.length ? parts.join(' • ') : stream.url ? 'Direct stream' : 'Addon stream'
 }
 
 function normalizeStreamRow(

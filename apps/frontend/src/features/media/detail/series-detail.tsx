@@ -134,6 +134,7 @@ export function SeriesDetailPage({
           <span className="flex items-center gap-3">
             <Button
               data-tv-back
+              aria-label="Back"
               className="w-fit"
               type="button"
               size="sm"
@@ -145,7 +146,7 @@ export function SeriesDetailPage({
               }}
             >
               <ChevronLeft aria-hidden="true" />
-              Change Episode
+              Back
             </Button>
             <span className="min-w-0">{selectedEpisode.title}</span>
           </span>

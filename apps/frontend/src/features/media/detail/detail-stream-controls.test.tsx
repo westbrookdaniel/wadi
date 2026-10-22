@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, expect, it, vi } from 'vitest'
 import { useAutoPlayback } from '@/store/auto-playback'
@@ -73,7 +73,7 @@ it('binds streams to episodes and discards late responses', async () => {
   const play = vi.fn(), user = userEvent.setup()
   render(<QueryClientProvider client={client()}><MediaDetailPage media={series} onPlay={play} onBack={vi.fn()} /></QueryClientProvider>)
   await user.click(screen.getByText('Pilot')); await waitFor(() => expect(resolveOld).toBeDefined())
-  await user.click(screen.getByRole('button', { name: 'Change Episode' })); await user.click(screen.getByText('Second'))
+  await user.click(within(screen.getByLabelText('Available streams')).getByRole('button', { name: 'Back' })); await user.click(screen.getByText('Second'))
   await act(async () => resolveOld(response([streams[0]])))
   await user.click(await screen.findByRole('button', { name: /Synthetic B/ }))
   expect(screen.queryByRole('button', { name: /Synthetic A/ })).not.toBeInTheDocument()
