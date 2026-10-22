@@ -72,7 +72,7 @@ export function StreamList({
     [activeFilterValue, rows],
   )
 
-  if (isLoading) {
+  if (isLoading && !streams.length) {
     return <StreamListSkeleton />
   }
 
@@ -82,7 +82,8 @@ export function StreamList({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      {settings.enabled && !recommendation ? <p className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">No stream matches your auto-pick rules.</p> : null}
+      {isLoading ? <p role="status" className={mutedText}>Refreshing streams…</p> : null}
+      {settings.enabled && !isLoading && !recommendation ? <p className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">No stream matches your auto-pick rules.</p> : null}
       <div className="grid gap-2">
         <Select value={activeFilterValue} onValueChange={setFilterValue}>
           <SelectTrigger className="w-full justify-between rounded-lg border border-border bg-card/70 px-2.5 text-sm" aria-label="Source filter">

@@ -124,16 +124,17 @@ export const episodesQuery = (mediaId: string, profileId: string | null) => quer
   staleTime: 60_000,
 })
 
-export const streamsQuery = (contentType: string, mediaId: string, enabled = true) =>
+export const streamsQuery = (contentType: string, mediaId: string, enabled = true, addonId?: string) =>
   queryOptions({
-    queryKey: queryKeys.streams(contentType, mediaId),
+    queryKey: [...queryKeys.streams(contentType, mediaId), ...(addonId ? [addonId] : [])],
+    retry: false,
     staleTime: 60_000,
     queryFn: async ({ signal }) => {
       const data = await apiRequest<ApiResponses<{ streams?: StreamInfo[] }>>(
-        `/api/streams/${contentType}/${mediaId}`,
+        `/api/streams/${encodeURIComponent(contentType)}/${encodeURIComponent(mediaId)}${addonId ? `?addon_id=${encodeURIComponent(addonId)}` : ''}`,
         { signal },
       )
-      if (!data.responses.some(item => item.response.streams?.length) && data.errors?.length) throw new Error('Please try again.')
+      if (!data.responses.some(item => item.response.streams?.length) && data.errors?.length) throw new Error(data.errors.map(failure => failure.error).join(' '))
       return data.responses.flatMap((item) =>
         (item.response.streams ?? []).map((stream) => ({ ...stream, addon_id: item.addon_id, parsedMetadata: parseStreamMetadata(stream) })),
       )

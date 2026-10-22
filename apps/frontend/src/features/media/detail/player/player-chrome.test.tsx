@@ -127,3 +127,16 @@ it('audio/subtitle menus accept repeated pointer changes and keep keyboard navig
   expect(screen.queryByRole('menu')).not.toBeInTheDocument()
   expect(input.onTogglePlay).not.toHaveBeenCalled()
 })
+
+it('hides unsupported cast speed and audio-track controls while keeping cast playback controls', () => {
+  const input = props()
+  const view = render(<TooltipProvider><PlayerChrome {...input} castReady castConnected /></TooltipProvider>)
+  expect(screen.queryByRole('button', { name: 'Playback speed' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Audio track' })).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Stop casting' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Pause' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Subtitles' })).toBeEnabled()
+  view.rerender(<TooltipProvider><PlayerChrome {...input} /></TooltipProvider>)
+  expect(screen.getByRole('button', { name: 'Playback speed' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Audio track' })).toBeInTheDocument()
+})

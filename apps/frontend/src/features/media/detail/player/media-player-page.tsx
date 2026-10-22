@@ -1,3 +1,5 @@
+import { DetailStreamControls } from '../detail-stream-controls'
+import { useStreams, prefetchStreams } from '../use-streams'
 import { useSubtitleTrack } from './use-subtitle-track'
 import { CopyStreamLink } from './copy-stream-link'
 import { useMediabunnyPlayer } from './use-mediabunny-player'
@@ -18,7 +20,6 @@ import { SourceControls } from './source-controls'
 import { useSourceRecovery } from './use-source-recovery'
 import { nextReleasedEpisode, rankStreams } from '../auto-pick'
 import { NextEpisodePrompt } from './next-episode-prompt'
-import { StreamList } from '../stream-list'
 import { episodesQuery } from '@/api/queries'
 import { useDesktopPlayer } from './use-desktop-player'
 import { desktopBridge } from '@/lib/desktop'
@@ -60,7 +61,6 @@ import {
 import {
   queryKeys,
   type SubtitleQueryContext,
-  streamsQuery,
   subtitlesQuery,
   updateWatchProgress,
 } from '@/api/queries'
@@ -122,7 +122,7 @@ export function MediaPlayerPage({
   const keepFamily = rankingContext.preferBingeGroup ?? autoSettings.preferBingeGroup
   const [sourceResume, setSourceResume] = useState<{ url: string; position: number; playing: boolean } | null>(null)
   const streamUrl = activeStream.url
-  const currentSources = useQuery(streamsQuery(activeTarget.mediaType, activeTarget.videoId ?? activeTarget.mediaId, defaultsReady && (autoSettings.autoRecover || sourceSheetOpen)))
+  const currentSources = useStreams(activeTarget.mediaType, activeTarget.videoId ?? activeTarget.mediaId, defaultsReady && (autoSettings.autoRecover || sourceSheetOpen))
   const eligibleSources = useMemo(() => rankStreams(currentSources.data ?? [], autoSettings, rankingContext)
     .filter(row => row.eligible).map(row => row.stream), [currentSources.data, autoSettings, rankingContext])
   const sourceCandidates = useMemo(() => eligibleSources.filter(candidate => quality === null || parseStreamMetadata(candidate).resolution.value === quality), [eligibleSources, quality])
@@ -175,17 +175,14 @@ export function MediaPlayerPage({
   const [selectedSwapSeason, setSelectedSwapSeason] = useState<number | null>(activeTarget.episodeContext?.season ?? null)
   const [pendingEpisode, setPendingEpisode] = useState<Episode | null>(null)
   const pendingRankingContext = useSourceRanking(pendingEpisode ? { ...activeTarget, episodeContext: pendingEpisode } : activeTarget)
-  const episodeStreams = useQuery(
-    streamsQuery(
+  const episodeStreams = useStreams(
       activeTarget.mediaType,
       pendingEpisode?.id ?? "",
       Boolean(pendingEpisode),
-    ),
   )
 
 
 
-  const lastSentCastPropsRef = useRef<string | null>(null)
 
   const streamSubtitleList = useMemo(
     () => mergeSubtitleTracks(
@@ -301,7 +298,7 @@ export function MediaPlayerPage({
   const recovery = useSourceRecovery({
     episodeKey: `${profileId}:${activeTarget.mediaType}:${activeTarget.mediaId}:${activeTarget.videoId}`,
     source: activeStream, state: player.state, candidates: sourceCandidates,
-    enabled: defaultsReady && autoSettings.autoRecover && currentSources.isSuccess && !castConnected && resume.ready && !sourceSheetOpen,
+    enabled: defaultsReady && autoSettings.autoRecover && currentSources.isSuccess && (sourceCandidates.some(candidate => candidate.url && candidate.url !== streamUrl) || !currentSources.isFetching) && !castConnected && resume.ready && !sourceSheetOpen,
     attempts: autoSettings.recoveryAttempts, timeoutSeconds: autoSettings.startupTimeoutSeconds,
     savedPosition: resume.savedPosition, onSwitch: switchSource, onFailure: onSourceFailure,
   })
@@ -328,7 +325,7 @@ export function MediaPlayerPage({
     const key = `${profileId}:${activeTarget.mediaType}:${nextEpisode.id}`
     if (prefetchedNext.current === key) return
     prefetchedNext.current = key
-    void queryClient.prefetchQuery(streamsQuery(activeTarget.mediaType, nextEpisode.id))
+    void prefetchStreams(queryClient, activeTarget.mediaType, nextEpisode.id).catch(() => { /* The episode picker exposes discovery errors and retry. */ })
   }, [defaultsReady, autoSettings.prefetchNext, autoSettings.autoplayNext, autoSettings.nextEpisodeLeadSeconds, autoSettings.countdownSeconds, nextEpisode, castConnected, tvMode, externalPreferences.data, player.state.duration, player.state.currentTime, queryClient, activeTarget.mediaType, profileId])
   const chooseQuality = (resolution: number | null) => {
     const next = eligibleSources.find(candidate => resolution === null || parseStreamMetadata(candidate).resolution.value === resolution)
@@ -456,9 +453,7 @@ export function MediaPlayerPage({
       "duration",
       "volume",
       "muted",
-      "playbackSpeed",
       "selectedSubtitlesTrackId",
-      "selectedAudioTrackId",
     ]
     propsToObserve.forEach((propName) => {
       void castTransport.sendMessage({ type: "observeProp", propName })
@@ -466,42 +461,13 @@ export function MediaPlayerPage({
   }, [activeStream.url, castConnected, castTransport, pauseLocal, streamSubtitleList])
 
   useEffect(() => {
-    if (!castConnected) {
-      lastSentCastPropsRef.current = null
-      return
-    }
-    const castProps = {
-      playbackSpeed: playbackState.playbackSpeed,
-      selectedSubtitlesTrackId: playbackState.selectedSubtitleId,
-      selectedAudioTrackId: playbackState.selectedAudioTrackId,
-    }
-    const serialized = JSON.stringify(castProps)
-    if (serialized === lastSentCastPropsRef.current) {
-      return
-    }
-    lastSentCastPropsRef.current = serialized
-    void castTransport.sendMessage({
-      type: "setProp",
-      propName: "playbackSpeed",
-      propValue: castProps.playbackSpeed,
-    })
+    if (!castConnected) return
     void castTransport.sendMessage({
       type: "setProp",
       propName: "selectedSubtitlesTrackId",
-      propValue: castProps.selectedSubtitlesTrackId,
+      propValue: playbackState.selectedSubtitleId,
     })
-    void castTransport.sendMessage({
-      type: "setProp",
-      propName: "selectedAudioTrackId",
-      propValue: castProps.selectedAudioTrackId,
-    })
-  }, [
-    castConnected,
-    castTransport,
-    playbackState.playbackSpeed,
-    playbackState.selectedAudioTrackId,
-    playbackState.selectedSubtitleId,
-  ])
+  }, [castConnected, castTransport, playbackState.selectedSubtitleId])
 
   const activeSubtitleTrack = useMemo(
     () => streamSubtitleList.find((track) => track.id === playbackState.selectedSubtitleId),
@@ -539,7 +505,7 @@ export function MediaPlayerPage({
     setEpisodeSheetOpen(false)
   }, [pendingEpisode, activeTarget, releaseCatalog.data, saveProgress, player.state.currentTime, player.state.duration, onPlaybackChange, setPendingEpisode, setEpisodeSheetOpen])
   useEffect(() => {
-    if (!defaultsReady || !pendingEpisode || episodeStreams.isFetching || episodeStreams.error || !episodeStreams.data) return
+    if (!defaultsReady || !pendingEpisode || !episodeStreams.data.length) return
     const next = rankStreams(episodeStreams.data, autoSettings, pendingRankingContext).find(row => row.eligible)?.stream
     // Completing the provider request transitions the external player and its episode state together.
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -583,13 +549,10 @@ export function MediaPlayerPage({
   }, [castConnected, castState.muted, castTransport, player])
 
   const onChangeSpeed = useCallback((speed: number) => {
+    if (castConnected) return
     updatePlaybackState({ playbackSpeed: speed })
-    if (castConnected) {
-      void castTransport.sendMessage({ type: "setProp", propName: "playbackSpeed", propValue: speed })
-      return
-    }
     player.setPlaybackSpeed(speed)
-  }, [castConnected, castTransport, player, updatePlaybackState])
+  }, [castConnected, player, updatePlaybackState])
 
   const effectiveState: PlayerState = castConnected
     ? {
@@ -602,9 +565,6 @@ export function MediaPlayerPage({
           castState.paused === undefined
             ? player.state.playing
             : !(castState.paused as boolean),
-      playbackSpeed: Number(castState.playbackSpeed ?? player.state.playbackSpeed),
-      selectedAudioTrackId:
-          (castState.selectedAudioTrackId as string | null | undefined) ?? player.state.selectedAudioTrackId,
     }
     : player.state
 
@@ -783,12 +743,9 @@ export function MediaPlayerPage({
             onVolumeChange={onVolume}
             onToggleMute={onToggleMute}
             onSelectAudioTrack={(id) => {
+              if (castConnected) return
               updatePlaybackState({ selectedAudioTrackId: id, preferredAudioLanguage: id ? effectiveState.audioTracks.find(track => track.id === id)?.language ?? null : null })
-              if (castConnected) {
-                void castTransport.sendMessage({ type: "setProp", propName: "selectedAudioTrackId", propValue: id })
-              } else {
-                player.setAudioTrack(id)
-              }
+              player.setAudioTrack(id)
             }}
           />
 
@@ -817,7 +774,7 @@ export function MediaPlayerPage({
 
           <SourceControls open={sourceSheetOpen} onOpenChange={setSourceSheetOpen} target={activeTarget}
             qualityStreams={eligibleSources}
-            streams={currentSources.data ?? []} loading={currentSources.isFetching} error={currentSources.isError} onRetry={() => void currentSources.refetch()}
+            streams={currentSources.data ?? []} loading={currentSources.isFetching} error={Boolean(currentSources.error)} failures={currentSources.failures} onRetry={() => void currentSources.refetch()}
             activeStream={describedStream} quality={quality} onQuality={chooseQuality}
             onSelect={next => { setQuality(null); switchSource(next, recovery.getPosition(), recovery.getPlaying()) }}
             onSmallerSource={smallerSource ? () => { setQuality(parseStreamMetadata(smallerSource).resolution.value); switchSource(smallerSource, recovery.getPosition(), recovery.getPlaying()) } : undefined}
@@ -837,10 +794,11 @@ export function MediaPlayerPage({
                 onSeasonChange={season => { setSelectedSwapSeason(season); saveLastSeason(useAppStore.getState().activeProfileId, activeTarget.mediaId, season) }}
                 onSelectEpisode={episode => { setUpNext(null); setPendingEpisode(episode) }}
               />
-              {pendingEpisode && !episodeStreams.isFetching ? <div className="grid gap-3"><p className="text-sm">Choose a stream for {pendingEpisode.title}</p>{episodeStreams.error ? <><p role="alert" className="text-sm text-destructive">Could not load streams.</p><Button onClick={() => void episodeStreams.refetch()}>Retry</Button></> : <StreamList streams={episodeStreams.data ?? []} isLoading={false} onPlay={changeEpisode} />}</div> : null}
-              {pendingEpisode && episodeStreams.isFetching ? (
-                <p className="text-sm text-muted-foreground">Loading streams for {pendingEpisode.title}…</p>
-              ) : null}
+              {pendingEpisode ? <div className="grid gap-3">
+                <p className="text-sm">Choose a stream for {pendingEpisode.title}</p>
+                <DetailStreamControls streams={episodeStreams.data} isLoading={episodeStreams.isFetching} error={episodeStreams.error}
+                  failures={episodeStreams.failures} onRetry={() => void episodeStreams.refetch()} onPlay={changeEpisode} />
+              </div> : null}
             </DialogContent>
           </Dialog>
 
@@ -1114,6 +1072,7 @@ function DesktopPlayerChrome({
           </div>
 
             <div className="ml-auto flex items-center gap-1 max-[620px]:col-span-3 max-[620px]:col-start-1 max-[620px]:row-start-2 max-[620px]:w-full max-[620px]:justify-between">
+              {!castConnected ? <>
               <div className="relative">
                 <TooltipButton label="Playback speed">
                   <Button
@@ -1214,6 +1173,8 @@ function DesktopPlayerChrome({
                   </div>
                 ) : null}
               </div>
+
+              </> : null}
 
               <TooltipButton label={castUnavailableReason ?? (castConnected ? "Stop casting" : "Cast")}>
                 <Button

@@ -234,13 +234,14 @@ it('keeps the linked provider ID selected after duplicate episodes merge', async
       media_type: 'series', media_id: 'series-1', stale: false, sources: [],
       items: [{ id: 'provider-a:2:1', videoIds: ['provider-a:2:1', 'provider-b:2:1'], addonIds: ['a', 'b'], title: 'Merged premiere', season: 2, episode: 1, releasePrecision: 'unknown', releaseState: 'unknown', releaseConflicting: false, watched: false, position_seconds: 0 }],
     })
+    if (path === '/api/addons') return Promise.resolve({ items: [{ id: 'b', manifest: { name: 'Provider B', resources: ['stream'], types: ['series'] } }] })
     if (path.startsWith('/api/streams/')) return Promise.resolve({ responses: [] })
     if (path.startsWith('/api/watch-data/')) return Promise.resolve({ media_type: 'series', media_id: 'series-1', items: [] })
     return Promise.resolve({ items: [] })
   })
   const page = renderSeriesDetailPage({ preferredVideoId: 'provider-b:2:1' })
   try {
-    await waitFor(() => expect(apiRequestMock).toHaveBeenCalledWith('/api/streams/series/provider-b:2:1', expect.objectContaining({ signal: expect.any(AbortSignal) })))
+    await waitFor(() => expect(apiRequestMock).toHaveBeenCalledWith('/api/streams/series/provider-b%3A2%3A1?addon_id=b', expect.objectContaining({ signal: expect.any(AbortSignal) })))
     expect(within(screen.getByLabelText('Available streams')).getByRole('button', { name: 'Back' })).toBeInTheDocument()
     expect(screen.getByText('Merged premiere')).toBeInTheDocument()
   } finally { page.unmount(); useAppStore.getState().setActiveProfileId(null) }

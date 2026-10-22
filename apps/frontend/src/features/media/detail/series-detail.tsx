@@ -1,3 +1,4 @@
+import { useStreams } from './use-streams'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { WatchedButton } from './watch-state'
 import { useWatchToggle } from './use-watch-toggle'
@@ -7,7 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-import { episodesQuery, streamsQuery, watchDataQuery } from "@/api/queries";
+import { episodesQuery, watchDataQuery } from "@/api/queries";
 import type { MediaPreview, WatchDataResponse } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import {
@@ -81,12 +82,10 @@ export function SeriesDetailPage({
   const step = stepOverride ?? (preferredEpisode ? "streams" : "episodes");
   const selectedEpisode =
     episodes.find((episode) => matchesEpisode(episode, selectedEpisodeId)) ?? null;
-  const streams = useQuery(
-    streamsQuery(
+  const streams = useStreams(
       media.type,
       selectedEpisode ? selectedEpisodeId ?? selectedEpisode.id : "",
       Boolean(selectedEpisode),
-    ),
   );
   const watchData = useQuery(
     watchDataQuery(media.type, media.id, Boolean(media)),
@@ -160,6 +159,7 @@ export function SeriesDetailPage({
               playRequested={playRequested}
               target={{ mediaType: media.type, mediaId: media.id, videoId: selectedEpisode.id, episodeContext: selectedEpisode }}
               error={streams.error}
+          failures={streams.failures}
               onRetry={() => void streams.refetch()}
               streams={streams.data ?? []}
               isLoading={streams.isFetching}

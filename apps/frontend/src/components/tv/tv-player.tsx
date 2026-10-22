@@ -11,6 +11,7 @@ import { canControlPlayback, type PlayerState } from '@/features/media/detail/pl
 import { TvPicker } from './tv-picker'
 
 type Props = Partial<SubtitleAppearance> & {
+  castConnected?: boolean
   onOpenSources?: () => void
   onUseDefaults?: () => void
   onSubtitleOutlineWidthChange?: (value: number) => void
@@ -124,9 +125,9 @@ export function TvPlayerChrome(props: Props) {
           {props.onOpenSources ? <button type="button" onClick={props.onOpenSources}>Quality & sources</button> : null}
           {props.hasEpisodeSwapper ? <button type="button" onClick={props.onOpenEpisodeSwapper}>Episodes</button> : null}
           <CopyStreamLink url={props.streamLink} />
-          <TvPicker label="Audio" value={state.selectedAudioTrackId ?? ''} disabled={!state.audioTracks.length} options={state.audioTracks.map(track => ({ value: track.id, label: track.label || track.language }))} onChange={props.onSelectAudioTrack} />
+          {!props.castConnected ? <TvPicker label="Audio" value={state.selectedAudioTrackId ?? ''} disabled={!state.audioTracks.length} options={state.audioTracks.map(track => ({ value: track.id, label: track.label || track.language }))} onChange={props.onSelectAudioTrack} /> : null}
           <TvPicker label="Subtitles" value={props.selectedSubtitleId ?? '__off'} options={[{ value: '__off', label: 'Subtitles off' }, ...props.subtitleTracks.map(track => ({ value: track.id, label: `${track.language} · ${track.source}` }))]} onChange={value => props.onSelectSubtitle(value === '__off' ? null : value)} />
-          <TvPicker label="Playback speed" value={String(props.playbackSpeed)} options={[0.5, 0.75, 1, 1.25, 1.5, 2].map(value => ({ value: String(value), label: `${value}× speed` }))} onChange={value => props.onPlaybackSpeedChange(Number(value))} />
+          {!props.castConnected ? <TvPicker label="Playback speed" value={String(props.playbackSpeed)} options={[0.5, 0.75, 1, 1.25, 1.5, 2].map(value => ({ value: String(value), label: `${value}× speed` }))} onChange={value => props.onPlaybackSpeedChange(Number(value))} /> : null}
           <TvPicker label="Subtitle size" value={String(props.subtitleSize)} options={[0.75, 1, 1.15, 1.25, 1.5, 2].map(value => ({ value: String(value), label: `${value}× subtitles` }))} onChange={value => props.onSubtitleSizeChange(Number(value))} />
           {props.onUseDefaults ? <button type="button" onClick={() => setSubtitleSettingsOpen(true)}>Subtitle settings</button> : null}
           <TvPicker label="Subtitle timing" value={String(props.subtitleDelay)} options={[-10, -5, -2, -1, 0, 1, 2, 5, 10].map(value => ({ value: String(value), label: `${value > 0 ? '+' : ''}${value}s subtitle delay` }))} onChange={value => props.onSubtitleDelayChange(Number(value))} />

@@ -308,3 +308,14 @@ it('edits subtitle outline in a modal, returns focus, and explicitly resets titl
   await waitFor(() => expect(screen.queryByLabelText('Subtitle preview')).not.toBeInTheDocument())
   expect(input.onBack).not.toHaveBeenCalled()
 })
+
+it('hides unsupported audio and speed selectors for a restored Cast session in TV mode', () => {
+  const input = playerProps()
+  const view = render(<TvPlayerChrome {...input} castConnected />)
+  expect(screen.queryByRole('button', { name: 'Playback speed' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Audio' })).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Pause' })).toBeEnabled()
+  view.rerender(<TvPlayerChrome {...input} />)
+  expect(screen.getByRole('button', { name: 'Playback speed' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Audio' })).toBeInTheDocument()
+})
