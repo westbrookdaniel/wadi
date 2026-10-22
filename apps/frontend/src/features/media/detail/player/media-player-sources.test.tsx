@@ -27,6 +27,7 @@ beforeEach(() => {
     if (path.includes('/settings/playback')) return { stream_action: 'internal', external_player_template: 'vlc://{url}' }
     if (path.includes('/watch-data/')) return { items: [], media_type: 'movie', media_id: 'film' }
     if (path.includes('/watch-progress')) return { ...(options?.body as object), updated_at: new Date().toISOString() }
+    if (path === '/api/addons') return { items: [{ id: 'provider', manifest: { name: 'Provider', resources: ['stream'], types: ['movie', 'series'] } }] }
     if (path.includes('/streams/')) return { responses: [{ addon_id: 'provider', response: { streams: sources } }] }
     if (path.includes('/subtitles/')) return { responses: [] }
     return { items: [] }
@@ -57,8 +58,8 @@ it('prefetches next-episode sources near the end once, without opening another p
   useAutoPlayback.getState().update({ autoplayNext: true, prefetchNext: true })
   mocks.time = 900; mocks.playing = true
   const view = show(true)
-  await waitFor(() => expect(mocks.request).toHaveBeenCalledWith('/api/streams/series/two', expect.objectContaining({ signal: expect.any(AbortSignal) })))
-  expect(mocks.request.mock.calls.filter(([path]) => path === '/api/streams/series/two')).toHaveLength(1)
+  await waitFor(() => expect(mocks.request).toHaveBeenCalledWith('/api/streams/series/two?addon_id=provider', expect.objectContaining({ signal: expect.any(AbortSignal) })))
+  expect(mocks.request.mock.calls.filter(([path]) => path === '/api/streams/series/two?addon_id=provider')).toHaveLength(1)
   expect(view.change).not.toHaveBeenCalled()
   expect(mocks.options.mock.calls.every(([options]) => !options.url || options.url === sources[0].url)).toBe(true)
   view.unmount(); view.client.clear()

@@ -1,3 +1,4 @@
+import { useStreams, prefetchStreams } from '../use-streams'
 import { useSubtitleTrack } from './use-subtitle-track'
 import { CopyStreamLink } from './copy-stream-link'
 import { useMediabunnyPlayer } from './use-mediabunny-player'
@@ -60,7 +61,6 @@ import {
 import {
   queryKeys,
   type SubtitleQueryContext,
-  streamsQuery,
   subtitlesQuery,
   updateWatchProgress,
 } from '@/api/queries'
@@ -122,7 +122,7 @@ export function MediaPlayerPage({
   const keepFamily = rankingContext.preferBingeGroup ?? autoSettings.preferBingeGroup
   const [sourceResume, setSourceResume] = useState<{ url: string; position: number; playing: boolean } | null>(null)
   const streamUrl = activeStream.url
-  const currentSources = useQuery(streamsQuery(activeTarget.mediaType, activeTarget.videoId ?? activeTarget.mediaId, defaultsReady && (autoSettings.autoRecover || sourceSheetOpen)))
+  const currentSources = useStreams(activeTarget.mediaType, activeTarget.videoId ?? activeTarget.mediaId, defaultsReady && (autoSettings.autoRecover || sourceSheetOpen))
   const eligibleSources = useMemo(() => rankStreams(currentSources.data ?? [], autoSettings, rankingContext)
     .filter(row => row.eligible).map(row => row.stream), [currentSources.data, autoSettings, rankingContext])
   const sourceCandidates = useMemo(() => eligibleSources.filter(candidate => quality === null || parseStreamMetadata(candidate).resolution.value === quality), [eligibleSources, quality])
@@ -175,12 +175,10 @@ export function MediaPlayerPage({
   const [selectedSwapSeason, setSelectedSwapSeason] = useState<number | null>(activeTarget.episodeContext?.season ?? null)
   const [pendingEpisode, setPendingEpisode] = useState<Episode | null>(null)
   const pendingRankingContext = useSourceRanking(pendingEpisode ? { ...activeTarget, episodeContext: pendingEpisode } : activeTarget)
-  const episodeStreams = useQuery(
-    streamsQuery(
+  const episodeStreams = useStreams(
       activeTarget.mediaType,
       pendingEpisode?.id ?? "",
       Boolean(pendingEpisode),
-    ),
   )
 
 
@@ -327,7 +325,7 @@ export function MediaPlayerPage({
     const key = `${profileId}:${activeTarget.mediaType}:${nextEpisode.id}`
     if (prefetchedNext.current === key) return
     prefetchedNext.current = key
-    void queryClient.prefetchQuery(streamsQuery(activeTarget.mediaType, nextEpisode.id))
+    void prefetchStreams(queryClient, activeTarget.mediaType, nextEpisode.id)
   }, [defaultsReady, autoSettings.prefetchNext, autoSettings.autoplayNext, autoSettings.nextEpisodeLeadSeconds, autoSettings.countdownSeconds, nextEpisode, castConnected, tvMode, externalPreferences.data, player.state.duration, player.state.currentTime, queryClient, activeTarget.mediaType, profileId])
   const chooseQuality = (resolution: number | null) => {
     const next = eligibleSources.find(candidate => resolution === null || parseStreamMetadata(candidate).resolution.value === resolution)

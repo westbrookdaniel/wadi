@@ -91,7 +91,8 @@ const server = createServer(async (req, res) => {
     if (path === '/api/continue-watching') return json(res,{items:[...watches.values()].filter(item=>item.position_seconds>0&&!item.watched)});
     if (path.startsWith('/api/subtitles/') && streamTargets[path.slice('/api/subtitles/'.length)]) return json(res,{responses:[]});
     if (path.startsWith('/api/streams/') && streamTargets[path.slice('/api/streams/'.length)]) return json(res,{responses:[{addon_id:'qa-addon',response:{streams:rule.empty?[]:rule.unavailable?[{name:'Unavailable synthetic stream',url:''}]:streamTargets[path.slice('/api/streams/'.length)].map(source=>({name:`QA ${source}`,url:`http://127.0.0.1:${port}/multitrack.webm?token=synthetic-only&source=${source}`,subtitles:[['qa-en','eng','english.srt'],['qa-fr','fra','french.srt'],['qa-en-alt','eng','english-alternate.srt']].map(([id,lang,file])=>({id,lang,url:`http://127.0.0.1:${port}/${file}`}))}))}}]});
-    if (['/api/addons','/api/catalogs','/api/lists'].includes(path) && req.method === 'GET') return json(res, {items:[]});
+    if (path === '/api/addons' && req.method === 'GET') return json(res, {items:[{id:'qa-addon',manifest:{name:'Synthetic QA',resources:['stream'],types:['movie','series']}}]});
+    if (['/api/catalogs','/api/lists'].includes(path) && req.method === 'GET') return json(res, {items:[]});
     if (path.startsWith('/api/')) { unexpected.push({path,method:req.method}); return json(res, {error:`Unexpected fixture API: ${req.method} ${path}`}, 501); }
     let file = path.startsWith('/_next/static/') ? join(root, 'static', path.slice('/_next/static/'.length)) : join(root, path.slice(1));
     if (!resolve(file).startsWith(root + '/')) return json(res, {}, 403);

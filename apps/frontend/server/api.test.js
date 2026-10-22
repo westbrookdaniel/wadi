@@ -17,6 +17,8 @@ test('Node API preserves auth, profile isolation, lists, progress, addons withou
   if (req.url === '/other/catalog/movie/test.json') return res.end(JSON.stringify({metas:[{id:'other:film',type:'movie',name:'Other film'}]}));
   if (req.url === '/catalog/movie/test/genre=Action&skip=100.json') return res.end(JSON.stringify({metas:[{id:'page:film',type:'movie',name:'Next page film'}]}));
   if (req.url === '/catalog/movie/test.json') return res.end(JSON.stringify({metas:[{id:'test:film',type:'movie',name:'Test film'}]}));
+  if (req.url === '/other/stream/movie/independent.json') return;
+  if (req.url === '/stream/movie/independent.json') return res.end(JSON.stringify({streams:[{url:`${fixture}/fast.mp4`}]}));
   if (req.url === '/stream/movie/test%3Afilm.json') return res.end(JSON.stringify({streams:[{url:`${fixture}/media.mp4`}]}));
   if (req.url === '/media.mp4') {
    res.setHeader('Content-Type','video/mp4'); res.setHeader('Accept-Ranges','bytes');
@@ -96,6 +98,14 @@ test('Node API preserves auth, profile isolation, lists, progress, addons withou
  assert.equal((await request('/api/catalog/movie/test?addon_id=foreign')).responses.length,0);
  assert.deepEqual(Object.keys((await request('/api/settings/browse-layout')).pages),['home']);
  const streams=await request('/api/streams/movie/test%3Afilm');assert.equal(streams.responses[0].response.streams[0].url,fixture+'/media.mp4');
+ // A scoped request must not query or wait for the other (hung) addon.
+ const fast = await Promise.race([
+  request(`/api/streams/movie/independent?addon_id=${firstAddon.id}`),
+  new Promise((_,reject)=>{ const timer=setTimeout(()=>reject(new Error('Fast addon blocked by another addon')),1000);timer.unref(); }),
+ ]);
+ assert.deepEqual(fast.responses.map(item=>item.addon_id),[firstAddon.id]);
+ assert.equal(fast.responses[0].response.streams[0].url,fixture+'/fast.mp4');
+ assert.equal((await request('/api/streams/movie/independent?addon_id=foreign')).responses.length,0);
  const proxy=base+'/api/stream-proxy?url='+encodeURIComponent(fixture+'/media.mp4');
  assert.equal((await fetch(proxy,{headers:{Authorization:`Bearer ${token}`}})).status,404);
  assert.equal((await request('/api/server-capabilities')).conversion,false);

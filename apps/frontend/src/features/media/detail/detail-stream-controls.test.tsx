@@ -15,7 +15,7 @@ const streams = [{ title: '1080p Synthetic A', url: 'https://example.invalid/a.w
 const movie: MediaPreview = { type: 'movie', id: 'film-a', name: 'Synthetic film', description: 'A generated test film', raw: {} }
 const series: MediaPreview = { type: 'series', id: 'show-a', name: 'Synthetic show', raw: { videos: [{ id: 'episode-a', title: 'Pilot', season: 1, episode: 1 }, { id: 'episode-b', title: 'Second', season: 1, episode: 2 }] } }
 function client() { return new QueryClient({ defaultOptions: { queries: { retry: false } } }) }
-const response = (data = streams) => ({ responses: [{ addon_id: 'synthetic', response: { streams: data } }], items: [] })
+const response = (data = streams) => ({ responses: [{ addon_id: 'synthetic', response: { streams: data } }], items: [{ id: 'synthetic', manifest: { name: 'Synthetic', resources: ['stream'], types: ['movie', 'series'] } }] })
 afterEach(() => { cleanup(); request.mockReset(); useAutoPlayback.getState().reset(); useDeviceStore.getState().setTvMode(false); localStorage.clear(); vi.restoreAllMocks() })
 
 it.each([[false, false], [true, false], [true, true]])('keeps movie details with auto-select=%s and legacy skip=%s until a stream is clicked', async (enabled, skipSelection) => {
@@ -54,7 +54,7 @@ it('handles loading, errors/retry, empty and unavailable streams without launchi
 
 it('ignores a late previous-title response and plays the new movie stream', async () => {
   let resolveOld!: (value: unknown) => void
-  request.mockImplementation((path: string) => path === '/api/streams/movie/film-a' ? new Promise(resolve => { resolveOld = resolve }) : Promise.resolve(response([streams[1]])))
+  request.mockImplementation((path: string) => path.startsWith('/api/streams/movie/film-a') ? new Promise(resolve => { resolveOld = resolve }) : Promise.resolve(response([streams[1]])))
   const play = vi.fn(), qc = client()
   const page = (media: MediaPreview) => <QueryClientProvider client={qc}><MediaDetailPage media={media} onPlay={play} onBack={vi.fn()} /></QueryClientProvider>
   const view = render(page(movie))
@@ -69,7 +69,7 @@ it('ignores a late previous-title response and plays the new movie stream', asyn
 
 it('binds streams to episodes and discards late responses', async () => {
   let resolveOld!: (value: unknown) => void
-  request.mockImplementation((path: string) => path === '/api/streams/series/episode-a' ? new Promise(resolve => { resolveOld = resolve }) : Promise.resolve(response([streams[1]])))
+  request.mockImplementation((path: string) => path.startsWith('/api/streams/series/episode-a') ? new Promise(resolve => { resolveOld = resolve }) : Promise.resolve(response([streams[1]])))
   const play = vi.fn(), user = userEvent.setup()
   render(<QueryClientProvider client={client()}><MediaDetailPage media={series} onPlay={play} onBack={vi.fn()} /></QueryClientProvider>)
   await user.click(screen.getByText('Pilot')); await waitFor(() => expect(resolveOld).toBeDefined())

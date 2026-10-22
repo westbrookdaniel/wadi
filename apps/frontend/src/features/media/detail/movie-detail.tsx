@@ -1,6 +1,7 @@
+import { useStreams } from './use-streams'
 import { useQuery } from '@tanstack/react-query'
 
-import { defaultWatchState, findWatchState, streamsQuery, watchDataQuery } from '@/api/queries'
+import { defaultWatchState, findWatchState, watchDataQuery } from '@/api/queries'
 import type { MediaPreview } from '@/api/types'
 
 import { DetailShell } from './detail-shell'
@@ -20,7 +21,7 @@ export function MovieDetailPage({
   onBack: () => void
   onPlay: (stream: PlayableStream, target: PlaybackTarget) => void
 }) {
-  const streams = useQuery(streamsQuery(media.type, media.id, Boolean(media)))
+  const streams = useStreams(media.type, media.id, Boolean(media))
   const watchData = useQuery(watchDataQuery(media.type, media.id, Boolean(media)))
   const watchState = findWatchState(watchData.data, null) ?? defaultWatchState(media.type, media.id, null)
   const toggleWatched = useWatchToggle(media.type, media.id, null)

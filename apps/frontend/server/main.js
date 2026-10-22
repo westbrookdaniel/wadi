@@ -322,7 +322,7 @@ export function createApp({ database = process.env.DATABASE_URL, sessionDays = 3
     for (const [route, kind] of [['catalog', 'catalog'], ['meta', 'meta'], ['streams', 'stream'], ['subtitles', 'subtitles']])
         app.get(`/api/${route}/:type/:id`, async (req, res) => {
             const { type, id } = req.params;
-            const addons = (await userAddons(req)).filter(a => kind !== 'catalog' || !req.query.addon_id || a.id === req.query.addon_id).filter(a => kind === 'catalog' ? a.manifest.catalogs.some(c => c.id === id && c.type === type) : a.manifest.resources.some(r => {
+            const addons = (await userAddons(req)).filter(a => !req.query.addon_id || a.id === req.query.addon_id).filter(a => kind === 'catalog' ? a.manifest.catalogs.some(c => c.id === id && c.type === type) : a.manifest.resources.some(r => {
                 const name = typeof r === 'string' ? r : r.name;
                 const types = typeof r === 'string' ? a.manifest.types : r.types;
                 const prefixes = typeof r === 'string' ? a.manifest.idPrefixes : r.idPrefixes;

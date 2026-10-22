@@ -11,9 +11,9 @@ function publicAddress(address) {
   // Global unicast only; excludes loopback, link-local, ULA and mapped IPv4.
   return isIP(address) === 6 && /^[23][0-9a-f]{3}:/i.test(address);
 }
-async function requestAddonJson(source, { allowPrivate = false } = {}) {
+async function requestAddonJson(source, { allowPrivate = false, timeoutMs = 10000 } = {}) {
   let url = new URL(source);
-  const deadline = AbortSignal.timeout(15000);
+  const deadline = AbortSignal.timeout(timeoutMs);
   for (let redirects=0; redirects<5; redirects++) {
     if (!['http:','https:'].includes(url.protocol) || url.username || url.password) throw new Error('Invalid addon URL');
     const host = url.hostname.replace(/^\[|\]$/g,'');
