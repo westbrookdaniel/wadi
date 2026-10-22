@@ -34,7 +34,7 @@ export function DetailStreamControls({ streams, isLoading, error, onRetry, onPla
     attempted.current = true
     onPlay(selected)
   }, [ready, isLoading, error, selected, playRequested, tvMode, playback.data, onPlay])
-  if (error) return <div role="alert" className="grid gap-2 text-sm"><p className="text-destructive">Could not load streams. {error.message}</p><Button variant="secondary" onClick={onRetry}>Retry</Button></div>
+  const failure = error ? <div role="alert" className="grid gap-2 text-sm"><p className="text-destructive">Could not load streams. {error.message}</p><Button variant="secondary" onClick={onRetry}>Retry</Button></div> : null
 
-  return <StreamList target={target} streams={streams} isLoading={isLoading} onPlay={onPlay} />
+  return <>{failure}<StreamList target={target} streams={streams} isLoading={isLoading} onPlay={onPlay} /></>
 }

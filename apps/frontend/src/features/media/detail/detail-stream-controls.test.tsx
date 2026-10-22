@@ -40,8 +40,8 @@ it('handles loading, errors/retry, empty and unavailable streams without launchi
   const play = vi.fn(), retry = vi.fn(), qc = client()
   const page = (data = streams, loading = false, error: Error | null = null) => <QueryClientProvider client={qc}><DetailStreamControls streams={data} isLoading={loading} error={error} onRetry={retry} onPlay={play} /></QueryClientProvider>
   const view = render(page(streams, true))
-  expect(screen.queryByRole('button', { name: /Synthetic A/ })).not.toBeInTheDocument()
-  expect(screen.queryByRole('button', { name: /Synthetic A/ })).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: /Synthetic A/ })).toBeEnabled()
+  expect(screen.getByRole('button', { name: /Synthetic A/ })).toBeEnabled()
   view.rerender(page(streams, false, new Error('Provider unavailable')))
   expect(screen.getByRole('alert')).toHaveTextContent('Provider unavailable')
   await userEvent.click(screen.getByRole('button', { name: 'Retry' })); expect(retry).toHaveBeenCalledOnce()
@@ -100,4 +100,25 @@ it('keeps explicit episode Play/Resume launching the ranked stream once', async 
   await waitFor(() => expect(play).toHaveBeenCalledOnce())
   expect(play.mock.calls[0][0].url).toBe(streams[0].url)
   expect(play.mock.calls[0][1]).toMatchObject({ videoId: 'episode-a', mediaId: 'show-a' })
+})
+
+it('keeps cached streams usable through a refetch and error, replacing only on success', async () => {
+  let resolveRefresh!: (value: unknown) => void
+  request.mockResolvedValue(response())
+  const play = vi.fn(), qc = client()
+  render(<QueryClientProvider client={qc}><MediaDetailPage media={movie} onPlay={play} onBack={vi.fn()} /></QueryClientProvider>)
+  await screen.findByRole('button', { name: /Synthetic A/ })
+  request.mockImplementation((path: string) => path.startsWith('/api/streams/') ? new Promise(resolve => { resolveRefresh = resolve }) : Promise.resolve(response()))
+  let refresh!: Promise<void>
+  act(() => { refresh = qc.invalidateQueries({ queryKey: ['streams', 'movie', movie.id] }) })
+  await screen.findByText('Refreshing streams…')
+  await userEvent.click(screen.getByRole('button', { name: /Synthetic A/ }))
+  expect(play).toHaveBeenCalledOnce()
+  await act(async () => { resolveRefresh(response([streams[1]])); await refresh })
+  await waitFor(() => expect(screen.queryByRole('button', { name: /Synthetic A/ })).not.toBeInTheDocument())
+  expect(screen.getByRole('button', { name: /Synthetic B/ })).toBeEnabled()
+  request.mockRejectedValue(new Error('Provider unavailable'))
+  await act(async () => { await qc.invalidateQueries({ queryKey: ['streams', 'movie', movie.id] }) })
+  expect(await screen.findByRole('alert')).toHaveTextContent('Provider unavailable')
+  expect(screen.getByRole('button', { name: /Synthetic B/ })).toBeEnabled()
 })

@@ -35,7 +35,8 @@ export function SourceControls({ open, onOpenChange, streams, qualityStreams, lo
       <div className="flex flex-wrap gap-2"><Button variant="secondary" disabled={loading} onClick={onTryAnother}>Try another source</Button>
       <Button variant="secondary" disabled={loading || !onSmallerSource} onClick={onSmallerSource}>Buffering? Try a smaller source</Button></div>
       <p className="text-sm text-muted-foreground">Wrong audio or subtitle timing? Try another version below, or use the player’s audio and subtitle controls.</p>
-      {error ? <div role="alert"><p>Could not load sources.</p><Button onClick={onRetry}>Retry</Button></div> : <StreamList target={target} streams={streams} isLoading={loading} onPlay={onSelect} />}
+      {error ? <div role="alert"><p>Could not load sources.</p><Button onClick={onRetry}>Retry</Button></div> : null}
+      <StreamList target={target} streams={streams} isLoading={loading} onPlay={onSelect} />
     </DialogContent>
   </Dialog>
 }
