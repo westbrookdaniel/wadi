@@ -30,7 +30,6 @@ type SeriesStep = "episodes" | "streams";
 
 export function SeriesDetailPage({
   media,
-  previousPlayback,
   listAction,
   preferredVideoId,
   preferredSeason,
@@ -39,7 +38,6 @@ export function SeriesDetailPage({
   onPlay,
 }: {
   media: MediaPreview;
-  previousPlayback?: { stream: PlayableStream; target: PlaybackTarget } | null;
   listAction?: React.ReactNode;
   preferredVideoId?: string | null;
   preferredSeason?: string;
@@ -132,13 +130,11 @@ export function SeriesDetailPage({
         step === "streams" ? "Available streams" : "Available episodes"
       }
       sideTitle={
-        step === "streams" && selectedEpisode ? selectedEpisode.title : "Episodes"
-      }
-      sideContent={
         step === "streams" && selectedEpisode ? (
-          <div className="flex min-h-0 flex-1 flex-col gap-3">
+          <span className="flex items-center gap-3">
             <Button
               data-tv-back
+              aria-label="Back"
               className="w-fit"
               type="button"
               size="sm"
@@ -150,13 +146,19 @@ export function SeriesDetailPage({
               }}
             >
               <ChevronLeft aria-hidden="true" />
-              Change Episode
+              Back
             </Button>
+            <span className="min-w-0">{selectedEpisode.title}</span>
+          </span>
+        ) : "Episodes"
+      }
+      sideContent={
+        step === "streams" && selectedEpisode ? (
+          <div className="flex min-h-0 flex-1 flex-col gap-3">
             <DetailStreamControls
               key={`${media.id}:${selectedEpisodeId ?? selectedEpisode.id}`}
               playRequested={playRequested}
               target={{ mediaType: media.type, mediaId: media.id, videoId: selectedEpisode.id, episodeContext: selectedEpisode }}
-              preferredStream={previousPlayback?.target.videoId && matchesEpisode(selectedEpisode, previousPlayback.target.videoId) ? previousPlayback.stream : undefined}
               error={streams.error}
               onRetry={() => void streams.refetch()}
               streams={streams.data ?? []}

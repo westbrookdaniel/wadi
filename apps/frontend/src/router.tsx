@@ -290,8 +290,6 @@ function BrowseRoute({
 }
 
 function MediaRoute() {
-  const profileId = useAppStore(state => state.activeProfileId)
-  const [detailPlayback, setDetailPlayback] = useState<{ profileId: string | null; stream: PlayableStream; target: PlaybackTarget } | null>(null)
   const playbackPrefs = useQuery(playbackPreferencesQuery)
   const [launchFailure, setLaunchFailure] = useState<{ stream: PlayableStream; message: string } | null>(null)
   const [chosenPlayer, setChosenPlayer] = useState("vlc")
@@ -312,7 +310,6 @@ function MediaRoute() {
     if (!playbackPrefs.data) {
       setLaunchFailure({ stream, message: 'Playback preferences are not ready. Choose a player below or try again.' }); return
     }
-    setDetailPlayback({ profileId, stream, target })
     if (!useDeviceStore.getState().tvMode && playbackPrefs.data.stream_action === 'external') {
       const url = getStreamUrl(stream)
       if (!url) { setLaunchFailure({ stream, message: 'This stream has no playable link.' }); return }
@@ -377,7 +374,6 @@ function MediaRoute() {
               target={selectedPlaybackTarget}
               onPlaybackChange={playStream}
               onBack={() => {
-                setDetailPlayback({ profileId, stream: selectedStream, target: selectedPlaybackTarget })
                 void navigate({ to: '/media/$type/$id', params: { type, id }, search: previous => ({ ...previous, playback: undefined, manual: true }), replace: true })
               }}
             />
@@ -386,7 +382,6 @@ function MediaRoute() {
           ) : (
             <MediaDetailPage
               media={displayMedia}
-              previousPlayback={detailPlayback?.profileId === profileId ? detailPlayback : null}
               preferredVideoId={preferredEpisodeIdFromSearch({ episode, videoId })}
               preferredSeason={season}
               onSeriesSelectionChange={updateSeriesSelection}

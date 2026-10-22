@@ -11,13 +11,11 @@ import { WatchedButton } from './watch-state'
 
 export function MovieDetailPage({
   media,
-  preferredStream,
   listAction,
   onBack,
   onPlay,
 }: {
   media: MediaPreview
-  preferredStream?: PlayableStream
   listAction?: React.ReactNode
   onBack: () => void
   onPlay: (stream: PlayableStream, target: PlaybackTarget) => void
@@ -37,7 +35,6 @@ export function MovieDetailPage({
         <DetailStreamControls
           key={`${media.type}:${media.id}`}
           target={{ mediaType: media.type, mediaId: media.id, videoId: null }}
-          preferredStream={preferredStream}
           error={streams.error}
           onRetry={() => void streams.refetch()}
           streams={streams.data ?? []}

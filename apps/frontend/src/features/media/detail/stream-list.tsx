@@ -16,6 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { bottomPagePadding, mutedText } from '@/lib/styles'
 import { cn } from '@/lib/utils'
 
+import { getStreamUrl } from './stream-playback'
 import type { PlaybackTarget, PlayableStream } from './types'
 
 const FILTER_ALL = '__all__'
@@ -31,15 +32,11 @@ export function StreamList({
   target,
   isLoading,
   onPlay,
-  selectedStream,
-  selectionOnly = false,
 }: {
   target?: PlaybackTarget
   streams: PlayableStream[]
   isLoading: boolean
   onPlay: (stream: PlayableStream) => void
-  selectedStream?: PlayableStream
-  selectionOnly?: boolean
 }) {
   const { settings } = usePlaybackDefaults()
   const context = useSourceRanking(target)
@@ -85,8 +82,7 @@ export function StreamList({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      {settings.enabled && !recommendation ? <p className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">No stream matches your auto-pick rules. Choose one below or adjust your settings.</p> : null}
-      <p className="text-xs text-muted-foreground">Choose a source below to use a different version. Playback support depends on the source and your device.</p>
+      {settings.enabled && !recommendation ? <p className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">No stream matches your auto-pick rules.</p> : null}
       <div className="grid gap-2">
         <Select value={activeFilterValue} onValueChange={setFilterValue}>
           <SelectTrigger className="w-full justify-between rounded-lg border border-border bg-card/70 px-2.5 text-sm" aria-label="Source filter">
@@ -114,13 +110,13 @@ export function StreamList({
             <button
               className="grid min-w-0 h-fit cursor-pointer content-between gap-1 rounded-lg border border-border bg-card/80 p-2.5 text-xs leading-relaxed text-left text-card-foreground hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/30 focus-visible:outline-none [&_small]:text-[0.76rem] [&_small]:text-primary [&_span]:text-muted-foreground"
               type="button"
-              aria-pressed={selectionOnly ? stream === selectedStream : undefined}
+              disabled={!getStreamUrl(stream)}
               key={`${i}-${stream.addon_id}-${stream.title ?? stream.name ?? index}`}
               data-tv-default={stream === recommendation?.stream || !recommendation && i === 0 ? '' : undefined}
               data-tv-focus-key={`stream:${stream.addon_id}:${stream.title ?? stream.name ?? index}`}
               onClick={() => onPlay(stream)}
             >
-              {selectionOnly && stream === selectedStream ? <strong className="text-primary">Selected</strong> : null}
+              {!getStreamUrl(stream) ? <strong>Unavailable</strong> : null}
               {stream === recommendation?.stream ? <span className="!text-primary text-xs font-medium">Recommended{recommendation.reasons.length ? ' · ' + recommendation.reasons.join(' · ') : ''}</span> : null}
               <p className="font-medium text-sm leading-snug whitespace-pre-line [overflow-wrap:anywhere]">{stream.title ?? stream.name ?? `Stream ${index + 1}`}</p>
               <p className="max-w-full whitespace-pre-wrap [overflow-wrap:anywhere] text-sm leading-relaxed text-muted-foreground">{streamDetail(stream)}</p>
@@ -163,7 +159,7 @@ function streamDetail(stream: PlayableStream) {
     stream.infoHash ? 'Torrent' : undefined,
   ].filter(Boolean)
 
-  return parts.length ? parts.join(' • ') : stream.url ? 'Direct stream · compatibility varies' : 'Addon stream'
+  return parts.length ? parts.join(' • ') : stream.url ? 'Direct stream' : 'Addon stream'
 }
 
 function normalizeStreamRow(
