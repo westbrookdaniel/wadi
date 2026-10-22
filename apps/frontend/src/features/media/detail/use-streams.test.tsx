@@ -23,5 +23,8 @@ it('publishes fast addon streams while another hangs, retaining only that addon 
   await act(async () => { await result.current.refetch() })
   await waitFor(() => expect(result.current.data.map(stream => stream.title)).toEqual(['updated', 'slow']))
   expect(result.current.failures[0]).toMatchObject({ provider: 'slow', message: 'Timed out' })
+  request.mockImplementation((path: string) => path.endsWith('addon_id=fast') ? Promise.resolve({ responses: [{ addon_id: 'fast', response: { streams: [] } }] }) : Promise.reject(new Error('Still unavailable')))
+  await act(async () => { await result.current.refetch() })
+  await waitFor(() => expect(result.current.data.map(stream => stream.title)).toEqual(['slow']))
   unmount(); client.clear()
 })

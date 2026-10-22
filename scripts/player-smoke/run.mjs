@@ -277,8 +277,8 @@ try {
       await control({rules:{[path]:{}},release:path});await expect(page.getByRole('combobox',{name:'Source filter',exact:true})).toBeVisible();
       await control({rules:{[path]:{empty:true}}});await page.reload();await expect(page.getByText('No streams returned.',{exact:true})).toBeVisible();await expect(anySeek).toBeHidden();
       await control({rules:{[path]:{unavailable:true}}});await page.reload();await expect(anySeek).toBeHidden();await expect(page.getByRole('button',{name:/Unavailable synthetic stream/})).toBeDisabled();await expect(anySeek).toBeHidden();
-      await control({rules:{[path]:{status:503}}});await page.reload();const error=page.getByRole('alert').filter({hasText:'Could not load streams'});await expect(error).toBeVisible();await expect(anySeek).toBeHidden();
-      await control({rules:{[path]:{}}});await button('Retry').click();await expect(error).toBeHidden();await expect(page.getByRole('combobox',{name:'Source filter',exact:true})).toBeVisible();
+      await control({rules:{[path]:{status:503}}});await page.reload();const error=page.getByRole('alert').filter({hasText:'Synthetic QA failed:'});await expect(error).toBeVisible();await expect(anySeek).toBeHidden();
+      await control({rules:{[path]:{}}});await button('Retry Synthetic QA').click();await expect(error).toBeHidden();await expect(page.getByRole('combobox',{name:'Source filter',exact:true})).toBeVisible();
     });
     await phase('show seasons episode-bound choices ignore late responses and restore Back',async()=>{
       const oldPath='/api/streams/series/qa-episode-1';await control({rules:{[oldPath]:{hold:true}}});await page.goto(origin+'/media/series/qa-show');

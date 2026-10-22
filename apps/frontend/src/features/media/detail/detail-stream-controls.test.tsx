@@ -143,3 +143,14 @@ it('shows a named partial provider failure with its reason and retries only that
   await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
   expect(request.mock.calls.filter(([path]) => path.endsWith('addon_id=fast'))).toHaveLength(fastCalls)
 })
+
+
+it('shows all failed addons with separate retries without blocking the detail page', async () => {
+  const addons = ['TorBox', 'Other provider'].map(id => ({ id, manifest: { name: id, resources: ['stream'], types: ['movie'] } }))
+  request.mockImplementation((path: string) => Promise.resolve(path === '/api/addons' ? { items: addons } : path.startsWith('/api/streams/') ? { responses: [], errors: [{ addon_id: 'failed', error: 'Provider took too long to respond.' }] } : response([])))
+  render(<QueryClientProvider client={client()}><MediaDetailPage media={movie} onPlay={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
+  expect(await screen.findByRole('button', { name: 'Retry TorBox' })).toBeEnabled()
+  expect(await screen.findByRole('button', { name: 'Retry Other provider' })).toBeEnabled()
+  expect(screen.getAllByRole('alert')).toHaveLength(2)
+  expect(screen.getByRole('button', { name: 'Back' })).toBeEnabled()
+})

@@ -298,7 +298,7 @@ export function MediaPlayerPage({
   const recovery = useSourceRecovery({
     episodeKey: `${profileId}:${activeTarget.mediaType}:${activeTarget.mediaId}:${activeTarget.videoId}`,
     source: activeStream, state: player.state, candidates: sourceCandidates,
-    enabled: defaultsReady && autoSettings.autoRecover && currentSources.isSuccess && !castConnected && resume.ready && !sourceSheetOpen,
+    enabled: defaultsReady && autoSettings.autoRecover && currentSources.isSuccess && (sourceCandidates.some(candidate => candidate.url && candidate.url !== streamUrl) || !currentSources.isFetching) && !castConnected && resume.ready && !sourceSheetOpen,
     attempts: autoSettings.recoveryAttempts, timeoutSeconds: autoSettings.startupTimeoutSeconds,
     savedPosition: resume.savedPosition, onSwitch: switchSource, onFailure: onSourceFailure,
   })

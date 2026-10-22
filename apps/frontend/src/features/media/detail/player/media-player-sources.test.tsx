@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { MediaPlayerPage } from './media-player-page'
@@ -7,19 +7,19 @@ import { useAutoPlayback } from '@/store/auto-playback'
 import { useAppStore } from '@/store/app-store'
 import { useSourceHistory } from '@/store/source-history'
 
-const mocks = vi.hoisted(() => ({ request: vi.fn(), options: vi.fn(), update: vi.fn(), time: 42, playing: false }))
+const mocks = vi.hoisted(() => ({ request: vi.fn(), options: vi.fn(), update: vi.fn(), time: 42, playing: false, failed: false }))
 const sources = [{ url: 'https://example.test/1080', title: '1080p H.264', behaviorHints: { bingeGroup: 'release-a' } }, { url: 'https://example.test/720', title: '720p H.264', behaviorHints: { bingeGroup: 'release-a' } }]
 vi.mock('@/api/client', () => ({ apiRequest: mocks.request, ApiError: Error }))
 vi.mock('@/lib/desktop', () => ({ desktopBridge: () => undefined }))
 vi.mock('./use-player-preferences', () => ({ usePlayerPreferences: () => ({ playbackState: initialLocalPlaybackState, updatePlaybackState: mocks.update, resetToDefaults: mocks.update }) }))
 vi.mock('./use-mediabunny-player', () => ({ useMediabunnyPlayer: (options: { url?: string; savedPosition: number }) => {
   mocks.options(options)
-  return { state: { ...initialPlayerState, status: options.url ? 'ready' : 'idle', sourceUrl: options.url, duration: options.url ? 1000 : 0, currentTime: options.url === sources[1].url ? options.savedPosition : mocks.time, playing: mocks.playing, hasVideo: true }, play: mocks.update, pause: mocks.update, seek: mocks.update, setVolume: mocks.update, setAudioTrack: mocks.update, setPlaybackSpeed: mocks.update, toggleMute: mocks.update, toggle: mocks.update }
+  return { state: { ...initialPlayerState, status: options.url ? mocks.failed && options.url === sources[0].url ? 'error' : 'ready' : 'idle', sourceUrl: options.url, duration: options.url ? 1000 : 0, currentTime: options.url === sources[1].url ? options.savedPosition : mocks.time, playing: mocks.playing, hasVideo: true }, play: mocks.update, pause: mocks.update, seek: mocks.update, setVolume: mocks.update, setAudioTrack: mocks.update, setPlaybackSpeed: mocks.update, toggleMute: mocks.update, toggle: mocks.update }
 } }))
 const transport = { setOptions: async () => {}, getCastState: () => 'disconnected', on: () => {}, off: () => {}, sendMessage: async () => {} }
 vi.mock('../chromecast', () => ({ getChromecastTransport: () => transport }))
 beforeEach(() => {
-  mocks.time = 42; mocks.playing = false
+  mocks.time = 42; mocks.playing = false; mocks.failed = false
   useAutoPlayback.getState().reset()
   mocks.request.mockImplementation(async (path: string, options?: { body?: unknown }) => {
     if (path.includes('playback-settings')) return { settings: null }
@@ -62,5 +62,24 @@ it('prefetches next-episode sources near the end once, without opening another p
   expect(mocks.request.mock.calls.filter(([path]) => path === '/api/streams/series/two?addon_id=provider')).toHaveLength(1)
   expect(view.change).not.toHaveBeenCalled()
   expect(mocks.options.mock.calls.every(([options]) => !options.url || options.url === sources[0].url)).toBe(true)
+  view.unmount(); view.client.clear()
+})
+
+
+it('recovers when a late addon supplies the first alternative after a fast empty response', async () => {
+  mocks.failed = true
+  const slow = Promise.withResolvers<unknown>()
+  const original = mocks.request.getMockImplementation()!
+  mocks.request.mockImplementation((path: string, options?: { body?: unknown }) => {
+    if (path === '/api/addons') return Promise.resolve({ items: ['fast', 'slow'].map(id => ({ id, manifest: { name: id, resources: ['stream'], types: ['movie'] } })) })
+    if (path.endsWith('addon_id=fast')) return Promise.resolve({ responses: [{ addon_id: 'fast', response: { streams: [] } }] })
+    if (path.endsWith('addon_id=slow')) return slow.promise
+    return original(path, options)
+  })
+  const view = show()
+  await waitFor(() => expect(mocks.request).toHaveBeenCalledWith('/api/streams/movie/film?addon_id=fast', expect.anything()))
+  expect(view.change).not.toHaveBeenCalled()
+  await act(async () => slow.resolve({ responses: [{ addon_id: 'slow', response: { streams: [sources[1]] } }] }))
+  await waitFor(() => expect(view.change).toHaveBeenCalledWith(expect.objectContaining({ url: sources[1].url }), expect.objectContaining({ mediaId: 'film' })))
   view.unmount(); view.client.clear()
 })
