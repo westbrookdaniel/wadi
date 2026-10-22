@@ -1,4 +1,5 @@
-import { useAutoPlayback } from '@/store/auto-playback'
+import { usePlaybackDefaults } from '@/store/use-playback-defaults'
+import { useSourceRanking } from './use-source-ranking'
 import { rankStreams } from './auto-pick'
 import { useQuery } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
@@ -15,7 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { bottomPagePadding, mutedText } from '@/lib/styles'
 import { cn } from '@/lib/utils'
 
-import type { PlayableStream } from './types'
+import type { PlaybackTarget, PlayableStream } from './types'
 
 const FILTER_ALL = '__all__'
 type StreamRow = {
@@ -27,19 +28,22 @@ type StreamRow = {
 
 export function StreamList({
   streams,
+  target,
   isLoading,
   onPlay,
   selectedStream,
   selectionOnly = false,
 }: {
+  target?: PlaybackTarget
   streams: PlayableStream[]
   isLoading: boolean
   onPlay: (stream: PlayableStream) => void
   selectedStream?: PlayableStream
   selectionOnly?: boolean
 }) {
-  const settings = useAutoPlayback(state => state.settings)
-  const ranked = useMemo(() => rankStreams(streams, settings), [streams, settings])
+  const { settings } = usePlaybackDefaults()
+  const context = useSourceRanking(target)
+  const ranked = useMemo(() => rankStreams(streams, settings, context), [streams, settings, context])
   const recommendation = settings.enabled && !isLoading ? ranked.find(row => row.eligible) : undefined
   const orderedStreams = settings.enabled ? ranked.map(row => row.stream) : streams
   const addons = useQuery(addonsQuery)
@@ -82,6 +86,7 @@ export function StreamList({
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       {settings.enabled && !recommendation ? <p className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">No stream matches your auto-pick rules. Choose one below or adjust your settings.</p> : null}
+      <p className="text-xs text-muted-foreground">Choose a source below to use a different version. Playback support depends on the source and your device.</p>
       <div className="grid gap-2">
         <Select value={activeFilterValue} onValueChange={setFilterValue}>
           <SelectTrigger className="w-full justify-between rounded-lg border border-border bg-card/70 px-2.5 text-sm" aria-label="Source filter">
@@ -158,7 +163,7 @@ function streamDetail(stream: PlayableStream) {
     stream.infoHash ? 'Torrent' : undefined,
   ].filter(Boolean)
 
-  return parts.length ? parts.join(' • ') : stream.url ? 'Direct browser-playable stream' : 'Addon stream'
+  return parts.length ? parts.join(' • ') : stream.url ? 'Direct stream · compatibility varies' : 'Addon stream'
 }
 
 function normalizeStreamRow(

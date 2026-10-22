@@ -1,15 +1,21 @@
-import { useId, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
-import { useAutoPlayback } from '@/store/auto-playback'
+import { usePlaybackDefaults } from '@/store/use-playback-defaults'
+import { useSourceRanking } from './use-source-ranking'
+import { useQuery } from '@tanstack/react-query'
+import { playbackPreferencesQuery } from '@/api/queries'
+import { useDeviceStore } from '@/store/device-store'
 import { rankStreams } from './auto-pick'
 import { getStreamUrl } from './stream-playback'
 import { StreamList } from './stream-list'
-import type { PlayableStream } from './types'
+import type { PlaybackTarget, PlayableStream } from './types'
 
 // The parent keys this component by title/episode. A late query response cannot
 // carry either a manual choice or a pending playback action into another target.
-export function DetailStreamControls({ streams, isLoading, error, onRetry, onPlay, preferredStream }: {
+export function DetailStreamControls({ streams, isLoading, error, onRetry, onPlay, preferredStream, target, playRequested = false }: {
+  target?: PlaybackTarget
+  playRequested?: boolean
   streams: PlayableStream[]
   isLoading: boolean
   error: Error | null
@@ -17,17 +23,28 @@ export function DetailStreamControls({ streams, isLoading, error, onRetry, onPla
   onPlay: (stream: PlayableStream) => void
   preferredStream?: PlayableStream
 }) {
-  const settings = useAutoPlayback(state => state.settings)
+  const { settings, ready } = usePlaybackDefaults()
+  const context = useSourceRanking(target)
+  const playback = useQuery(playbackPreferencesQuery)
+  const tvMode = useDeviceStore(state => state.tvMode)
+  const attempted = useRef(false)
   const [open, setOpen] = useState(false)
   const [choice, setChoice] = useState<string | null>(() => preferredStream ? streamKey(preferredStream) : null)
   const trigger = useRef<HTMLButtonElement>(null)
   const lastLaunch = useRef<number>(-Infinity)
   const selectorId = useId()
-  const ranked = useMemo(() => rankStreams(streams, settings), [streams, settings])
+  const ranked = useMemo(() => rankStreams(streams, settings, context), [streams, settings, context])
   const manual = choice ? streams.find(stream => streamKey(stream) === choice) : undefined
-  const selected = choice ? manual : settings.enabled
+  const selected = choice ? manual : (settings.enabled || playRequested)
     ? ranked.find(row => row.eligible)?.stream
     : streams.find(stream => getStreamUrl(stream))
+  useEffect(() => {
+    if (attempted.current || !ready || isLoading || error || !selected || !getStreamUrl(selected)
+      || !playRequested
+      || (!tvMode && playback.data?.stream_action !== 'internal')) return
+    attempted.current = true
+    onPlay(selected)
+  }, [ready, isLoading, error, selected, playRequested, tvMode, playback.data, onPlay])
   const close = () => { setOpen(false); trigger.current?.focus() }
 
   return (
@@ -38,7 +55,7 @@ export function DetailStreamControls({ streams, isLoading, error, onRetry, onPla
       if (event.repeat && (event.key === 'Enter' || event.key === ' ')) event.preventDefault()
     }}>
       <div className="flex flex-wrap gap-2">
-        <Button type="button" data-tv-default data-tv-focus-key="watch" disabled={isLoading || Boolean(error) || !selected || !getStreamUrl(selected)} onClick={() => {
+        <Button type="button" data-tv-default data-tv-focus-key="watch" disabled={!ready || isLoading || Boolean(error) || !selected || !getStreamUrl(selected)} onClick={() => {
           // Bound double clicks/held remote OK without blocking a deliberate retry.
           if (!selected || Date.now() - lastLaunch.current < 500) return
           lastLaunch.current = Date.now()
@@ -54,7 +71,7 @@ export function DetailStreamControls({ streams, isLoading, error, onRetry, onPla
         : <p role="status" className="text-sm text-muted-foreground">{choice ? 'The selected stream is no longer available. Choose another stream.' : !streams.length ? 'No streams returned.' : settings.enabled ? 'No stream matches your auto-pick rules. Choose a stream.' : 'No playable streams returned.'}</p>}
       {open ? <section data-stream-selector id={selectorId} aria-label="Choose stream" className="flex min-h-0 flex-1 flex-col gap-3">
         <Button type="button" variant="ghost" size="sm" className="w-fit" data-tv-back onClick={close}>Close streams</Button>
-        {!error ? <StreamList streams={streams} isLoading={isLoading} selectionOnly selectedStream={selected} onPlay={stream => setChoice(streamKey(stream))} /> : null}
+        {!error ? <StreamList target={target} streams={streams} isLoading={isLoading} selectionOnly selectedStream={selected} onPlay={stream => setChoice(streamKey(stream))} /> : null}
       </section> : null}
     </div>
   )

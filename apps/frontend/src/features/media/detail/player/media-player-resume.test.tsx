@@ -26,7 +26,7 @@ const target = { mediaType: 'movie', mediaId: 'film', videoId: null }
 const progress = (position: number, time: number): WatchDataResponse => ({ media_type: 'movie', media_id: 'film', items: [{ media_type: 'movie', media_id: 'film', video_id: null, watched: false, position_seconds: position, duration_seconds: 1000, updated_at: new Date(time).toISOString() }] })
 beforeEach(() => {
   mocks.desktop.mockReturnValue(undefined)
-  vi.stubGlobal('AudioContext', class { state = 'suspended'; currentTime = 0; destination = {}; createGain() { return { gain: { value: 0 }, connect() {} } }; close = async () => {} })
+  vi.stubGlobal('AudioContext', class { state = 'suspended'; currentTime = 0; destination = {}; resume = async () => {}; createGain() { return { gain: { value: 0 }, connect() {} } }; close = async () => {} })
 })
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); useAppStore.setState({ activeProfileId: null }); localStorage.clear() })
 

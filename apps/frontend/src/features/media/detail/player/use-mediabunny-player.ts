@@ -23,7 +23,9 @@ export function useMediabunnyPlayer({
   initialPlaybackSpeed,
   onProgressCommit,
   onEnded,
+  autoPlay,
 }: {
+  autoPlay?: boolean
   canvasRef: RefObject<HTMLCanvasElement | null>
   url?: string
   authToken: string | null
@@ -65,6 +67,8 @@ export function useMediabunnyPlayer({
   const animationFrameRef = useRef<number | null>(null)
   const renderIntervalRef = useRef<number | null>(null)
   const renderRef = useRef<(requestNextFrame?: boolean) => void>(() => undefined)
+  const autoPlayRef = useRef(autoPlay)
+  useEffect(() => { autoPlayRef.current = autoPlay }, [autoPlay])
   const endedCallback = useRef(onEnded)
   useEffect(() => { endedCallback.current = onEnded }, [onEnded])
   const onProgressCommitRef = useRef(onProgressCommit)
@@ -150,7 +154,15 @@ export function useMediabunnyPlayer({
     }
 
     while (currentAsyncId === asyncIdRef.current) {
-      const result = await iterator.next()
+      let result
+      try { result = await iterator.next() }
+      catch {
+        if (currentAsyncId === asyncIdRef.current) {
+          pause(false)
+          updateState({ status: 'error', error: 'Video playback stopped. Try another source.' })
+        }
+        return
+      }
       const frame = result.value ?? null
       if (!frame) {
         break
@@ -167,7 +179,7 @@ export function useMediabunnyPlayer({
         break
       }
     }
-  }, [drawWrappedCanvas, getPlaybackTime])
+  }, [drawWrappedCanvas, getPlaybackTime, pause, updateState])
 
   const startVideoIterator = useCallback(async () => {
     const videoSink = videoSinkRef.current
@@ -192,6 +204,7 @@ export function useMediabunnyPlayer({
   }, [drawWrappedCanvas, getPlaybackTime])
 
   const runAudioIterator = useCallback(() => {
+    const iterator = audioBufferIteratorRef.current
     const consume = async () => {
       const audioContext = audioContextRef.current
       const gainNode = gainNodeRef.current
@@ -235,10 +248,16 @@ export function useMediabunnyPlayer({
     audioConsumersRef.current.add(task)
     void task.then(
       () => audioConsumersRef.current.delete(task),
-      error => { audioConsumersRef.current.delete(task); console.error(error) },
+      () => {
+        audioConsumersRef.current.delete(task)
+        if (iterator === audioBufferIteratorRef.current && playingRef.current) {
+          pause(false)
+          updateState({ status: 'error', error: 'Audio playback stopped. Try another source.' })
+        }
+      },
     )
     return task
-  }, [getPlaybackTime])
+  }, [getPlaybackTime, pause, updateState])
 
   const play = useCallback(async () => {
     if (stateRef.current.status !== 'ready') {
@@ -388,7 +407,7 @@ export function useMediabunnyPlayer({
 
     const init = async () => {
       dispose(false)
-      stateRef.current = { ...initialPlayerState, status: 'loading' }
+      stateRef.current = { ...initialPlayerState, status: 'loading', sourceUrl: url }
       setState(stateRef.current)
 
       try {
@@ -502,8 +521,8 @@ export function useMediabunnyPlayer({
         animationFrameRef.current = requestAnimationFrame(() => render())
         renderIntervalRef.current = window.setInterval(() => render(false), 500)
 
-        if (audioContext.state === 'running') {
-          void play()
+        if (autoPlayRef.current ?? (audioContext.state === 'running')) {
+          void play().catch(() => updateState({ playing: false, warning: 'Press Play to start playback.' }))
         }
       } catch (error) {
         if (canceled) {
@@ -514,6 +533,7 @@ export function useMediabunnyPlayer({
         updateState({
           ...initialPlayerState,
           status: 'error',
+          sourceUrl: url,
           error: error instanceof Error ? error.message : String(error),
         })
       }

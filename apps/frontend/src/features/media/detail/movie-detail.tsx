@@ -36,6 +36,7 @@ export function MovieDetailPage({
       sideContent={
         <DetailStreamControls
           key={`${media.type}:${media.id}`}
+          target={{ mediaType: media.type, mediaId: media.id, videoId: null }}
           preferredStream={preferredStream}
           error={streams.error}
           onRetry={() => void streams.refetch()}

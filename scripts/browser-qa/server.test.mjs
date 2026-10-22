@@ -61,3 +61,16 @@ test('empty/unavailable streams remain target-specific and held responses retain
   assert.equal((await (await fetch(origin+path)).json()).responses[0].response.streams[0].url,'');
   assert.equal((await (await fetch(origin+'/api/streams/series/qa-episode-2')).json()).responses[0].response.streams.length,2);
 }));
+
+test('profile defaults fixture saves, reloads and clears overrides with the API methods', () => withServer(async origin => {
+  const path = origin+'/api/profiles/qa-profile/playback-settings';
+  const settings = { preferredResolution:720, autoRecover:false };
+  assert.deepEqual(await (await fetch(path)).json(),{settings:null});
+  const save = await fetch(path,{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(settings)});
+  assert.equal(save.status,200);
+  assert.deepEqual(await save.json(),{settings});
+  assert.deepEqual(await (await fetch(path)).json(),{settings});
+  assert.equal((await fetch(path,{method:'DELETE'})).status,200);
+  assert.deepEqual(await (await fetch(path)).json(),{settings:null});
+  assert.deepEqual((await (await fetch(origin+'/qa/state')).json()).unexpected,[]);
+}));

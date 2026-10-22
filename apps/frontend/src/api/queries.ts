@@ -127,9 +127,11 @@ export const episodesQuery = (mediaId: string, profileId: string | null) => quer
 export const streamsQuery = (contentType: string, mediaId: string, enabled = true) =>
   queryOptions({
     queryKey: queryKeys.streams(contentType, mediaId),
-    queryFn: async () => {
+    staleTime: 60_000,
+    queryFn: async ({ signal }) => {
       const data = await apiRequest<ApiResponses<{ streams?: StreamInfo[] }>>(
         `/api/streams/${contentType}/${mediaId}`,
+        { signal },
       )
       if (!data.responses.some(item => item.response.streams?.length) && data.errors?.length) throw new Error('Please try again.')
       return data.responses.flatMap((item) =>

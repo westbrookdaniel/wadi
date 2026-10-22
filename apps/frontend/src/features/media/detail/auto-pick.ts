@@ -6,7 +6,13 @@ import { parseStreamMetadata } from './stream-metadata'
 export function isDirectStream(stream: PlayableStream) {
   try { return ['http:', 'https:'].includes(new URL(stream.url ?? '').protocol) } catch { return false }
 }
-export function rankStreams(streams: PlayableStream[], settings: AutoPlaybackSettings) {
+export type RankingContext = {
+  preferBingeGroup?: boolean
+  bingeGroup?: string | null
+  desktop?: boolean
+  reliability?: (stream: PlayableStream) => number
+}
+export function rankStreams(streams: PlayableStream[], settings: AutoPlaybackSettings, context: RankingContext = {}) {
   return streams.map((stream, index) => {
     const metadata = parseStreamMetadata(stream)
     const resolution = metadata.resolution.value
@@ -34,6 +40,13 @@ export function rankStreams(streams: PlayableStream[], settings: AutoPlaybackSet
     if (settings.codec !== 'any' && metadata.codec.value === settings.codec) { score += 25; reasons.push(settings.codec) }
     if (settings.language !== 'any' && metadata.languages.value?.some(lang => normalizeLanguage(lang) === settings.language || lang.startsWith(settings.language + '-'))) { score += 35; reasons.push('Preferred language') }
     if (settings.preferredAddon && stream.addon_id === settings.preferredAddon) { score += 40; reasons.push('Preferred provider') }
+    if ((context.preferBingeGroup ?? settings.preferBingeGroup) && context.bingeGroup && metadata.bingeGroup.value === context.bingeGroup) { score += 60; reasons.push('Same release family') }
+    if (settings.preferCompatible && context.desktop === false && metadata.codec.value === 'H.264') { score += 20; reasons.push('H.264 preference') }
+    if (settings.learnSourceReliability && context.reliability) {
+      const reliability = context.reliability(stream)
+      score += reliability
+      if (reliability > 0) reasons.push('Played successfully')
+    }
     return { stream, index, score, eligible, cached, reasons }
   }).sort((a, b) => Number(b.eligible) - Number(a.eligible) || (settings.cachedMode === 'prefer' ? Number(b.cached) - Number(a.cached) : 0) || b.score - a.score || a.index - b.index)
 }

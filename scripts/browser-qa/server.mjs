@@ -10,7 +10,7 @@ const defaults = { subtitles_enabled: true, subtitle_language: null, subtitle_de
 let watch = { media_type: 'movie', media_id: 'qa-film', video_id: null, watched: false, position_seconds: 60, duration_seconds: 120, updated_at: new Date().toISOString() };
 const watchKey = body => JSON.stringify([body.media_type, body.media_id, body.video_id ?? null]);
 const watches = new Map([[watchKey(watch), watch]]);
-let writes = [], delayWatchMs = 0;
+let writes = [], delayWatchMs = 0, playbackSettings = null;
 const unexpected = [], requests = [], held = new Map(), rules = {};
 const completed = [], aborted = [];
 const state = () => ({ watch, watches: [...watches.values()], writes, delayWatchMs, unexpected, requests, completed, aborted, pending: [...held.keys()] });
@@ -47,7 +47,8 @@ const server = createServer(async (req, res) => {
       const method = path === '/api/watch-progress' ? 'PUT' : path === '/api/profiles/select' || ['/api/auth/login','/api/auth/register'].includes(path) ? 'POST' : 'GET';
       const progressTarget = body.media_type === 'movie' && ['qa-film','qa-film-b'].includes(body.media_id) && body.video_id == null || body.media_type === 'series' && body.media_id === 'qa-show' && episodes.some(episode=>episode.id===body.video_id);
       const progressValid = path !== '/api/watch-progress' || (progressTarget && Number.isFinite(body.position_seconds) && body.position_seconds >= 0 && body.position_seconds <= 121 && (body.duration_seconds === undefined || body.duration_seconds === null || Number.isFinite(body.duration_seconds)));
-      if(req.method !== method || !progressValid){unexpected.push({path,method:req.method,reason:'Fixture contract mismatch'});return json(res,{error:'Fixture contract mismatch'},400);}
+      const allowedMethods = path === '/api/profiles/qa-profile/playback-settings' ? ['GET','PUT','DELETE'] : [method];
+      if(!allowedMethods.includes(req.method) || !progressValid){unexpected.push({path,method:req.method,reason:'Fixture contract mismatch'});return json(res,{error:'Fixture contract mismatch'},400);}
     }
     if (!path.startsWith('/qa/')) {
       requests.push({path, method:req.method, at:Date.now()});
@@ -66,6 +67,7 @@ const server = createServer(async (req, res) => {
     }
     if (path === '/api/auth/me') return json(res, { id: 'qa-user', email: 'qa@example.invalid', active_profile_id: 'qa-profile' });
     if (path === '/api/profiles') return json(res, { items: [{ id: 'qa-profile', name: 'QA', avatar_key: 'avatar-1', user_id: 'qa-user' }] });
+    if (path === '/api/profiles/qa-profile/playback-settings') { if (req.method === 'PUT') playbackSettings = body; if (req.method === 'DELETE') playbackSettings = null; return json(res, { settings: playbackSettings }); }
     if (path === '/api/profiles/select') return json(res, { active_profile_id: 'qa-profile' });
     if (path === '/api/auth/login' || path === '/api/auth/register') { res.setHeader('Retry-After', '900'); return json(res, { error: 'Too many sign-in attempts. Try again in 900 seconds.' }, 429); }
     if (path === '/api/settings/player-defaults') return json(res, defaults);
