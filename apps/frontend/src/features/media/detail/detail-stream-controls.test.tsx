@@ -122,3 +122,24 @@ it('keeps cached streams usable through a refetch and error, replacing only on s
   expect(await screen.findByRole('alert')).toHaveTextContent('Provider unavailable')
   expect(screen.getByRole('button', { name: /Synthetic B/ })).toBeEnabled()
 })
+
+it('shows a named partial provider failure with its reason and retries only that provider', async () => {
+  const addons = ['fast', 'torbox'].map(id => ({ id, manifest: { name: id === 'torbox' ? 'TorBox' : 'Fast addon', resources: ['stream'], types: ['movie'] } }))
+  let failed = true
+  request.mockImplementation((path: string) => {
+    if (path === '/api/addons') return Promise.resolve({ items: addons })
+    if (path.endsWith('addon_id=torbox') && failed) return Promise.resolve({ responses: [], errors: [{ addon_id: 'torbox', error: 'HTTP 401. Check your provider API key.' }] })
+    return Promise.resolve(response([streams[path.endsWith('addon_id=torbox') ? 1 : 0]]))
+  })
+  const play = vi.fn()
+  render(<QueryClientProvider client={client()}><MediaDetailPage media={movie} onPlay={play} onBack={vi.fn()} /></QueryClientProvider>)
+  expect(await screen.findByRole('alert')).toHaveTextContent('TorBox failed: HTTP 401. Check your provider API key.')
+  await userEvent.click(screen.getByRole('button', { name: /Synthetic A/ }))
+  expect(play).toHaveBeenCalledOnce()
+  const fastCalls = request.mock.calls.filter(([path]) => path.endsWith('addon_id=fast')).length
+  failed = false
+  await userEvent.click(screen.getByRole('button', { name: 'Retry TorBox' }))
+  expect(await screen.findByRole('button', { name: /Synthetic B/ })).toBeEnabled()
+  await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+  expect(request.mock.calls.filter(([path]) => path.endsWith('addon_id=fast'))).toHaveLength(fastCalls)
+})

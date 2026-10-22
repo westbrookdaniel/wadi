@@ -1,3 +1,4 @@
+import { DetailStreamControls } from '../detail-stream-controls'
 import { useStreams, prefetchStreams } from '../use-streams'
 import { useSubtitleTrack } from './use-subtitle-track'
 import { CopyStreamLink } from './copy-stream-link'
@@ -19,7 +20,6 @@ import { SourceControls } from './source-controls'
 import { useSourceRecovery } from './use-source-recovery'
 import { nextReleasedEpisode, rankStreams } from '../auto-pick'
 import { NextEpisodePrompt } from './next-episode-prompt'
-import { StreamList } from '../stream-list'
 import { episodesQuery } from '@/api/queries'
 import { useDesktopPlayer } from './use-desktop-player'
 import { desktopBridge } from '@/lib/desktop'
@@ -325,7 +325,7 @@ export function MediaPlayerPage({
     const key = `${profileId}:${activeTarget.mediaType}:${nextEpisode.id}`
     if (prefetchedNext.current === key) return
     prefetchedNext.current = key
-    void prefetchStreams(queryClient, activeTarget.mediaType, nextEpisode.id)
+    void prefetchStreams(queryClient, activeTarget.mediaType, nextEpisode.id).catch(() => { /* The episode picker exposes discovery errors and retry. */ })
   }, [defaultsReady, autoSettings.prefetchNext, autoSettings.autoplayNext, autoSettings.nextEpisodeLeadSeconds, autoSettings.countdownSeconds, nextEpisode, castConnected, tvMode, externalPreferences.data, player.state.duration, player.state.currentTime, queryClient, activeTarget.mediaType, profileId])
   const chooseQuality = (resolution: number | null) => {
     const next = eligibleSources.find(candidate => resolution === null || parseStreamMetadata(candidate).resolution.value === resolution)
@@ -505,7 +505,7 @@ export function MediaPlayerPage({
     setEpisodeSheetOpen(false)
   }, [pendingEpisode, activeTarget, releaseCatalog.data, saveProgress, player.state.currentTime, player.state.duration, onPlaybackChange, setPendingEpisode, setEpisodeSheetOpen])
   useEffect(() => {
-    if (!defaultsReady || !pendingEpisode || episodeStreams.isFetching || episodeStreams.error || !episodeStreams.data) return
+    if (!defaultsReady || !pendingEpisode || !episodeStreams.data.length) return
     const next = rankStreams(episodeStreams.data, autoSettings, pendingRankingContext).find(row => row.eligible)?.stream
     // Completing the provider request transitions the external player and its episode state together.
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -774,7 +774,7 @@ export function MediaPlayerPage({
 
           <SourceControls open={sourceSheetOpen} onOpenChange={setSourceSheetOpen} target={activeTarget}
             qualityStreams={eligibleSources}
-            streams={currentSources.data ?? []} loading={currentSources.isFetching} error={currentSources.isError} onRetry={() => void currentSources.refetch()}
+            streams={currentSources.data ?? []} loading={currentSources.isFetching} error={Boolean(currentSources.error)} failures={currentSources.failures} onRetry={() => void currentSources.refetch()}
             activeStream={describedStream} quality={quality} onQuality={chooseQuality}
             onSelect={next => { setQuality(null); switchSource(next, recovery.getPosition(), recovery.getPlaying()) }}
             onSmallerSource={smallerSource ? () => { setQuality(parseStreamMetadata(smallerSource).resolution.value); switchSource(smallerSource, recovery.getPosition(), recovery.getPlaying()) } : undefined}
@@ -794,10 +794,11 @@ export function MediaPlayerPage({
                 onSeasonChange={season => { setSelectedSwapSeason(season); saveLastSeason(useAppStore.getState().activeProfileId, activeTarget.mediaId, season) }}
                 onSelectEpisode={episode => { setUpNext(null); setPendingEpisode(episode) }}
               />
-              {pendingEpisode && !episodeStreams.isFetching ? <div className="grid gap-3"><p className="text-sm">Choose a stream for {pendingEpisode.title}</p>{episodeStreams.error ? <><p role="alert" className="text-sm text-destructive">Could not load streams.</p><Button onClick={() => void episodeStreams.refetch()}>Retry</Button></> : <StreamList streams={episodeStreams.data ?? []} isLoading={false} onPlay={changeEpisode} />}</div> : null}
-              {pendingEpisode && episodeStreams.isFetching ? (
-                <p className="text-sm text-muted-foreground">Loading streams for {pendingEpisode.title}…</p>
-              ) : null}
+              {pendingEpisode ? <div className="grid gap-3">
+                <p className="text-sm">Choose a stream for {pendingEpisode.title}</p>
+                <DetailStreamControls streams={episodeStreams.data} isLoading={episodeStreams.isFetching} error={episodeStreams.error}
+                  failures={episodeStreams.failures} onRetry={() => void episodeStreams.refetch()} onPlay={changeEpisode} />
+              </div> : null}
             </DialogContent>
           </Dialog>
 

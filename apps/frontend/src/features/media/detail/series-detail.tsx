@@ -159,6 +159,7 @@ export function SeriesDetailPage({
               playRequested={playRequested}
               target={{ mediaType: media.type, mediaId: media.id, videoId: selectedEpisode.id, episodeContext: selectedEpisode }}
               error={streams.error}
+          failures={streams.failures}
               onRetry={() => void streams.refetch()}
               streams={streams.data ?? []}
               isLoading={streams.isFetching}

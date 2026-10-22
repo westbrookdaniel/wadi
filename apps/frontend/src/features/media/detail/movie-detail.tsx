@@ -37,6 +37,7 @@ export function MovieDetailPage({
           key={`${media.type}:${media.id}`}
           target={{ mediaType: media.type, mediaId: media.id, videoId: null }}
           error={streams.error}
+          failures={streams.failures}
           onRetry={() => void streams.refetch()}
           streams={streams.data ?? []}
           isLoading={streams.isFetching}

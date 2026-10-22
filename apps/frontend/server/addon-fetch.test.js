@@ -16,3 +16,15 @@ test('a hung addon times out without delaying an independent fast addon', async 
   assert.equal(fast.streams.length, 1);
   await slow;
 });
+
+test('reports HTTP and HTTP-200 debrid failures without exposing credentials', async t => {
+  const upstream = createServer((req, res) => {
+    if (req.url.startsWith('/http/')) { res.writeHead(401); return res.end('secret-token'); }
+    res.end(JSON.stringify({ success: false, error: 'TorBox AUTH_BAD_TOKEN', detail: 'https://provider.test/secret-token?api_key=secret-token' }));
+  });
+  upstream.listen(0, '127.0.0.1'); await once(upstream, 'listening');
+  t.after(() => { upstream.closeAllConnections(); upstream.close(); });
+  const base = `http://127.0.0.1:${upstream.address().port}`;
+  await assert.rejects(fetchAddonJson(base + '/http/secret-token', { allowPrivate: true }), error => /HTTP 401/.test(error.message) && !error.message.includes('secret-token'));
+  await assert.rejects(fetchAddonJson(base + '/json/secret-token', { allowPrivate: true }), error => /TorBox: Authentication failed/.test(error.message) && !error.message.includes('secret-token'));
+});

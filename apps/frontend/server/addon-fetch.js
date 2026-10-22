@@ -50,13 +50,21 @@ async function requestAddonJson(source, { allowPrivate = false, timeoutMs = 1000
 
 // Never expose configured paths: addon URLs can contain provider credentials.
 export async function fetchAddonJson(source, options) {
-  try { return await requestAddonJson(source, options); }
+  try {
+    const value = await requestAddonJson(source, options);
+    // Some debrid addons report an API error in a successful HTTP response.
+    const failure = providerFailure(value);
+    if (failure) throw Object.assign(new Error(failure), { providerFailure: true });
+    return value;
+  }
   catch (error) {
     const host = new URL(source).hostname;
     const upstreamStatus = /^Addon returned HTTP (\d+)$/.exec(error.message)?.[1];
     const code = typeof error.code === 'string' && /^[A-Z0-9_]+$/.test(error.code) ? error.code : undefined;
     console.warn('Addon request failed', { host, upstreamStatus, code });
-    const message = upstreamStatus
+    const message = error.providerFailure
+      ? `The addon provider (${host}) failed: ${error.message}`
+      : upstreamStatus
       ? `The addon provider (${host}) returned HTTP ${upstreamStatus}. Please try again later or check the addon URL.`
       : error.name === 'AbortError'
         ? `The addon provider (${host}) took too long to respond. Please try again.`
@@ -65,4 +73,23 @@ export async function fetchAddonJson(source, options) {
           : `Could not connect to the addon provider (${host}). Please try again later.`;
     throw Object.assign(new Error(message), { status: 502, code: 'ADDON_PROVIDER_ERROR' });
   }
+}
+
+// Only publish recognized reasons/codes, never arbitrary provider text or URLs:
+// configured addon paths and upstream error payloads can contain API keys.
+function providerFailure(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || value.streams?.length) return null;
+  if (!value.error && value.success !== false && value.status !== 'error') return null;
+  const detail = [value.error, value.error?.code, value.error?.message, value.code, value.message, value.detail].filter(item => typeof item === 'string').join(' ');
+  const provider = /\b(TorBox|RealDebrid|AllDebrid|Premiumize)\b/i.exec(detail)?.[1];
+  const reason = /unauthori[sz]ed|invalid.*(?:key|token)|bad.token|auth(?:entication)?[_ ](?:failed|error)|auth_bad/i.test(detail)
+    ? 'Authentication failed. Check your provider API key.'
+    : /rate.?limit|too many requests|429/i.test(detail)
+      ? 'Rate limit reached. Try again later.'
+      : /premium|subscription|expired/i.test(detail)
+        ? 'The provider subscription is unavailable or expired.'
+        : /timeout|timed out/i.test(detail)
+          ? 'The provider took too long to respond.'
+          : 'The provider reported an error. Try again or check its configuration.';
+  return `${provider ? provider + ': ' : ''}${reason}`;
 }

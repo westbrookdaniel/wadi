@@ -21,7 +21,14 @@ export function useStreams(type: string, id: string, enabled = true) {
       isFetching: enabled && (addons.isFetching || results.some(result => result.isFetching)),
       isSuccess: addons.isSuccess && (results.length === 0 || results.some(result => result.isSuccess)),
       isError: addons.isError || results.some(result => result.isError),
-      error: addons.error ?? results.find(result => result.error)?.error ?? null,
+      error: addons.error,
+      failures: results.flatMap((result, index) => result.error ? [{
+        id: providers[index].id,
+        provider: providers[index].manifest.name ?? providers[index].id,
+        message: result.error.message,
+        isRetrying: result.isFetching,
+        onRetry: () => { void result.refetch() },
+      }] : []),
       refetch: () => addons.error ? addons.refetch() : Promise.allSettled(results.map(result => result.refetch())),
     }),
   })

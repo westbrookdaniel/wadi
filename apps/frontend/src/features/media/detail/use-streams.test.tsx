@@ -5,7 +5,7 @@ import { useStreams } from './use-streams'
 
 const request = vi.fn()
 vi.mock('@/api/client', () => ({ apiRequest: (...args: unknown[]) => request(...args), ApiError: Error }))
-export const providers = ['fast', 'slow'].map(id => ({ id, manifest: { name: id, resources: ['stream'], types: ['movie'] } }))
+const providers = ['fast', 'slow'].map(id => ({ id, manifest: { name: id, resources: ['stream'], types: ['movie'] } }))
 const response = (id: string) => ({ responses: [{ addon_id: id, response: { streams: [{ title: id, url: `https://example.test/${id}` }] } }] })
 afterEach(() => request.mockReset())
 
@@ -22,6 +22,6 @@ it('publishes fast addon streams while another hangs, retaining only that addon 
   request.mockImplementation((path: string) => path.endsWith('addon_id=fast') ? Promise.resolve(response('updated')) : Promise.reject(new Error('Timed out')))
   await act(async () => { await result.current.refetch() })
   await waitFor(() => expect(result.current.data.map(stream => stream.title)).toEqual(['updated', 'slow']))
-  expect(result.current.error).toBeTruthy()
+  expect(result.current.failures[0]).toMatchObject({ provider: 'slow', message: 'Timed out' })
   unmount(); client.clear()
 })
