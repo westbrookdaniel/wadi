@@ -185,7 +185,6 @@ export function MediaPlayerPage({
 
 
 
-  const lastSentCastPropsRef = useRef<string | null>(null)
 
   const streamSubtitleList = useMemo(
     () => mergeSubtitleTracks(
@@ -456,9 +455,7 @@ export function MediaPlayerPage({
       "duration",
       "volume",
       "muted",
-      "playbackSpeed",
       "selectedSubtitlesTrackId",
-      "selectedAudioTrackId",
     ]
     propsToObserve.forEach((propName) => {
       void castTransport.sendMessage({ type: "observeProp", propName })
@@ -466,42 +463,13 @@ export function MediaPlayerPage({
   }, [activeStream.url, castConnected, castTransport, pauseLocal, streamSubtitleList])
 
   useEffect(() => {
-    if (!castConnected) {
-      lastSentCastPropsRef.current = null
-      return
-    }
-    const castProps = {
-      playbackSpeed: playbackState.playbackSpeed,
-      selectedSubtitlesTrackId: playbackState.selectedSubtitleId,
-      selectedAudioTrackId: playbackState.selectedAudioTrackId,
-    }
-    const serialized = JSON.stringify(castProps)
-    if (serialized === lastSentCastPropsRef.current) {
-      return
-    }
-    lastSentCastPropsRef.current = serialized
-    void castTransport.sendMessage({
-      type: "setProp",
-      propName: "playbackSpeed",
-      propValue: castProps.playbackSpeed,
-    })
+    if (!castConnected) return
     void castTransport.sendMessage({
       type: "setProp",
       propName: "selectedSubtitlesTrackId",
-      propValue: castProps.selectedSubtitlesTrackId,
+      propValue: playbackState.selectedSubtitleId,
     })
-    void castTransport.sendMessage({
-      type: "setProp",
-      propName: "selectedAudioTrackId",
-      propValue: castProps.selectedAudioTrackId,
-    })
-  }, [
-    castConnected,
-    castTransport,
-    playbackState.playbackSpeed,
-    playbackState.selectedAudioTrackId,
-    playbackState.selectedSubtitleId,
-  ])
+  }, [castConnected, castTransport, playbackState.selectedSubtitleId])
 
   const activeSubtitleTrack = useMemo(
     () => streamSubtitleList.find((track) => track.id === playbackState.selectedSubtitleId),
@@ -583,13 +551,10 @@ export function MediaPlayerPage({
   }, [castConnected, castState.muted, castTransport, player])
 
   const onChangeSpeed = useCallback((speed: number) => {
+    if (castConnected) return
     updatePlaybackState({ playbackSpeed: speed })
-    if (castConnected) {
-      void castTransport.sendMessage({ type: "setProp", propName: "playbackSpeed", propValue: speed })
-      return
-    }
     player.setPlaybackSpeed(speed)
-  }, [castConnected, castTransport, player, updatePlaybackState])
+  }, [castConnected, player, updatePlaybackState])
 
   const effectiveState: PlayerState = castConnected
     ? {
@@ -602,9 +567,6 @@ export function MediaPlayerPage({
           castState.paused === undefined
             ? player.state.playing
             : !(castState.paused as boolean),
-      playbackSpeed: Number(castState.playbackSpeed ?? player.state.playbackSpeed),
-      selectedAudioTrackId:
-          (castState.selectedAudioTrackId as string | null | undefined) ?? player.state.selectedAudioTrackId,
     }
     : player.state
 
@@ -783,12 +745,9 @@ export function MediaPlayerPage({
             onVolumeChange={onVolume}
             onToggleMute={onToggleMute}
             onSelectAudioTrack={(id) => {
+              if (castConnected) return
               updatePlaybackState({ selectedAudioTrackId: id, preferredAudioLanguage: id ? effectiveState.audioTracks.find(track => track.id === id)?.language ?? null : null })
-              if (castConnected) {
-                void castTransport.sendMessage({ type: "setProp", propName: "selectedAudioTrackId", propValue: id })
-              } else {
-                player.setAudioTrack(id)
-              }
+              player.setAudioTrack(id)
             }}
           />
 
@@ -1114,6 +1073,7 @@ function DesktopPlayerChrome({
           </div>
 
             <div className="ml-auto flex items-center gap-1 max-[620px]:col-span-3 max-[620px]:col-start-1 max-[620px]:row-start-2 max-[620px]:w-full max-[620px]:justify-between">
+              {!castConnected ? <>
               <div className="relative">
                 <TooltipButton label="Playback speed">
                   <Button
@@ -1214,6 +1174,8 @@ function DesktopPlayerChrome({
                   </div>
                 ) : null}
               </div>
+
+              </> : null}
 
               <TooltipButton label={castUnavailableReason ?? (castConnected ? "Stop casting" : "Cast")}>
                 <Button
