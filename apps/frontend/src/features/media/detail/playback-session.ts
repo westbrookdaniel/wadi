@@ -32,7 +32,7 @@ function pruneSessions() {
     }
   } catch { /* Memory fallback remains available when storage is blocked. */ }
   for (const [key, value] of sessionFallback) entries.set(key, sessionTimestamp(value))
-  const ordered = [...entries].sort((a, b) => b[1] - a[1])
+  const ordered = [...entries].reverse().sort((a, b) => b[1] - a[1])
   ordered.forEach(([key, timestamp], index) => {
     if (index < sessionLimit && (!timestamp || now - timestamp < sessionLifetime)) return
     sessionFallback.delete(key)

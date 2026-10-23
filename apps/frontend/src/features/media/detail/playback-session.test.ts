@@ -112,7 +112,7 @@ it('honors subtitle off and preferred language before audio-based automatic sele
 
 it('bounds persisted playback sessions and expires old sessions without deleting unrelated storage', () => {
   let clock = Date.now() + 1000
-  vi.spyOn(Date, 'now').mockImplementation(() => clock++)
+  vi.spyOn(Date, 'now').mockImplementation(() => clock)
   sessionStorage.setItem('wadi.profile.selected_token', 'keep-me')
   const keys = Array.from({ length: 25 }, () => savePlaybackSession({ url: 'https://example.test/video' }, target))
   expect(sessionStorage.length).toBe(21)
