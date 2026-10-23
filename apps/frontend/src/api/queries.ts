@@ -113,7 +113,7 @@ export async function fetchCatalogItems(contentType: string, catalogId: string, 
 export const metaQuery = (contentType: string, mediaId: string, enabled = true) =>
   queryOptions({
     queryKey: queryKeys.meta(contentType, mediaId),
-    queryFn: () => apiRequest<ApiResponses>(`/api/meta/${contentType}/${mediaId}`),
+    queryFn: () => apiRequest<ApiResponses>(`/api/meta/${encodeURIComponent(contentType)}/${encodeURIComponent(mediaId)}`),
     enabled,
   })
 
