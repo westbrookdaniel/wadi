@@ -58,7 +58,7 @@ The desktop development build and sign-in window were opened, and the web login 
 ## Detail pages and stream providers
 
 - Open a movie with legacy skip-selection on and off. Details and the full stream list should stay visible until choosing a stream; the Source filter sits above the list. Choosing a row starts playback directly.
-- Open a series, choose a season/episode and confirm its title and streams. Back above the streams returns to episode selection. Episode Play/Resume chooses an available matching source.
+- Open a series, choose a season/episode and confirm its title and streams. Back above the streams returns to episode selection.
 - Refresh a populated list. Existing rows must remain clickable until that addon's new results arrive; on a refresh error they stay visible. A successful empty result should remove only that addon's old rows.
 - Delay one stream addon while another responds quickly. Fast results should appear immediately; a hung addon should fail after its own ten-second timeout.
 - Fail one provider (including TorBox), then all providers. Confirm named non-blocking messages, a reason where known, and a retry for each failed addon. Retry should not refetch successful addons, and working/cached streams should remain usable. Repeat in Quality & sources and the player's episode picker.
@@ -66,7 +66,7 @@ The desktop development build and sign-in window were opened, and the web login 
 ## Playback defaults and source switching
 
 - Save different resolution/language/recovery defaults for two profiles; switch between them and reopen on another device. A profile without an override uses device defaults; resetting an override restores those defaults.
-- Play/resume an episode directly and confirm manual source selection still works on returning from the player.
+- Choose an episode, play a stream, and confirm manual source selection still works on returning from the player.
 - Switch quality while playing and paused, including after a rewind to zero. Confirm the position and pause state survive, and the selected source is retained when reloading.
 - Fail the first two sources or delay startup beyond the wait limit. Confirm bounded recovery, no repeated URLs, and manual selection after exhaustion. Disable recovery and confirm errors remain manual. Desktop seeks must not trigger startup recovery.
 - Open Quality & sources on desktop, mobile and TV; reach all controls and close normally. Test smaller-source recovery. While casting, source switching must be unavailable.

@@ -91,17 +91,6 @@ it('TV Back returns from visible movie streams to browsing', async () => {
   expect(back).toHaveBeenCalledOnce()
 })
 
-it('keeps explicit episode Play/Resume launching the ranked stream once', async () => {
-  request.mockImplementation(async (path: string) => path === '/api/settings/playback' ? { stream_action: 'internal' } : response())
-  useAutoPlayback.getState().update({ enabled: true })
-  const play = vi.fn()
-  render(<QueryClientProvider client={client()}><MediaDetailPage media={series} onBack={vi.fn()} onPlay={play} /></QueryClientProvider>)
-  await userEvent.click(screen.getByRole('button', { name: 'Play Pilot' }))
-  await waitFor(() => expect(play).toHaveBeenCalledOnce())
-  expect(play.mock.calls[0][0].url).toBe(streams[0].url)
-  expect(play.mock.calls[0][1]).toMatchObject({ videoId: 'episode-a', mediaId: 'show-a' })
-})
-
 it('keeps cached streams usable through a refetch and error, replacing only on success', async () => {
   let resolveRefresh!: (value: unknown) => void
   request.mockResolvedValue(response())
