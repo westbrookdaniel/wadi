@@ -110,3 +110,17 @@ it('honors subtitle off and preferred language before audio-based automatic sele
   expect(defaultSubtitleForAudio('jpn', tracks, { enabled: true, language: 'fr' })).toBeNull()
 })
 
+it('bounds persisted playback sessions and expires old sessions without deleting unrelated storage', () => {
+  let clock = Date.now() + 1000
+  vi.spyOn(Date, 'now').mockImplementation(() => clock++)
+  sessionStorage.setItem('wadi.profile.selected_token', 'keep-me')
+  const keys = Array.from({ length: 25 }, () => savePlaybackSession({ url: 'https://example.test/video' }, target))
+  expect(sessionStorage.length).toBe(21)
+  expect(readPlaybackSession(keys[0], 'series', 'show')).toBeNull()
+  expect(readPlaybackSession(keys[24], 'series', 'show')).not.toBeNull()
+  clock += 24 * 60 * 60 * 1000
+  expect(readPlaybackSession(keys[24], 'series', 'show')).toBeNull()
+  savePlaybackSession({ url: 'https://example.test/fresh' }, target)
+  expect(sessionStorage.length).toBe(2)
+  expect(sessionStorage.getItem('wadi.profile.selected_token')).toBe('keep-me')
+})

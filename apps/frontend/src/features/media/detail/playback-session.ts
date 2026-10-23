@@ -5,6 +5,7 @@ import type { PlayableStream, PlaybackTarget } from './types'
 const optionalText = z.string().optional()
 const episode = z.object({ id: z.string(), title: z.string(), season: z.number().nullable(), episode: z.number().nullable(), released: optionalText, overview: optionalText, thumbnail: optionalText })
 const sessionSchema = z.object({
+  savedAt: z.number().finite().nonnegative().optional(),
   stream: z.object({ title: optionalText, name: optionalText, url: optionalText, externalUrl: optionalText, infoHash: optionalText, fileIdx: z.number().optional(), addon_id: optionalText,
     subtitles: z.array(z.object({ id: optionalText, lang: optionalText, url: optionalText }).passthrough()).optional(),
     behaviorHints: z.object({ videoHash: optionalText, videoSize: z.number().optional(), filename: optionalText }).passthrough().optional(),
@@ -15,17 +16,37 @@ function storageKey(key: string) {
   return `wadi.playback.${useAppStore.getState().activeProfileId}.${key}`
 }
 const sessionFallback = new Map<string, string>()
-export function savePlaybackSession(stream: PlayableStream, target: PlaybackTarget) {
-  const key = crypto.randomUUID()
-  const value = JSON.stringify({ stream, target })
-  try { sessionStorage.setItem(storageKey(key), value) } catch {
-    // Keep navigation usable when browser storage is full or blocked.
-    sessionFallback.set(storageKey(key), value)
-    if (sessionFallback.size > 20) {
-      const oldest = sessionFallback.keys().next()
-      if (!oldest.done) sessionFallback.delete(oldest.value)
+const sessionLimit = 20
+const sessionLifetime = 24 * 60 * 60 * 1000
+const isSessionKey = (key: string) => /^wadi\.playback\..+\.[0-9a-f-]{36}$/i.test(key)
+function sessionTimestamp(value: string) {
+  try { return sessionSchema.safeParse(JSON.parse(value)).data?.savedAt ?? 0 } catch { return 0 }
+}
+function pruneSessions() {
+  const now = Date.now()
+  const entries = new Map<string, number>()
+  try {
+    for (let index = 0; index < sessionStorage.length; index++) {
+      const key = sessionStorage.key(index)
+      if (key && isSessionKey(key)) entries.set(key, sessionTimestamp(sessionStorage.getItem(key) ?? 'null'))
     }
+  } catch { /* Memory fallback remains available when storage is blocked. */ }
+  for (const [key, value] of sessionFallback) entries.set(key, sessionTimestamp(value))
+  const ordered = [...entries].sort((a, b) => b[1] - a[1])
+  ordered.forEach(([key, timestamp], index) => {
+    if (index < sessionLimit && (!timestamp || now - timestamp < sessionLifetime)) return
+    sessionFallback.delete(key)
+    try { sessionStorage.removeItem(key) } catch { /* Storage may be blocked. */ }
+  })
+}
+export function savePlaybackSession(stream: PlayableStream, target: PlaybackTarget) {
+  pruneSessions()
+  const key = crypto.randomUUID()
+  const value = JSON.stringify({ stream, target, savedAt: Date.now() })
+  try { sessionStorage.setItem(storageKey(key), value) } catch {
+    sessionFallback.set(storageKey(key), value)
   }
+  pruneSessions()
   return key
 }
 export function readPlaybackSession(key: string | undefined, type: string, id: string) {
@@ -33,7 +54,9 @@ export function readPlaybackSession(key: string | undefined, type: string, id: s
   try {
     const fallback = sessionFallback.get(storageKey(key))
     const result = sessionSchema.safeParse(JSON.parse(fallback ?? sessionStorage.getItem(storageKey(key)) ?? 'null'))
-    return result.success && result.data.target.mediaType === type && result.data.target.mediaId === id ? result.data : null
+    if (!result.success || result.data.target.mediaType !== type || result.data.target.mediaId !== id) return null
+    if (result.data.savedAt !== undefined && Date.now() - result.data.savedAt >= sessionLifetime) return null
+    return { stream: result.data.stream, target: result.data.target }
   } catch { return null }
 }
 type Checkpoint = { position: number; updatedAt: number; recordedAt?: number }
