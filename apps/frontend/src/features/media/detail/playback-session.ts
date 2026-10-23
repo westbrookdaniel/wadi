@@ -14,15 +14,25 @@ const sessionSchema = z.object({
 function storageKey(key: string) {
   return `wadi.playback.${useAppStore.getState().activeProfileId}.${key}`
 }
+const sessionFallback = new Map<string, string>()
 export function savePlaybackSession(stream: PlayableStream, target: PlaybackTarget) {
   const key = crypto.randomUUID()
-  sessionStorage.setItem(storageKey(key), JSON.stringify({ stream, target }))
+  const value = JSON.stringify({ stream, target })
+  try { sessionStorage.setItem(storageKey(key), value) } catch {
+    // Keep navigation usable when browser storage is full or blocked.
+    sessionFallback.set(storageKey(key), value)
+    if (sessionFallback.size > 20) {
+      const oldest = sessionFallback.keys().next()
+      if (!oldest.done) sessionFallback.delete(oldest.value)
+    }
+  }
   return key
 }
 export function readPlaybackSession(key: string | undefined, type: string, id: string) {
   if (!key) return null
   try {
-    const result = sessionSchema.safeParse(JSON.parse(sessionStorage.getItem(storageKey(key)) ?? 'null'))
+    const fallback = sessionFallback.get(storageKey(key))
+    const result = sessionSchema.safeParse(JSON.parse(fallback ?? sessionStorage.getItem(storageKey(key)) ?? 'null'))
     return result.success && result.data.target.mediaType === type && result.data.target.mediaId === id ? result.data : null
   } catch { return null }
 }

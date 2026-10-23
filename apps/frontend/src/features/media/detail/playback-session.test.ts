@@ -1,7 +1,9 @@
-import { beforeEach, expect, it } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { useAppStore } from '@/store/app-store'
 import { acknowledgePlaybackPosition, reconcilePlaybackPosition, readSubtitleChoice, saveSubtitleChoice, readPlaybackPosition, readPlaybackSession, savePlaybackPosition, savePlaybackSession } from './playback-session'
 import { defaultSubtitleForAudio, languageName } from './player/subtitle-utils'
+
+afterEach(() => vi.restoreAllMocks())
 
 const target = { mediaType: 'series', mediaId: 'show', videoId: 'show:1:2' }
 beforeEach(() => { sessionStorage.clear(); localStorage.clear(); useAppStore.setState({ activeProfileId: 'profile-a' }) })
@@ -87,4 +89,16 @@ it('orders same-millisecond actions and adopts the acknowledged server normaliza
   const response = { position_seconds: 0, updated_at: new Date(Date.now() + 10).toISOString() }
   acknowledgePlaybackPosition(target, second, response)
   expect(readPlaybackPosition(target)).toBe(0)
+})
+
+it('opens streams when session storage is full or blocked while keeping profiles isolated', () => {
+  const stream = { url: 'https://example.test/video.mkv' }
+  vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new DOMException('Quota exceeded', 'QuotaExceededError') })
+  const key = savePlaybackSession(stream, target)
+  expect(readPlaybackSession(key, 'series', 'show')).toEqual({ stream, target })
+  vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new DOMException('Blocked', 'SecurityError') })
+  expect(readPlaybackSession(key, 'series', 'show')).toEqual({ stream, target })
+  expect(readPlaybackSession(key, 'series', 'another-show')).toBeNull()
+  useAppStore.setState({ activeProfileId: 'profile-b' })
+  expect(readPlaybackSession(key, 'series', 'show')).toBeNull()
 })
