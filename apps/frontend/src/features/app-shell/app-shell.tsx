@@ -42,7 +42,7 @@ export function AppShell({
   const backdrop = useDynamicBackdropColor(location.pathname);
   const token = useAppStore((state) => state.token);
   const activeProfileId = useAppStore((state) => state.activeProfileId);
-  const profiles = useQuery({ ...profilesQuery, enabled: Boolean(token) });
+  const profiles = useQuery({ ...profilesQuery(), enabled: Boolean(token) });
   const activeProfile = (profiles.data ?? []).find((value) => value.id === activeProfileId) ?? null;
 
   if (tvMode) return <TvShell activePath={activePath} pageKey={String(activeProfileId) + ':' + location.pathname + (hideNavigation ? ':player' : '')} label={label} hideNavigation={hideNavigation} onNavigate={onNavigate}>

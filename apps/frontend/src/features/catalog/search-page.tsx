@@ -19,7 +19,7 @@ export function SearchPage({ onOpenMedia }: { onOpenMedia: (media: MediaPreview)
   const searchInput = useRef<HTMLInputElement>(null)
   const [query, setQuery] = useTvPageState('search-query', '')
   const debouncedQuery = useDebouncedValue(query.trim())
-  const catalogs = useQuery(catalogsQuery)
+  const catalogs = useQuery(catalogsQuery())
   const searchable = (catalogs.data ?? []).filter((entry) =>
     entry.catalog.extra?.some((extra) => extra.name === 'search'),
   )

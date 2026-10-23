@@ -34,7 +34,7 @@ export function IntegrationSettings() {
     queryKey,
     queryFn: () => apiRequest<Connections>("/api/account/integrations"),
   });
-  const profiles = useQuery(profilesQuery);
+  const profiles = useQuery(profilesQuery());
   const [name, setName] = useState("");
   const [profile, setProfile] = useState("");
   const [write, setWrite] = useState(false);

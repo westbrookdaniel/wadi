@@ -1,7 +1,9 @@
-import { beforeEach, expect, it } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { useAppStore } from '@/store/app-store'
 import { acknowledgePlaybackPosition, reconcilePlaybackPosition, readSubtitleChoice, saveSubtitleChoice, readPlaybackPosition, readPlaybackSession, savePlaybackPosition, savePlaybackSession } from './playback-session'
 import { defaultSubtitleForAudio, languageName } from './player/subtitle-utils'
+
+afterEach(() => vi.restoreAllMocks())
 
 const target = { mediaType: 'series', mediaId: 'show', videoId: 'show:1:2' }
 beforeEach(() => { sessionStorage.clear(); localStorage.clear(); useAppStore.setState({ activeProfileId: 'profile-a' }) })
@@ -87,4 +89,38 @@ it('orders same-millisecond actions and adopts the acknowledged server normaliza
   const response = { position_seconds: 0, updated_at: new Date(Date.now() + 10).toISOString() }
   acknowledgePlaybackPosition(target, second, response)
   expect(readPlaybackPosition(target)).toBe(0)
+})
+
+it('opens streams when session storage is full or blocked while keeping profiles isolated', () => {
+  const stream = { url: 'https://example.test/video.mkv' }
+  vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new DOMException('Quota exceeded', 'QuotaExceededError') })
+  const key = savePlaybackSession(stream, target)
+  expect(readPlaybackSession(key, 'series', 'show')).toEqual({ stream, target })
+  vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new DOMException('Blocked', 'SecurityError') })
+  expect(readPlaybackSession(key, 'series', 'show')).toEqual({ stream, target })
+  expect(readPlaybackSession(key, 'series', 'another-show')).toBeNull()
+  useAppStore.setState({ activeProfileId: 'profile-b' })
+  expect(readPlaybackSession(key, 'series', 'show')).toBeNull()
+})
+
+it('honors subtitle off and preferred language before audio-based automatic selection', () => {
+  const tracks = [{ id: 'en', language: 'eng' }, { id: 'es', language: 'spa' }]
+  expect(defaultSubtitleForAudio('jpn', tracks, { enabled: false, language: 'spa' })).toBeNull()
+  expect(defaultSubtitleForAudio('eng', tracks, { enabled: true, language: 'es' })).toBe('es')
+  expect(defaultSubtitleForAudio('jpn', tracks, { enabled: true, language: 'fr' })).toBeNull()
+})
+
+it('bounds persisted playback sessions and expires old sessions without deleting unrelated storage', () => {
+  let clock = Date.now() + 1000
+  vi.spyOn(Date, 'now').mockImplementation(() => clock)
+  sessionStorage.setItem('wadi.profile.selected_token', 'keep-me')
+  const keys = Array.from({ length: 25 }, () => savePlaybackSession({ url: 'https://example.test/video' }, target))
+  expect(sessionStorage.length).toBe(21)
+  expect(readPlaybackSession(keys[0], 'series', 'show')).toBeNull()
+  expect(readPlaybackSession(keys[24], 'series', 'show')).not.toBeNull()
+  clock += 24 * 60 * 60 * 1000
+  expect(readPlaybackSession(keys[24], 'series', 'show')).toBeNull()
+  savePlaybackSession({ url: 'https://example.test/fresh' }, target)
+  expect(sessionStorage.length).toBe(2)
+  expect(sessionStorage.getItem('wadi.profile.selected_token')).toBe('keep-me')
 })

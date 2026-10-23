@@ -10,7 +10,7 @@ const librarySchema = z.object({ items: z.array(z.object({ media_id: z.string(),
 export function ReleaseProvider({ children, enabled }: { children: ReactNode; enabled: boolean }) {
   const profileId = useAppStore(state => state.activeProfileId)
   const revision = useAppStore(state => state.authRevision)
-  const layout = useQuery(browseLayoutQuery)
+  const layout = useQuery(browseLayoutQuery())
   const preferences = { ...defaultReleasePreferences, ...layout.data?.newEpisodes }
   const shouldLoad = enabled && Boolean(profileId) && (preferences.showBadges || !layout.data?.pages.home.hidden.includes('new_episodes'))
   const library = useQuery({ queryKey: ['lists', 'episode-library', profileId, revision, preferences.listId], queryFn: async ({ signal }) => librarySchema.parse(await apiRequest('/api/episode-library?listId=' + encodeURIComponent(preferences.listId), { signal })), enabled: shouldLoad, staleTime: 60_000 })

@@ -12,7 +12,7 @@ const CREATE_LIST_VALUE = '__create_list__'
 export function WatchlistAddButton({ media }: { media: MediaPreview }) {
   const queryClient = useQueryClient()
   const { openDialog } = useDialogManager()
-  const lists = useQuery(listsQuery)
+  const lists = useQuery(listsQuery())
   const defaultList = (lists.data ?? []).find((list) => list.is_default) ?? null
   const customLists = (lists.data ?? []).filter((list) => !list.is_default)
   const listItems = useQueries({

@@ -39,9 +39,9 @@ import {
 export function BrowseLayoutSettings() {
   const tvMode = useDeviceStore(state => state.tvMode)
   const queryClient = useQueryClient()
-  const catalogs = useQuery(catalogsQuery)
-  const lists = useQuery(listsQuery)
-  const browseLayout = useQuery(browseLayoutQuery)
+  const catalogs = useQuery(catalogsQuery())
+  const lists = useQuery(listsQuery())
+  const browseLayout = useQuery(browseLayoutQuery())
   const activePage = 'home'
   const [draftLayout, setDraftLayout] = useState<BrowseLayout | null>(null)
 

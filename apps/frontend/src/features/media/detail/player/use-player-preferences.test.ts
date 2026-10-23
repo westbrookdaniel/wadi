@@ -16,7 +16,7 @@ describe('resolveSubtitleSelectionState', () => {
     expect(patch).toBeNull()
   })
 
-  it('disables subtitles when no tracks exist after loading', () => {
+  it('clears unavailable tracks without disabling the subtitle preference', () => {
     const patch = resolveSubtitleSelectionState(
       {
         selectedSubtitleId: 'eng',
@@ -26,6 +26,13 @@ describe('resolveSubtitleSelectionState', () => {
       [],
       false,
     )
-    expect(patch).toEqual({ selectedSubtitleId: null, subtitlesEnabled: false })
+    expect(patch).toEqual({ selectedSubtitleId: null })
   })
+})
+
+it('keeps subtitle intent after a trackless source so a later source can select the preferred language', () => {
+  const intent = { selectedSubtitleId: 'eng', subtitlesEnabled: true, preferredSubtitleLanguage: 'eng' }
+  const patch = resolveSubtitleSelectionState(intent, [], false)
+  expect(patch).toEqual({ selectedSubtitleId: null })
+  expect(resolveSubtitleSelectionState({ ...intent, ...patch }, [{ id: 'next-eng', language: 'eng' }], false)).toEqual({ selectedSubtitleId: 'next-eng' })
 })

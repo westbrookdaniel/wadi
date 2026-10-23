@@ -12,7 +12,7 @@ export function streamAddons(addons: AddonRecord[], type: string, id: string) {
 
 // Separate cache entries let each provider publish or retain its own results.
 export function useStreams(type: string, id: string, enabled = true) {
-  const addons = useQuery({ ...addonsQuery, enabled })
+  const addons = useQuery({ ...addonsQuery(), enabled })
   const providers = streamAddons(addons.data ?? [], type, id)
   return useQueries({
     queries: providers.map(addon => streamsQuery(type, id, enabled, addon.id)),
@@ -35,6 +35,6 @@ export function useStreams(type: string, id: string, enabled = true) {
 }
 
 export async function prefetchStreams(client: QueryClient, type: string, id: string) {
-  const addons = await client.fetchQuery(addonsQuery)
+  const addons = await client.fetchQuery(addonsQuery())
   await Promise.allSettled(streamAddons(addons, type, id).map(addon => client.prefetchQuery(streamsQuery(type, id, true, addon.id))))
 }

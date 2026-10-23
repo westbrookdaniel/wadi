@@ -15,8 +15,8 @@ export function DiscoverPage({ search, onChange, onOpenMedia }: {
   onChange: (search: DiscoverSearch) => void
   onOpenMedia: (media: MediaPreview) => void
 }) {
-  const catalogs = useQuery(catalogsQuery)
-  const lists = useQuery(listsQuery)
+  const catalogs = useQuery(catalogsQuery())
+  const lists = useQuery(listsQuery())
   const sources = discoverSources(catalogs.data ?? [], lists.data ?? [])
   const types = [...new Set(['movie', 'series', ...(catalogs.data ?? []).map(entry => entry.catalog.type)])]
   const type = search.type && types.includes(search.type) ? search.type : ''

@@ -30,7 +30,7 @@ export function ProtectedRoute({
   const queryClient = useQueryClient();
   const me = useQuery(meQuery(Boolean(token)));
   const profiles = useQuery({
-    ...profilesQuery,
+    ...profilesQuery(),
     enabled: Boolean(token && me.data),
   });
   const selectProfileMutation = useMutation({

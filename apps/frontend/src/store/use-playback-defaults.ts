@@ -22,6 +22,7 @@ export function usePlaybackDefaults() {
     retry: false,
   })
   const mutation = useMutation({
+    scope: { id: JSON.stringify(key) },
     mutationFn: async ({ settings, path: requestPath, key: requestKey, profileId: requestProfile }: { settings: AutoPlaybackSettings | null; path: string; key: typeof key; profileId: string | null }) => {
       if (!requestProfile) {
         if (settings) updateDevice(settings)

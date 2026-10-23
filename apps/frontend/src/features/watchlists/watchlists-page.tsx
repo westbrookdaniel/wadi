@@ -22,7 +22,7 @@ export function WatchlistsPage({ onOpenMedia }: { onOpenMedia: (media: MediaPrev
   const selectedListId = useAppStore((state) => state.selectedListId)
   const setSelectedListId = useAppStore((state) => state.setSelectedListId)
 
-  const lists = useQuery(listsQuery)
+  const lists = useQuery(listsQuery())
   const defaultList = (lists.data ?? []).find((list) => list.is_default) ?? null
   const activeListId = lists.data?.some(list => list.id === selectedListId) ? selectedListId : defaultList?.id ?? lists.data?.[0]?.id ?? null
   const activeList = (lists.data ?? []).find((list) => list.id === activeListId) ?? null

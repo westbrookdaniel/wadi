@@ -31,3 +31,30 @@ it('clears all active account state and advances the session revision on expiry'
   await expect(apiRequest('/api/auth/me')).rejects.toThrow()
   expect(useAppStore.getState()).toMatchObject({ token: null, activeProfileId: null, selectedListId: null, authRevision: revision + 1 })
 })
+
+it('pins a request to the profile selected at invocation even if selection changes before completion', async () => {
+  const response = Promise.withResolvers<Response>()
+  const fetcher = vi.fn((url: string, options: RequestInit) => { void url; void options; return response.promise })
+  vi.stubGlobal('fetch', fetcher)
+  useAppStore.setState({ activeProfileId: 'alice' })
+  const pending = apiRequest('/api/watch-progress', { method: 'PUT', body: { position_seconds: 42 } })
+  useAppStore.setState({ activeProfileId: 'bob' })
+  expect(new Headers(fetcher.mock.calls[0]?.[1].headers).get('X-Wadi-Profile')).toBe('alice')
+  response.resolve(new Response('{}'))
+  await pending
+})
+it('cancels a desktop request and rejects promptly when its query is aborted', async () => {
+  const pending = Promise.withResolvers<{ status: number; body: unknown }>()
+  const cancel = vi.fn(async () => {})
+  const request = vi.fn(() => pending.promise)
+  vi.stubGlobal('window', { wadiDesktop: { request, cancelRequest: cancel } })
+  const controller = new AbortController()
+  const result = apiRequest('/api/streams/movie/film', { signal: controller.signal })
+  const rejection = expect(result).rejects.toMatchObject({ name: 'AbortError' })
+  controller.abort()
+  await rejection
+  expect(cancel).toHaveBeenCalledTimes(1)
+  expect(cancel).toHaveBeenCalledWith(expect.any(String))
+  pending.resolve({ status: 401, body: {} })
+  await Promise.resolve()
+})

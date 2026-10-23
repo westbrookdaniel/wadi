@@ -176,3 +176,13 @@ Detail pages, the player source chooser and episode selection use independent Re
 Refetching retains cached rows; each successful addon response replaces its own rows, including a successful empty list. Failed requests retain that addon's cached rows and expose a named retry without hiding successful providers. Upstream HTTP status and recognized JSON debrid failure reasons are shown without configured paths, raw payloads or credentials. Unknown provider errors use a generic configuration/retry message. The API must be deployed with the frontend for scoped stream requests to take effect.
 
 Movie streams are always shown, and series use season/episode pickers before showing the selected episode's streams. The player's Copy stream link icon copies the active URL. Cast playback retains its supported transport commands; speed and audio-track selection are hidden while connected because the default receiver has no handlers for them.
+
+## Profile isolation and playback session limits
+
+Account data query keys include the authentication revision and selected profile. Changing either replaces the app query client and cancels old queries; late mutation callbacks retain the old client. Requests carry an optional `X-Wadi-Profile` header. The API checks ownership and uses that profile for data routes, while auth and profile-management routes retain the session's selected profile. Older clients without the header retain the existing session behavior. Deploy the matching API for request-level profile pinning.
+
+Desktop query cancellation uses request IDs over trusted IPC, with AbortControllers in the main process. AbortSignal objects do not cross Electron's context bridge. Cancelling one request leaves others alone; quitting aborts pending requests.
+
+Playback navigation retains at most 20 stored sessions across profiles and expires dated sessions after 24 hours. Saving prunes old entries before writing, including the bounded memory fallback used when browser storage is blocked. Checkpoints, subtitle choices, and profile-selection storage are separate. An expired playback URL returns to title details for source selection.
+
+Subtitle availability does not change the saved on/off or language preference. Appearance edits preserve that intent even if no tracks are available. Automatic audio-based selection respects an explicit off/language preference and does not save its chosen track as a user preference.
