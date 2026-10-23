@@ -1,9 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, expect, it, vi } from 'vitest'
 import { useAutoPlayback } from '@/store/auto-playback'
-import { DetailStreamControls } from './detail-stream-controls'
 import { StreamList } from './stream-list'
 vi.mock('@/api/queries', () => ({ addonsQuery: () => ({ queryKey: ['addons'], queryFn: async () => [] }), playbackPreferencesQuery: { queryKey: ['playback-preferences'], queryFn: async () => ({ stream_action: 'internal' }) } }))
 afterEach(() => { cleanup(); useAutoPlayback.getState().reset() })
@@ -25,10 +24,3 @@ it('shows unmatched streams without launching anything', () => {
   expect(screen.getByText(/No stream matches/)).toBeVisible(); expect(play).not.toHaveBeenCalled()
 })
 
-it('honors an explicit episode Play request without enabling automatic selection globally', async () => {
-  const client = new QueryClient(); const play = vi.fn()
-  client.setQueryData(['playback-preferences'], { stream_action: 'internal' })
-  render(<QueryClientProvider client={client}><DetailStreamControls playRequested streams={streams} isLoading={false} error={null} onRetry={() => {}} onPlay={play} /></QueryClientProvider>)
-  await waitFor(() => expect(play).toHaveBeenCalledOnce())
-  expect(useAutoPlayback.getState().settings.enabled).toBe(false)
-})

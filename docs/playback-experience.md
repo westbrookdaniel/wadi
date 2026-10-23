@@ -1,6 +1,6 @@
 # Playback defaults and source controls
 
-Movie details always show the full stream list with a **Source filter** above it; choosing a stream starts playback directly. Series details first offer season/episode pickers, then show the selected episode and its streams, with **Back** returning to episode selection. Episode rows also offer **Play** or **Resume**, which chooses an available source using the viewer's quality, language, size and provider rules. Legacy skip-selection settings do not bypass movie details. Settings → **Playback defaults** controls source ranking, quality limits, recovery, next-episode preparation and watch-progress thresholds.
+Movie details always show the full stream list with a **Source filter** above it; choosing a stream starts playback directly. Series details first offer season/episode pickers, then show the selected episode and its streams, with **Back** returning to episode selection. Legacy skip-selection settings do not bypass movie details. Settings → **Playback defaults** controls source ranking, quality limits, recovery, next-episode preparation and watch-progress thresholds.
 
 Streams from each addon appear independently as they arrive. Existing rows remain available during a refresh; successful addon results replace that addon's rows, while failed addons retain their previous results. Each addon has a ten-second request timeout. A non-blocking failure message names the addon/provider and gives a reason when known, with **Retry** for that addon. Other providers' results remain usable.
 

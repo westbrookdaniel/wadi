@@ -91,9 +91,7 @@ export function SeriesDetailPage({
     watchDataQuery(media.type, media.id, Boolean(media)),
   );
 
-  const [playRequested, setPlayRequested] = useState(false)
-  const selectEpisode = (episode: Episode, play = false) => {
-    setPlayRequested(play)
+  const selectEpisode = (episode: Episode) => {
     setSelectedEpisodeIdOverride(episode.id);
     setSelectedSeasonOverride(episode.season);
     onSelectionChange?.({ season: episode.season, episodeId: episode.id });
@@ -156,7 +154,6 @@ export function SeriesDetailPage({
           <div className="flex min-h-0 flex-1 flex-col gap-3">
             <DetailStreamControls
               key={`${media.id}:${selectedEpisodeId ?? selectedEpisode.id}`}
-              playRequested={playRequested}
               target={{ mediaType: media.type, mediaId: media.id, videoId: selectedEpisode.id, episodeContext: selectedEpisode }}
               error={streams.error}
           failures={streams.failures}
@@ -189,7 +186,6 @@ export function SeriesDetailPage({
             watchData={watchData.data}
             onSeasonChange={onSeasonChange}
             onSelectEpisode={selectEpisode}
-            onPlayEpisode={episode => selectEpisode(episode, true)}
           />
         )
       }
@@ -209,7 +205,6 @@ function EpisodeSelector({
   watchData,
   onSeasonChange,
   onSelectEpisode,
-  onPlayEpisode,
 }: {
   media: MediaPreview;
   episodes: Episode[];
@@ -219,7 +214,6 @@ function EpisodeSelector({
   watchData: WatchDataResponse | undefined;
   onSeasonChange: (season: number | null) => void;
   onSelectEpisode: (episode: Episode) => void;
-  onPlayEpisode: (episode: Episode) => void;
 }) {
   if (!episodes.length) {
     return <p className={mutedText}>No episodes returned for this series.</p>;
@@ -290,7 +284,6 @@ function EpisodeSelector({
             watchState={watchData?.items.filter(state => (episode.videoIds ?? [episode.id]).includes(state.video_id ?? "")).sort((a, b) => (b.updated_at ?? "").localeCompare(a.updated_at ?? ""))[0]}
             watchUnavailable={!watchData}
             onClick={() => onSelectEpisode(episode)}
-            onPlay={() => onPlayEpisode(episode)}
           />
         ))}
       </div>
@@ -304,14 +297,12 @@ function EpisodeButton({
   watchState,
   watchUnavailable,
   onClick,
-  onPlay,
 }: {
   episode: Episode;
   media: MediaPreview;
   watchUnavailable: boolean;
   watchState?: { position_seconds: number; duration_seconds?: number | null; watched: boolean };
   onClick: () => void;
-  onPlay: () => void;
 }) {
   const toggle = useWatchToggle(media.type, media.id, episode.id)
   return (
@@ -345,7 +336,6 @@ function EpisodeButton({
           <TooltipContent>{formatWatchDuration(watchState.position_seconds)} watched{watchState.duration_seconds ? ` of ${formatWatchDuration(watchState.duration_seconds)}` : ''}</TooltipContent>
         </Tooltip>
       ) : null}
-      <Button size="sm" variant="secondary" data-tv-default={!watchState?.watched ? '' : undefined} data-tv-focus-key={`play-episode:${episode.id}`} aria-label={`${watchState && watchState.position_seconds > 0 && !watchState.watched ? 'Resume' : 'Play'} ${episode.title}`} onClick={onPlay}>{watchState && watchState.position_seconds > 0 && !watchState.watched ? 'Resume' : 'Play'}</Button>
       <WatchedButton compact title={episode.title} watched={watchState?.watched ?? false} isPending={toggle.isPending || watchUnavailable} onClick={() => toggle.mutate(!watchState?.watched)} />
       </div>
       {toggle.error ? <p role="alert" className="px-3 py-2 text-xs text-destructive">{toggle.error.message}</p> : null}
