@@ -19,13 +19,18 @@ const playerSchema = z.object({
 })
 const overrideSchema = playerSchema.partial().extend({ subtitle_outline_width: z.number().min(0).max(6).optional() })
 const memory = new Map<string, unknown>()
+const pending = new Set<string>()
 function read(key: string): unknown {
+  if (pending.has(key)) return memory.get(key)
   try { return JSON.parse(localStorage.getItem(key) ?? 'null') } catch { return memory.get(key) ?? null }
 }
 function save(key: string, value: unknown) {
   // Continue to work in memory when browser storage is unavailable.
   memory.set(key, value)
-  try { localStorage.setItem(key, JSON.stringify(value)) } catch { /* Session-only fallback. */ }
+  try {
+    localStorage.setItem(key, JSON.stringify(value))
+    pending.delete(key)
+  } catch { pending.add(key) }
 }
 export const playbackKey = 'wadi.device.playback.v1'
 export async function devicePlayback(loadLegacy: () => Promise<PlaybackPreferences>) {

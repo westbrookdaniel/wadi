@@ -1,5 +1,7 @@
-import { expect, it, vi } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import { devicePlayback, saveDevicePlayback, deviceOverride, saveDeviceOverride } from './playback-settings'
+
+afterEach(() => vi.restoreAllMocks())
 it('imports legacy playback once and keeps subsequent changes local', async () => {
   const legacy = vi.fn(async () => ({ stream_action: 'copy' as const, external_player_template: 'vlc://{url}' }))
   expect((await devicePlayback(legacy)).stream_action).toBe('copy')
@@ -24,4 +26,22 @@ it('reads changes made by another tab and preserves other fields on a partial sa
   localStorage.setItem('shared-title', JSON.stringify({ subtitle_size: 2, playback_speed: 1.5 }))
   expect(await deviceOverride('shared-title', async () => ({}))).toEqual({ subtitle_size: 2, playback_speed: 1.5 })
   expect(await saveDeviceOverride('shared-title', { playback_speed: 1 })).toEqual({ subtitle_size: 2, playback_speed: 1 })
+})
+
+it('retains edits and partial overrides when storage writes fail but reads still work', async () => {
+  localStorage.setItem('quota-title', JSON.stringify({ subtitle_size: 1 }))
+  const writes = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+    throw new DOMException('Quota exceeded', 'QuotaExceededError')
+  })
+  saveDeviceOverride('quota-title', { subtitle_size: 2 })
+  expect(await deviceOverride('quota-title', async () => ({}))).toEqual({ subtitle_size: 2 })
+  expect(saveDeviceOverride('quota-title', { playback_speed: 1.5 })).toEqual({ subtitle_size: 2, playback_speed: 1.5 })
+  await saveDevicePlayback({ stream_action: 'copy', external_player_template: 'vlc://{url}' })
+  const legacy = vi.fn()
+  expect((await devicePlayback(legacy)).stream_action).toBe('copy')
+  expect(legacy).not.toHaveBeenCalled()
+  writes.mockRestore()
+  saveDeviceOverride('quota-title', { playback_speed: 1 })
+  localStorage.setItem('quota-title', JSON.stringify({ subtitle_size: 3 }))
+  expect(await deviceOverride('quota-title', async () => ({}))).toEqual({ subtitle_size: 3 })
 })
