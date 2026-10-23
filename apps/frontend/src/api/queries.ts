@@ -56,31 +56,31 @@ export const queryKeys = {
 export const meQuery = (enabled: boolean) =>
   queryOptions({
     queryKey: queryKeys.me,
-    queryFn: () => apiRequest<User>('/api/auth/me'),
+    queryFn: ({ signal }) => apiRequest<User>('/api/auth/me', { signal }),
     enabled,
     retry: false,
   })
 
 export const addonsQuery = () => queryOptions({
   queryKey: queryKeys.addons,
-  queryFn: async () => {
-    const data = await apiRequest<ApiListResponse<AddonRecord>>('/api/addons')
+  queryFn: async ({ signal }) => {
+    const data = await apiRequest<ApiListResponse<AddonRecord>>('/api/addons', { signal })
     return data.items
   },
 })
 
 export const catalogsQuery = () => queryOptions({
   queryKey: queryKeys.catalogs,
-  queryFn: async () => {
-    const data = await apiRequest<ApiListResponse<CatalogEntry>>('/api/catalogs')
+  queryFn: async ({ signal }) => {
+    const data = await apiRequest<ApiListResponse<CatalogEntry>>('/api/catalogs', { signal })
     return data.items
   },
 })
 
 export const listsQuery = () => queryOptions({
   queryKey: queryKeys.lists,
-  queryFn: async () => {
-    const data = await apiRequest<ApiListResponse<UserList>>('/api/lists')
+  queryFn: async ({ signal }) => {
+    const data = await apiRequest<ApiListResponse<UserList>>('/api/lists', { signal })
     return data.items
   },
 })
@@ -88,8 +88,8 @@ export const listsQuery = () => queryOptions({
 export const listItemsQuery = (listId: string | null) =>
   queryOptions({
     queryKey: queryKeys.listItems(listId),
-    queryFn: async () => {
-      const data = await apiRequest<ApiListResponse<ListItem>>(`/api/lists/${listId}/items`)
+    queryFn: async ({ signal }) => {
+      const data = await apiRequest<ApiListResponse<ListItem>>(`/api/lists/${listId}/items`, { signal })
       return data.items
     },
     enabled: Boolean(listId),
@@ -118,7 +118,7 @@ export async function fetchCatalogItems(contentType: string, catalogId: string, 
 export const metaQuery = (contentType: string, mediaId: string, enabled = true) =>
   queryOptions({
     queryKey: queryKeys.meta(contentType, mediaId),
-    queryFn: () => apiRequest<ApiResponses>(`/api/meta/${encodeURIComponent(contentType)}/${encodeURIComponent(mediaId)}`),
+    queryFn: ({ signal }) => apiRequest<ApiResponses>(`/api/meta/${encodeURIComponent(contentType)}/${encodeURIComponent(mediaId)}`, { signal }),
     enabled,
   })
 
@@ -154,9 +154,9 @@ export const watchDataQuery = (
 ) =>
   queryOptions({
     queryKey: queryKeys.watchData(contentType, mediaId),
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       apiRequest<WatchDataResponse>(
-        `/api/watch-data/${encodeURIComponent(contentType)}/${encodeURIComponent(mediaId)}`,
+        `/api/watch-data/${encodeURIComponent(contentType)}/${encodeURIComponent(mediaId)}`, { signal },
       ),
     enabled,
   })
@@ -164,11 +164,11 @@ export const watchDataQuery = (
 export const continueWatchingQuery = (limit = 20) =>
   queryOptions({
     queryKey: queryKeys.continueWatching(limit),
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       let data: ApiListResponse<ContinueWatchingItem>
       try {
         data = await apiRequest<ApiListResponse<ContinueWatchingItem>>(
-          `/api/continue-watching?limit=${limit}`,
+          `/api/continue-watching?limit=${limit}`, { signal },
         )
       } catch (error) {
         // A 404 here usually means the dev frontend is pointed at a backend that has not been restarted with the viewing-state routes.
@@ -184,13 +184,13 @@ export const continueWatchingQuery = (limit = 20) =>
 
 export const browseLayoutQuery = () => queryOptions({
   queryKey: queryKeys.browseLayout,
-  queryFn: () => apiRequest<BrowseLayout>('/api/settings/browse-layout'),
+  queryFn: ({ signal }) => apiRequest<BrowseLayout>('/api/settings/browse-layout', { signal }),
 })
 
 export const profilesQuery = () => queryOptions({
   queryKey: queryKeys.profiles,
-  queryFn: async () => {
-    const data = await apiRequest<ApiListResponse<Profile>>('/api/profiles')
+  queryFn: async ({ signal }) => {
+    const data = await apiRequest<ApiListResponse<Profile>>('/api/profiles', { signal })
     return data.items
   },
 })
@@ -421,11 +421,11 @@ export const subtitlesQuery = (
   const normalizedContext = normalizeSubtitleQueryContext(context)
   return queryOptions({
     queryKey: queryKeys.subtitles(contentType, mediaId, normalizedContext),
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const search = new URLSearchParams(normalizedContext)
       const suffix = search.size ? `?${search.toString()}` : ''
       const data = await apiRequest<ApiResponses<{ subtitles?: SubtitleInfo[] }>>(
-        `/api/subtitles/${encodeURIComponent(contentType)}/${encodeURIComponent(mediaId)}${suffix}`,
+        `/api/subtitles/${encodeURIComponent(contentType)}/${encodeURIComponent(mediaId)}${suffix}`, { signal },
       )
       return data.responses.flatMap((item) =>
         (item.response.subtitles ?? []).map((subtitle) => ({

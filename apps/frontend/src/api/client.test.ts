@@ -43,3 +43,18 @@ it('pins a request to the profile selected at invocation even if selection chang
   response.resolve(new Response('{}'))
   await pending
 })
+it('cancels a desktop request and rejects promptly when its query is aborted', async () => {
+  const pending = Promise.withResolvers<{ status: number; body: unknown }>()
+  const cancel = vi.fn(async () => {})
+  const request = vi.fn(() => pending.promise)
+  vi.stubGlobal('window', { wadiDesktop: { request, cancelRequest: cancel } })
+  const controller = new AbortController()
+  const result = apiRequest('/api/streams/movie/film', { signal: controller.signal })
+  const rejection = expect(result).rejects.toMatchObject({ name: 'AbortError' })
+  controller.abort()
+  await rejection
+  expect(cancel).toHaveBeenCalledTimes(1)
+  expect(cancel).toHaveBeenCalledWith(expect.any(String))
+  pending.resolve({ status: 401, body: {} })
+  await Promise.resolve()
+})

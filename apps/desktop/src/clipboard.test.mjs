@@ -52,7 +52,7 @@ test('preload exposes a named write-only method guarded by user activation, neve
     assert.equal(name, 'electron');
     return { contextBridge: { exposeInMainWorld: (name, api) => { assert.equal(name, 'wadiDesktop'); bridge = api; } }, ipcRenderer: { invoke: (...args) => { calls.push(args); return Promise.resolve(); } } };
   } });
-  assert.deepEqual(Object.keys(bridge).sort(), ['appVersion','getStartFullscreen','setStartFullscreen','onStartFullscreenChanged','updateState','checkUpdates','downloadUpdate','onUpdate','onOpenSettings','openPage','session','signIn','request','media','openExternal','copyStreamLink'].sort());
+  assert.deepEqual(Object.keys(bridge).sort(), ['appVersion','getStartFullscreen','setStartFullscreen','onStartFullscreenChanged','updateState','checkUpdates','downloadUpdate','onUpdate','onOpenSettings','openPage','session','signIn','request','cancelRequest','media','openExternal','copyStreamLink'].sort());
   await assert.rejects(bridge.copyStreamLink('https://example.invalid/a'), /user action/);
   assert.deepEqual(calls, []);
   navigator.userActivation.isActive = true;

@@ -24,11 +24,23 @@ type ApiOptions = {
 }
 
 export async function apiRequest<T>(path: string, options: ApiOptions = {}) {
+  options.signal?.throwIfAborted()
   const revision = useAppStore.getState().authRevision
   const profileId = options.profileId === undefined ? useAppStore.getState().activeProfileId : options.profileId
   const desktop = desktopBridge()
   if (desktop) {
-    const response = await desktop.request(path, { method: options.method, body: options.body, profileId })
+    const signal = options.signal
+    const requestId = signal && desktop.cancelRequest ? crypto.randomUUID() : undefined
+    let onAbort: (() => void) | undefined
+    const response = await new Promise<{ status: number; body: unknown }>((resolve, reject) => {
+      onAbort = () => {
+        if (requestId) void desktop.cancelRequest?.(requestId).catch(() => {})
+        reject(signal?.reason ?? new DOMException('Request aborted', 'AbortError'))
+      }
+      signal?.addEventListener('abort', onAbort, { once: true })
+      desktop.request(path, { method: options.method, body: options.body, profileId, requestId }).then(resolve, reject)
+    }).finally(() => { if (onAbort) signal?.removeEventListener('abort', onAbort) })
+    signal?.throwIfAborted()
     if (response.status >= 400) {
       if (response.status === 401 && revision === useAppStore.getState().authRevision) clearStoredToken()
       throw new ApiError(response.status, response.body)

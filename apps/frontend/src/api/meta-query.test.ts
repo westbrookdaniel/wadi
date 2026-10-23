@@ -11,6 +11,6 @@ it('keeps addon identifiers containing URL delimiters inside the metadata path s
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   try {
     await client.fetchQuery(metaQuery('movie', 'provider:film/part?lang=en#edition'))
-    expect(request).toHaveBeenCalledWith('/api/meta/movie/provider%3Afilm%2Fpart%3Flang%3Den%23edition')
+    expect(request).toHaveBeenCalledWith('/api/meta/movie/provider%3Afilm%2Fpart%3Flang%3Den%23edition', { signal: expect.any(AbortSignal) })
   } finally { client.clear() }
 })

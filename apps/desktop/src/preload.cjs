@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('wadiDesktop', {
   session: () => ipcRenderer.invoke('session'),
   signIn: () => ipcRenderer.invoke('sign-in'),
   request: (path, options) => ipcRenderer.invoke('api', path, options),
+  cancelRequest: requestId => ipcRenderer.invoke('api-cancel', requestId),
   media: (action, payload) => ipcRenderer.invoke('media', action, payload),
   copyStreamLink: url => {
     if (!navigator.userActivation?.isActive) return Promise.reject(new Error('Copy requires a user action'));

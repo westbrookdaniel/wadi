@@ -6,6 +6,7 @@ import { readFile, writeFile, mkdir, rm } from 'node:fs/promises';
 import { dirname, join, resolve, extname, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { z } from 'zod';
+import { createApiRequests } from './api-requests.mjs';
 import { createMediaService } from './media.mjs';
 import { createUpdates } from './updates.mjs';
 import { assertTrustedMainFrame, registerCopyStreamLink } from './clipboard.mjs';
@@ -58,13 +59,14 @@ async function api(path, options = {}) {
   if (requestToken) headers.Authorization = `Bearer ${requestToken}`;
   const body = options.body === undefined ? undefined : JSON.stringify(options.body);
   if (body && body.length > 1024*1024) throw new Error('Request too large');
-  const response = await fetch(url, { method, headers, body, redirect: 'error', signal: AbortSignal.timeout(30000) });
+  const response = await fetch(url, { method, headers, body, redirect: 'error', signal: AbortSignal.any([AbortSignal.timeout(30000), ...(options.signal ? [options.signal] : [])]) });
   const text = await response.text();
   if (requestToken === token && (response.status === 401 || (path === '/api/auth/logout' || path === '/api/account' && method === 'DELETE') && response.ok)) await saveToken(null);
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { return { status: 503, body: { error: 'Wadi is temporarily unavailable. Please try again.' } }; }
   return { status: response.status, body: data };
 }
+const apiRequests = createApiRequests(api);
 function trusted(event) {
   assertTrustedMainFrame(event, window);
 }
@@ -150,8 +152,9 @@ for (const [name, handler] of Object.entries({
   'sign-in': signIn,
   api: (path, options) => {
     if (typeof path !== 'string' || path.startsWith('/api/auth/') && !['/api/auth/me','/api/auth/logout'].includes(path)) throw new Error('Use browser sign-in');
-    return api(path, options);
+    return apiRequests.request(path, options);
   },
+  'api-cancel': requestId => apiRequests.cancel(requestId),
   media: (action, payload) => media.command(action, payload),
   external: openExternal,
 })) ipcMain.handle(name, (event, ...args) => { trusted(event); return handler(...args); });
@@ -169,7 +172,7 @@ updates = createUpdates({
 if (process.platform !== 'darwin') Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: 'Wadi', submenu: [{ label: 'Check for Updates…', click: () => void updates.check(true) }, { type: 'separator' }, { role: 'quit' }] }, { role: 'editMenu' }, { label: 'View', submenu: [{ role: 'reload' }, { role: 'forceReload' }, { role: 'toggleDevTools' }, { type: 'separator' }, { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' }, { type: 'separator' }, { role: 'togglefullscreen' }, fullscreenPreference()] }]));
 app.on('window-all-closed', () => app.quit());
 let quitting = false;
-app.on('before-quit', event => { if (quitting) return; event.preventDefault(); updates?.dispose(); quitting = true; authServer?.close(); void media.close().finally(() => app.exit(0)); });
+app.on('before-quit', event => { if (quitting) return; event.preventDefault(); apiRequests.dispose(); updates?.dispose(); quitting = true; authServer?.close(); void media.close().finally(() => app.exit(0)); });
 
 }
 void app.whenReady().then(startDesktop).catch(error => { console.error(error); app.exit(1); });
