@@ -20,13 +20,15 @@ type ApiOptions = {
   body?: unknown
   token?: string | null
   signal?: AbortSignal
+  profileId?: string | null
 }
 
 export async function apiRequest<T>(path: string, options: ApiOptions = {}) {
   const revision = useAppStore.getState().authRevision
+  const profileId = options.profileId === undefined ? useAppStore.getState().activeProfileId : options.profileId
   const desktop = desktopBridge()
   if (desktop) {
-    const response = await desktop.request(path, { method: options.method, body: options.body })
+    const response = await desktop.request(path, { method: options.method, body: options.body, profileId })
     if (response.status >= 400) {
       if (response.status === 401 && revision === useAppStore.getState().authRevision) clearStoredToken()
       throw new ApiError(response.status, response.body)
@@ -35,6 +37,7 @@ export async function apiRequest<T>(path: string, options: ApiOptions = {}) {
   }
   const token = options.token ?? useAppStore.getState().token
   const headers = new Headers()
+  if (profileId) headers.set('X-Wadi-Profile', profileId)
 
   if (options.body !== undefined) {
     headers.set('Content-Type', 'application/json')

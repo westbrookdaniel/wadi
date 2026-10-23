@@ -31,3 +31,15 @@ it('clears all active account state and advances the session revision on expiry'
   await expect(apiRequest('/api/auth/me')).rejects.toThrow()
   expect(useAppStore.getState()).toMatchObject({ token: null, activeProfileId: null, selectedListId: null, authRevision: revision + 1 })
 })
+
+it('pins a request to the profile selected at invocation even if selection changes before completion', async () => {
+  const response = Promise.withResolvers<Response>()
+  const fetcher = vi.fn((url: string, options: RequestInit) => { void url; void options; return response.promise })
+  vi.stubGlobal('fetch', fetcher)
+  useAppStore.setState({ activeProfileId: 'alice' })
+  const pending = apiRequest('/api/watch-progress', { method: 'PUT', body: { position_seconds: 42 } })
+  useAppStore.setState({ activeProfileId: 'bob' })
+  expect(new Headers(fetcher.mock.calls[0]?.[1].headers).get('X-Wadi-Profile')).toBe('alice')
+  response.resolve(new Response('{}'))
+  await pending
+})

@@ -231,7 +231,7 @@ export function AccountSettingsPage({ user, view = "account" }: { user: User; vi
   const queryClient = useQueryClient();
   const setToken = useAppStore((state) => state.setToken);
   const navigate = useNavigate();
-  const addons = useQuery({ ...addonsQuery, enabled: view === "plugins" });
+  const addons = useQuery({ ...addonsQuery(), enabled: view === "plugins" });
   const [search, setSearch] = useState("");
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
   const reorderMutation = useMutation({
@@ -382,7 +382,7 @@ function ProfileManager() {
   const activeProfileId = useAppStore((state) => state.activeProfileId);
   const setActiveProfileId = useAppStore((state) => state.setActiveProfileId);
   const setSelectedListId = useAppStore((state) => state.setSelectedListId);
-  const profiles = useQuery(profilesQuery);
+  const profiles = useQuery(profilesQuery());
   const [createOpen, setCreateOpen] = useState(false);
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
   const [deletingProfileId, setDeletingProfileId] = useState<string | null>(

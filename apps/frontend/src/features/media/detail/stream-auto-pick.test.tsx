@@ -5,7 +5,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { useAutoPlayback } from '@/store/auto-playback'
 import { DetailStreamControls } from './detail-stream-controls'
 import { StreamList } from './stream-list'
-vi.mock('@/api/queries', () => ({ addonsQuery: { queryKey: ['addons'], queryFn: async () => [] }, playbackPreferencesQuery: { queryKey: ['playback-preferences'], queryFn: async () => ({ stream_action: 'internal' }) } }))
+vi.mock('@/api/queries', () => ({ addonsQuery: () => ({ queryKey: ['addons'], queryFn: async () => [] }), playbackPreferencesQuery: { queryKey: ['playback-preferences'], queryFn: async () => ({ stream_action: 'internal' }) } }))
 afterEach(() => { cleanup(); useAutoPlayback.getState().reset() })
 const streams = [{ url: 'https://example.test/stream', title: '1080p English 1 GB' }]
 it('keeps a recommendation manual, including legacy skip-selection settings', async () => {

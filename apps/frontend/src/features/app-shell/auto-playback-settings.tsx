@@ -21,7 +21,7 @@ function PlaybackDefaultsForm() {
   const update = (patch: Partial<PlaybackSettings>) => setDraft(current => ({ ...current, ...patch }))
   const needsIndicator = settings.enabled && settings.cachedMode !== 'any' && !settings.cachedIndicator.replace(/[\uFE0E\uFE0F]/g, '').trim()
   const isDirty = JSON.stringify(settings) !== JSON.stringify(savedSettings)
-  const addons = useQuery(addonsQuery)
+  const addons = useQuery(addonsQuery())
   if (!ready) return <section role="status" className="p-5">Loading playback defaults…</section>
   return <section className="grid gap-5 rounded-xl border border-border bg-card/60 p-5">
     <div><h2 className="text-lg font-medium">Playback defaults</h2><p className="mt-1 text-sm text-muted-foreground">Choose quality, source selection, recovery, and episode defaults.</p></div>

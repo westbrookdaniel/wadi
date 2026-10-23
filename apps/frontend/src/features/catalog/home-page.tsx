@@ -21,10 +21,10 @@ export function HomePage({
   onOpenSettings: () => void
 }) {
   const tvMode = useDeviceStore(state => state.tvMode)
-  const catalogs = useQuery(catalogsQuery)
+  const catalogs = useQuery(catalogsQuery())
   const continueWatching = useQuery(continueWatchingQuery(12))
-  const lists = useQuery(listsQuery)
-  const browseLayout = useQuery(browseLayoutQuery)
+  const lists = useQuery(listsQuery())
+  const browseLayout = useQuery(browseLayoutQuery())
 
   const listItems = useQueries({
     queries: (lists.data ?? []).map((list) => listItemsQuery(list.id)),

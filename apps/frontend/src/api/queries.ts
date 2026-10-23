@@ -28,23 +28,28 @@ import type {
   WatchStateRequest,
 } from '@/api/types'
 
+function scopedKey<const T extends readonly unknown[]>(key: T) {
+  const { authRevision, activeProfileId } = useAppStore.getState()
+  return [...key, { authRevision, profileId: activeProfileId }] as const
+}
+
 export const queryKeys = {
   playerDefaults: ['player-defaults'] as const,
-  playerOverride: (type: string, id: string, profileId = useAppStore.getState().activeProfileId) => ['player-override', type, id, profileId] as const,
-  subtitles: (type: string, id: string, context: Record<string, string> = {}) => ['subtitles', type, id, context] as const,
-  me: ['me'] as const,
-  addons: ['addons'] as const,
-  catalogs: ['catalogs'] as const,
+  playerOverride: (type: string, id: string, profileId = useAppStore.getState().activeProfileId) => scopedKey(['player-override', type, id, profileId]),
+  subtitles: (type: string, id: string, context: Record<string, string> = {}) => scopedKey(['subtitles', type, id, context]),
+  get me() { return scopedKey(['me']) },
+  get addons() { return scopedKey(['addons']) },
+  get catalogs() { return scopedKey(['catalogs']) },
   catalog: (type: string, id: string, extras: Record<string, string> = {}) =>
-    ['catalog', type, id, extras] as const,
-  lists: ['lists'] as const,
-  listItems: (listId: string | null) => ['list-items', listId] as const,
-  meta: (type: string, id: string) => ['meta', type, id] as const,
-  streams: (type: string, id: string) => ['streams', type, id] as const,
-  watchData: (type: string, id: string) => ['watch-data', type, id] as const,
-  continueWatching: (limit = 20) => ['continue-watching', limit] as const,
-  browseLayout: ['browse-layout'] as const,
-  profiles: ['profiles'] as const,
+    scopedKey(['catalog', type, id, extras]),
+  get lists() { return scopedKey(['lists']) },
+  listItems: (listId: string | null) => scopedKey(['list-items', listId]),
+  meta: (type: string, id: string) => scopedKey(['meta', type, id]),
+  streams: (type: string, id: string) => scopedKey(['streams', type, id]),
+  watchData: (type: string, id: string) => scopedKey(['watch-data', type, id]),
+  continueWatching: (limit = 20) => scopedKey(['continue-watching', limit]),
+  get browseLayout() { return scopedKey(['browse-layout']) },
+  get profiles() { return scopedKey(['profiles']) },
   playbackPreferences: ['playback-preferences'] as const,
 }
 
@@ -56,7 +61,7 @@ export const meQuery = (enabled: boolean) =>
     retry: false,
   })
 
-export const addonsQuery = queryOptions({
+export const addonsQuery = () => queryOptions({
   queryKey: queryKeys.addons,
   queryFn: async () => {
     const data = await apiRequest<ApiListResponse<AddonRecord>>('/api/addons')
@@ -64,7 +69,7 @@ export const addonsQuery = queryOptions({
   },
 })
 
-export const catalogsQuery = queryOptions({
+export const catalogsQuery = () => queryOptions({
   queryKey: queryKeys.catalogs,
   queryFn: async () => {
     const data = await apiRequest<ApiListResponse<CatalogEntry>>('/api/catalogs')
@@ -72,7 +77,7 @@ export const catalogsQuery = queryOptions({
   },
 })
 
-export const listsQuery = queryOptions({
+export const listsQuery = () => queryOptions({
   queryKey: queryKeys.lists,
   queryFn: async () => {
     const data = await apiRequest<ApiListResponse<UserList>>('/api/lists')
@@ -118,7 +123,7 @@ export const metaQuery = (contentType: string, mediaId: string, enabled = true) 
   })
 
 export const episodesQuery = (mediaId: string, profileId: string | null) => queryOptions({
-  queryKey: ['episodes', mediaId, profileId],
+  queryKey: scopedKey(['episodes', mediaId, profileId]),
   queryFn: async ({ signal }) => episodeCatalogSchema.parse(await apiRequest<unknown>('/api/episodes/series/' + encodeURIComponent(mediaId), { signal })),
   enabled: Boolean(mediaId && profileId),
   staleTime: 60_000,
@@ -177,12 +182,12 @@ export const continueWatchingQuery = (limit = 20) =>
     retry: (failureCount, error) => !(error instanceof ApiError && error.status === 404) && failureCount < 3,
   })
 
-export const browseLayoutQuery = queryOptions({
+export const browseLayoutQuery = () => queryOptions({
   queryKey: queryKeys.browseLayout,
   queryFn: () => apiRequest<BrowseLayout>('/api/settings/browse-layout'),
 })
 
-export const profilesQuery = queryOptions({
+export const profilesQuery = () => queryOptions({
   queryKey: queryKeys.profiles,
   queryFn: async () => {
     const data = await apiRequest<ApiListResponse<Profile>>('/api/profiles')

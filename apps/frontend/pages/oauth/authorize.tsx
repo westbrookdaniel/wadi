@@ -30,7 +30,7 @@ function Consent() {
         { method: "POST", body: router.query },
       ),
   });
-  const profiles = useQuery({ ...profilesQuery, enabled: Boolean(token) });
+  const profiles = useQuery({ ...profilesQuery(), enabled: Boolean(token) });
   const account = useQuery({
     queryKey: ["oauth-account"],
     enabled: Boolean(token),

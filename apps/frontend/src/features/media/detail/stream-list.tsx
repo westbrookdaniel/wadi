@@ -43,7 +43,7 @@ export function StreamList({
   const ranked = useMemo(() => rankStreams(streams, settings, context), [streams, settings, context])
   const recommendation = settings.enabled && !isLoading ? ranked.find(row => row.eligible) : undefined
   const orderedStreams = settings.enabled ? ranked.map(row => row.stream) : streams
-  const addons = useQuery(addonsQuery)
+  const addons = useQuery(addonsQuery())
   const sourceLabelsById = useMemo(() => {
     const map = new Map<string, string>()
     for (const addon of addons.data ?? []) {

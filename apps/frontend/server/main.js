@@ -1,4 +1,5 @@
 import { autoPlaybackSchema } from '../shared/auto-playback.js';
+import { profileScope } from './profile-scope.js';
 import { authThrottle } from './auth-throttle.js';
 import { addIntegrations } from './integrations.js';
 import { addIntroDbRoutes } from './introdb.js';
@@ -37,7 +38,7 @@ export function createApp({ database = process.env.DATABASE_URL, sessionDays = 3
         else if (req.headers.origin === 'wadi://app')
             res.set('Access-Control-Allow-Origin', 'wadi://app');
         res.set('Vary', 'Origin');
-        res.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, Range, MCP-Protocol-Version');
+        res.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, Range, MCP-Protocol-Version, X-Wadi-Profile');
         res.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, PUT, DELETE, OPTIONS');
         res.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges, Content-Type, Retry-After');
         if (req.method === 'OPTIONS')
@@ -93,6 +94,7 @@ export function createApp({ database = process.env.DATABASE_URL, sessionDays = 3
         req.tokenHash = digest(token);
         next();
     });
+    app.use('/api', profileScope(get));
     addAccountRoutes(app, db);
     addIntegrationManagement();
     addIntroDbRoutes(app, { db });

@@ -53,6 +53,7 @@ async function api(path, options = {}) {
   if (url.origin !== origin) throw new Error('Invalid API origin');
   const method = z.enum(['GET','POST','PUT','DELETE']).parse(options.method ?? 'GET');
   const headers = { 'Content-Type': 'application/json' };
+  if (options.profileId) headers['X-Wadi-Profile'] = z.string().max(512).parse(options.profileId);
   const requestToken = token;
   if (requestToken) headers.Authorization = `Bearer ${requestToken}`;
   const body = options.body === undefined ? undefined : JSON.stringify(options.body);
