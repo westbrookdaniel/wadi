@@ -4,6 +4,7 @@ import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import * as url from 'node:url';
+import { createApiRequests } from '../../apps/desktop/src/api-requests.mjs';
 import { installSyntheticCredentials } from './credential-adapter.mjs';
 
 // Evaluate the real QA entry and production main with isolated JS Electron/IO
@@ -48,6 +49,7 @@ async function startup(useAdapter = true) {
     'node:crypto': exported({ randomBytes() {}, createHash() {} }),
     zod: exported({ z: { enum: () => ({ parse: value => value }) } }),
     './media.mjs': exported({ createMediaService: async () => ({ command: (...args) => { calls.push(['media', ...args]); return 'real-handler-result'; } }) }),
+    './api-requests.mjs': exported({ createApiRequests }),
     './updates.mjs': exported({ createUpdates: () => ({}) }),
     './credential-adapter.mjs': exported({ installSyntheticCredentials }),
   };
@@ -82,6 +84,7 @@ test('real QA entry installs credentials before real production startup with no 
   const event = { sender: fixture.window.webContents, senderFrame: fixture.window.webContents.mainFrame };
   assert.equal(fixture.handlers.get('session')(event), true);
   assert.throws(() => fixture.handlers.get('session')({}), /Untrusted caller/);
+  assert.throws(() => fixture.handlers.get('api-cancel')({}, '00000000-0000-4000-8000-000000000000'), /Untrusted caller/);
   assert.throws(() => fixture.handlers.get('copy-stream-link')({}, 'http://127.0.0.1:4173/example'), /Untrusted caller/);
   fixture.handlers.get('copy-stream-link')(event, 'http://127.0.0.1:4173/example?synthetic=1');
   assert.ok(fixture.calls.some(call => call[0] === 'clipboard' && call[1].endsWith('?synthetic=1')));
