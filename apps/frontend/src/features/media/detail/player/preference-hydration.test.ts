@@ -68,3 +68,19 @@ it('preserves legacy appearance, saves immediately, resets without resurrecting 
     third.unmount()
   } finally { hook.unmount(); client.clear(); useAppStore.getState().setActiveProfileId(null); localStorage.clear() }
 })
+
+it('does not save subtitles as off when an appearance edit is made with no available tracks', async () => {
+  localStorage.clear()
+  useAppStore.getState().setActiveProfileId('missing-tracks')
+  request.mockResolvedValue({})
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+  client.setQueryData(queryKeys.playerDefaults, { ...defaults, subtitle_language: 'spa' })
+  const wrapper = ({ children }: PropsWithChildren) => createElement(QueryClientProvider, { client }, children)
+  const hook = renderHook(() => usePlayerPreferences({ mediaType: 'movie', overrideMediaId: 'no-tracks', streamSubtitleList: [] }), { wrapper })
+  try {
+    await waitFor(() => expect(hook.result.current.playbackState.preferredSubtitleLanguage).toBe('spa'))
+    act(() => hook.result.current.updatePlaybackState({ subtitleSize: 2 }))
+    const key = JSON.stringify(['wadi.device.override.v1', 'missing-tracks', 'movie', 'no-tracks'])
+    expect(JSON.parse(localStorage.getItem(key)!)).toMatchObject({ subtitles_enabled: true, subtitle_language: 'spa' })
+  } finally { hook.unmount(); client.clear(); useAppStore.getState().setActiveProfileId(null); localStorage.clear() }
+})

@@ -359,14 +359,16 @@ export function MediaPlayerPage({
   useEffect(() => { automaticAudioRef.current = null; manualSubtitleRef.current = false }, [activeTarget.mediaType, activeTarget.mediaId, activeTarget.videoId])
   useEffect(() => {
     const audio = player.state.audioTracks.find(track => track.id === player.state.selectedAudioTrackId)
-    if (!audio || subtitleTracks.isLoading || player.state.status !== 'ready' || automaticAudioRef.current === audio.id) return
-    automaticAudioRef.current = audio.id
+    if (!audio || subtitleTracks.isLoading || player.state.status !== 'ready') return
+    const selectionKey = JSON.stringify([audio.id, playbackState.subtitlesEnabled, playbackState.preferredSubtitleLanguage, streamSubtitleList])
+    if (automaticAudioRef.current === selectionKey) return
+    automaticAudioRef.current = selectionKey
     if (manualSubtitleRef.current) return
     const savedChoice = readSubtitleChoice(activeTarget)
     const savedTrack = savedChoice?.language ? streamSubtitleList.find(track => track.id === savedChoice.id) ?? streamSubtitleList.find(track => normalizeLanguage(track.language) === normalizeLanguage(savedChoice.language ?? '')) : undefined
-    const id = savedChoice ? savedTrack?.id ?? null : defaultSubtitleForAudio(audio.language, streamSubtitleList)
-    updatePlaybackState({ subtitlesEnabled: id !== null, selectedSubtitleId: id, preferredSubtitleLanguage: id ? streamSubtitleList.find(track => track.id === id)?.language ?? 'eng' : null }, false)
-  }, [activeTarget, player.state.audioTracks, player.state.selectedAudioTrackId, player.state.status, streamSubtitleList, subtitleTracks.isLoading, updatePlaybackState])
+    const id = !playbackState.subtitlesEnabled ? null : savedChoice ? savedTrack?.id ?? null : defaultSubtitleForAudio(audio.language, streamSubtitleList, { enabled: playbackState.subtitlesEnabled, language: playbackState.preferredSubtitleLanguage })
+    updatePlaybackState({ selectedSubtitleId: id }, false)
+  }, [activeTarget, player.state.audioTracks, player.state.selectedAudioTrackId, player.state.status, streamSubtitleList, subtitleTracks.isLoading, playbackState.subtitlesEnabled, playbackState.preferredSubtitleLanguage, updatePlaybackState])
 
   const { setPlaybackSpeed, setAudioTrack, pause: pauseLocal, setVolume } = player
   useEffect(() => { if (tvMode) setVolume(1) }, [tvMode, setVolume])
@@ -687,7 +689,7 @@ export function MediaPlayerPage({
             onSelectSubtitle={(id) => {
               manualSubtitleRef.current = true
               saveSubtitleChoice(activeTarget, { id, language: streamSubtitleList.find(track => track.id === id)?.language ?? null })
-              updatePlaybackState({ selectedSubtitleId: id, subtitlesEnabled: id !== null })
+              updatePlaybackState({ selectedSubtitleId: id, subtitlesEnabled: id !== null, preferredSubtitleLanguage: streamSubtitleList.find(track => track.id === id)?.language ?? null })
               if (castConnected) {
                 void castTransport.sendMessage({
                   type: "setProp",
@@ -710,7 +712,7 @@ export function MediaPlayerPage({
             onSubtitleBackgroundOpacityChange={(value) => updatePlaybackState({ subtitleBackgroundOpacity: value })}
             subtitleOutlineWidth={playbackState.subtitleOutlineWidth}
             onSubtitleOutlineWidthChange={value => updatePlaybackState({ subtitleOutlineWidth: value })}
-            onUseDefaults={() => { manualSubtitleRef.current = true; clearSubtitleChoice(activeTarget); void resetToDefaults() }}
+            onUseDefaults={() => { manualSubtitleRef.current = false; automaticAudioRef.current = null; clearSubtitleChoice(activeTarget); void resetToDefaults() }}
             subtitleOutlineColor={playbackState.subtitleOutlineColor}
             onSubtitleOutlineColorChange={(value) => updatePlaybackState({ subtitleOutlineColor: value })}
             subtitleOutlineStyle={playbackState.subtitleOutlineStyle}

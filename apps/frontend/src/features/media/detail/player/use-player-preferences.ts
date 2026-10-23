@@ -73,12 +73,12 @@ export function usePlayerPreferences({
     // Commit deliberate edits in the event handler, before navigation or reload
     // can interrupt React's render/effect cycle. Automatic selection is not saved.
     if (persist && overrideMediaId) {
-      const payload = buildOverridePayload(next, streamSubtitleList, next.selectedSubtitleId)
+      const payload = buildOverridePayload(next)
       const value = updatePlayerOverride(mediaType, overrideMediaId, payload, profileId)
       queryClient.setQueryData(queryKeys.playerOverride(mediaType, overrideMediaId, profileId), value)
     }
     setPlaybackState(next)
-  }, [mediaType, overrideMediaId, profileId, queryClient, streamSubtitleList])
+  }, [mediaType, overrideMediaId, profileId, queryClient])
 
   useEffect(() => {
     if (!mergedPrefs || hydratedOverrideKeyRef.current === overrideHydrationKey) return
@@ -165,7 +165,7 @@ function selectPreferredSubtitleTrack(
       return preferred.id
     }
   }
-  return tracks[0]?.id ?? null
+  return null
 }
 
 export function resolveSubtitleSelectionState(
@@ -177,7 +177,7 @@ export function resolveSubtitleSelectionState(
     return null
   }
   if (!tracks.length) {
-    return { selectedSubtitleId: null, subtitlesEnabled: false }
+    return playbackState.selectedSubtitleId === null ? null : { selectedSubtitleId: null }
   }
   if (!playbackState.subtitlesEnabled) {
     if (playbackState.selectedSubtitleId !== null) {
@@ -196,20 +196,10 @@ export function resolveSubtitleSelectionState(
   return null
 }
 
-function buildOverridePayload(
-  state: LocalPlaybackState,
-  subtitleTracks: SubtitleTrackOption[],
-  selectedSubtitleId: string | null,
-): PlayerOverride {
-  const subtitlesEnabled = selectedSubtitleId !== null
-  const selectedSubtitleLanguage =
-    subtitlesEnabled
-      ? (
-        subtitleTracks.find((track) => track.id === selectedSubtitleId)?.language
-        ?? state.preferredSubtitleLanguage
-        ?? null
-      )
-      : null
+function buildOverridePayload(state: LocalPlaybackState): PlayerOverride {
+  // Track availability and automatic selection must not become user intent.
+  const subtitlesEnabled = state.subtitlesEnabled
+  const selectedSubtitleLanguage = state.preferredSubtitleLanguage
   return {
     subtitles_enabled: subtitlesEnabled,
     subtitle_language: selectedSubtitleLanguage,

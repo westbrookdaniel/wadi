@@ -102,3 +102,11 @@ it('opens streams when session storage is full or blocked while keeping profiles
   useAppStore.setState({ activeProfileId: 'profile-b' })
   expect(readPlaybackSession(key, 'series', 'show')).toBeNull()
 })
+
+it('honors subtitle off and preferred language before audio-based automatic selection', () => {
+  const tracks = [{ id: 'en', language: 'eng' }, { id: 'es', language: 'spa' }]
+  expect(defaultSubtitleForAudio('jpn', tracks, { enabled: false, language: 'spa' })).toBeNull()
+  expect(defaultSubtitleForAudio('eng', tracks, { enabled: true, language: 'es' })).toBe('es')
+  expect(defaultSubtitleForAudio('jpn', tracks, { enabled: true, language: 'fr' })).toBeNull()
+})
+

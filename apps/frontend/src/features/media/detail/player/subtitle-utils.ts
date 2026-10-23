@@ -158,7 +158,9 @@ export function languageName(language: string) {
   if (!code || code === 'und') return 'Unknown language'
   try { return new Intl.DisplayNames(['en'], { type: 'language' }).of(code) ?? 'Unknown language' } catch { return 'Unknown language' }
 }
-export function defaultSubtitleForAudio(language: string, tracks: Array<{ id: string; language: string }>) {
+export function defaultSubtitleForAudio(language: string, tracks: Array<{ id: string; language: string }>, intent: { enabled: boolean; language: string | null } = { enabled: true, language: null }) {
+  if (!intent.enabled) return null
+  if (intent.language) return tracks.find(track => normalizeLanguage(track.language) === normalizeLanguage(intent.language ?? ''))?.id ?? null
   if (normalizeLanguage(language).split('-')[0] === 'en') return null
   return tracks.find(track => normalizeLanguage(track.language).split('-')[0] === 'en')?.id ?? null
 }
