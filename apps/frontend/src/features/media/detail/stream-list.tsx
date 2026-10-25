@@ -1,3 +1,4 @@
+import { cacheStatus } from './provider-status'
 import { usePlaybackDefaults } from '@/store/use-playback-defaults'
 import { useSourceRanking } from './use-source-ranking'
 import { rankStreams } from './auto-pick'
@@ -117,6 +118,7 @@ export function StreamList({
               data-tv-focus-key={`stream:${stream.addon_id}:${stream.title ?? stream.name ?? index}`}
               onClick={() => onPlay(stream)}
             >
+              {cacheStatus(stream) === 'uncached' ? <strong>Not cached yet · download required</strong> : cacheStatus(stream) === 'cached' ? <strong>Cached · ready to play</strong> : null}
               {!getStreamUrl(stream) ? <strong>Unavailable</strong> : null}
               {stream === recommendation?.stream ? <span className="!text-primary text-xs font-medium">Recommended{recommendation.reasons.length ? ' · ' + recommendation.reasons.join(' · ') : ''}</span> : null}
               <p className="font-medium text-sm leading-snug whitespace-pre-line [overflow-wrap:anywhere]">{stream.title ?? stream.name ?? `Stream ${index + 1}`}</p>

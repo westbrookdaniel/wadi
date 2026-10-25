@@ -7,10 +7,11 @@ import { StreamList } from '../stream-list'
 import { parseStreamMetadata } from '../stream-metadata'
 import type { PlaybackTarget, PlayableStream } from '../types'
 
-export function SourceControls({ open, onOpenChange, streams, qualityStreams, loading, error, failures, onRetry, activeStream, quality, onQuality, onSelect, onTryAnother, onSmallerSource, target, keepFamily, onKeepFamily }: {
+export function SourceControls({ open, onOpenChange, streams, qualityStreams, loading, error, failures, playbackFailures, onRetry, activeStream, quality, onQuality, onSelect, onTryAnother, onSmallerSource, target, keepFamily, onKeepFamily }: {
   open: boolean; onOpenChange: (open: boolean) => void
   qualityStreams: PlayableStream[]
   streams: PlayableStream[]; loading: boolean; error: boolean; onRetry: () => void
+  playbackFailures?: Array<{ source: string; reason: string }>
   failures?: StreamFailure[]
   activeStream: PlayableStream; quality: number | null
   onQuality: (resolution: number | null) => void
@@ -38,6 +39,7 @@ export function SourceControls({ open, onOpenChange, streams, qualityStreams, lo
       <Button variant="secondary" disabled={!onSmallerSource} onClick={onSmallerSource}>Buffering? Try a smaller source</Button></div>
       <p className="text-sm text-muted-foreground">Wrong audio or subtitle timing? Try another version below, or use the player’s audio and subtitle controls.</p>
       {error ? <div role="alert"><p>Could not load sources.</p><Button onClick={onRetry}>Retry</Button></div> : null}
+      {playbackFailures?.length ? <div role="status" className="rounded bg-muted p-3 text-sm">{playbackFailures.map((failure, index) => <p key={index}>{failure.source}: {failure.reason}</p>)}</div> : null}
       <StreamFailures failures={failures} />
       <StreamList target={target} streams={streams} isLoading={loading} onPlay={onSelect} />
     </DialogContent>

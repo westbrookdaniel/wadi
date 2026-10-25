@@ -60,3 +60,13 @@ it('never retries the same URL, supports manual recovery when disabled, and rese
   act(() => { hook.result.current.tryAnother() })
   expect(input.onSwitch).toHaveBeenLastCalledWith(sources[1], 0, true)
 })
+
+it('retains each provider reason during retries and at the retry limit', () => {
+  const input = base()
+  const hook = renderHook(props => useSourceRecovery(props), { initialProps: input })
+  hook.rerender({ ...input, state: { ...input.state, status: 'error', error: 'HTTP 404: video link not found' } })
+  expect(hook.result.current.failures[0].reason).toContain('HTTP 404')
+  hook.rerender({ ...input, source: sources[1], state: { ...input.state, sourceUrl: sources[1].url, status: 'loading', duration: 0 } })
+  hook.rerender({ ...input, source: sources[1], state: { ...input.state, sourceUrl: sources[1].url, status: 'error', error: 'Not cached yet' } })
+  expect(hook.result.current.failures.map(item => item.reason)).toEqual(['HTTP 404: video link not found', 'Not cached yet'])
+})

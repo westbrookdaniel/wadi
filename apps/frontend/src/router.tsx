@@ -1,3 +1,4 @@
+import { useExternalLaunch } from './features/media/detail/use-external-launch'
 import { useDeviceStore } from '@/store/device-store'
 /* eslint-disable react-refresh/only-export-components */
 import {
@@ -291,7 +292,8 @@ function BrowseRoute({
 
 function MediaRoute() {
   const playbackPrefs = useQuery(playbackPreferencesQuery)
-  const [launchFailure, setLaunchFailure] = useState<{ stream: PlayableStream; message: string } | null>(null)
+  const externalLaunch = useExternalLaunch()
+  const { failure: launchFailure, setFailure: setLaunchFailure } = externalLaunch
   const [chosenPlayer, setChosenPlayer] = useState("vlc")
   const navigate = useNavigate()
   const { type, id } = mediaRoute.useParams()
@@ -307,13 +309,14 @@ function MediaRoute() {
   const backSearch = backPath === '/discover' ? discoverSearchSchema.parse(defaultParseSearch(from?.includes('?') ? from.slice(from.indexOf('?')) : '')) : undefined
 
   const playStream = (stream: PlayableStream, target: PlaybackTarget) => {
+    externalLaunch.dismiss()
     if (!playbackPrefs.data) {
       setLaunchFailure({ stream, message: 'Playback preferences are not ready. Choose a player below or try again.' }); return
     }
     if (!useDeviceStore.getState().tvMode && playbackPrefs.data.stream_action === 'external') {
       const url = getStreamUrl(stream)
       if (!url) { setLaunchFailure({ stream, message: 'This stream has no playable link.' }); return }
-      void openExternalPlayback(url, playbackPrefs.data).catch(error => setLaunchFailure({ stream, message: error instanceof Error ? error.message : 'Could not open player.' }))
+      externalLaunch.launch(stream, () => openExternalPlayback(url, playbackPrefs.data!))
       return
     }
     const key = savePlaybackSession(stream, target)
@@ -349,14 +352,14 @@ function MediaRoute() {
           label={`${displayMedia.name} page`}
           onNavigate={(path) => navigate({ to: path })}
         >
-          <Dialog open={Boolean(launchFailure)} onOpenChange={open => { if (!open) setLaunchFailure(null) }}>
+          <Dialog open={Boolean(launchFailure)} onOpenChange={open => { if (!open) externalLaunch.dismiss() }}>
             <DialogContent><DialogTitle>Open stream</DialogTitle><DialogDescription>{launchFailure?.message}</DialogDescription>
-              <SettingsSelect aria-label="External player" value={chosenPlayer} onValueChange={setChosenPlayer}>{externalPlayers.filter(player => player.id !== 'custom').map(player => <option key={player.id} value={player.id}>{player.label}</option>)}</SettingsSelect>
+              <SettingsSelect aria-label="External player" value={chosenPlayer} onValueChange={value => { setChosenPlayer(value); externalLaunch.clearMessage() }}>{externalPlayers.filter(player => player.id !== 'custom').map(player => <option key={player.id} value={player.id}>{player.label}</option>)}</SettingsSelect>
               <Button onClick={() => {
                 const url = launchFailure ? getStreamUrl(launchFailure.stream) : null
                 if (!url) return
                 const next = { stream_action: 'external', external_player_template: playbackPrefs.data?.external_player_template ?? 'vlc://{url}', external_player_preset: chosenPlayer } satisfies import('@/api/types').PlaybackPreferences
-                void openExternalPlayback(url, next).then(() => setLaunchFailure(null)).catch(error => setLaunchFailure(current => current ? { ...current, message: error instanceof Error ? error.message : 'Could not open player.' } : null))
+                if (launchFailure) externalLaunch.launch(launchFailure.stream, () => openExternalPlayback(url, next), true)
               }}>Open player</Button>
               <Button variant="secondary" onClick={async () => {
                 const url = launchFailure ? getStreamUrl(launchFailure.stream) : null
