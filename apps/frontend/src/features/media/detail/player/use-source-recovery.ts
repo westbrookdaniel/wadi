@@ -17,12 +17,18 @@ export function useSourceRecovery({ episodeKey, source, state, candidates, enabl
   const session = useRef({ episodeKey, tried: new Set<string>(), count: 0, failures: new Set<string>(), position: savedPosition, playing: true })
   const sourcePhase = useRef({ url: source.url, awaitingLoad: false })
   const [notice, setNotice] = useState<string | null>(null)
+  const [failures, setFailures] = useState<Array<{ url: string | undefined; source: string; reason: string }>>([])
+  const recordFailure = useCallback((stream: PlayableStream, reason: string) => {
+    const source = [stream.name, stream.title].filter(Boolean).join(' · ') || 'Source'
+    setFailures(previous => previous.some(item => item.url === stream.url && item.reason === reason) ? previous : [...previous, { url: stream.url, source, reason }])
+  }, [])
   const [exhausted, setExhausted] = useState(false)
   const snapshot = useRef({ source, state, candidates, enabled, attempts, onSwitch, onFailure, savedPosition })
   useEffect(() => { snapshot.current = { source, state, candidates, enabled, attempts, onSwitch, onFailure, savedPosition } })
   useEffect(() => {
     if (session.current.episodeKey !== episodeKey) {
       session.current = { episodeKey, tried: new Set(), count: 0, failures: new Set(), position: savedPosition, playing: true }
+      setFailures([])
       setNotice(null)
       setExhausted(false)
     }
@@ -62,25 +68,27 @@ export function useSourceRecovery({ episodeKey, source, state, candidates, enabl
   }, [])
 
   useEffect(() => {
+    if (state.status === 'error' && (!state.sourceUrl || state.sourceUrl === source.url) && !sourcePhase.current.awaitingLoad) recordFailure(source, state.error ?? 'The provider could not play this source.')
     if (enabled && state.status === 'error' && (!state.sourceUrl || state.sourceUrl === source.url) && !sourcePhase.current.awaitingLoad) {
       if (session.current.count >= attempts) {
         setExhausted(true)
         setNotice('Automatic retry limit reached. Choose another source to continue.')
       } else tryAnother(true)
     }
-  }, [enabled, attempts, state.status, state.sourceUrl, source.url, tryAnother])
+  }, [enabled, attempts, state.status, state.sourceUrl, source.url, source, state.error, recordFailure, tryAnother])
   useEffect(() => {
     if (!enabled || state.status !== 'loading' || state.duration > 0) return
     const timer = setTimeout(() => {
+      recordFailure(snapshot.current.source, 'The provider took too long to respond.')
       if (session.current.count >= snapshot.current.attempts) {
         setExhausted(true)
         setNotice('Automatic retry limit reached. Choose another source to continue.')
       } else tryAnother(true)
     }, timeoutSeconds * 1000)
     return () => clearTimeout(timer)
-  }, [enabled, state.status, state.duration, source.url, timeoutSeconds, tryAnother])
+  }, [enabled, state.status, state.duration, source.url, timeoutSeconds, tryAnother, recordFailure])
   return {
-    notice, exhausted, tryAnother: () => tryAnother(false),
+    failures, notice, exhausted, tryAnother: () => tryAnother(false),
     getPosition: () => session.current.position,
     getPlaying: () => session.current.playing,
   }

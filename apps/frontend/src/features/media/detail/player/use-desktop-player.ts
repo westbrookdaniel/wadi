@@ -1,3 +1,4 @@
+import { placeholderReason } from '../provider-status'
 import { useDeviceStore } from '@/store/device-store'
 import Hls from 'hls.js'
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
@@ -6,10 +7,11 @@ import { desktopBridge } from '@/lib/desktop'
 import { initialPlayerState, type PlayerState } from './state'
 const sessionSchema = z.object({ id:z.string(),url:z.url(),duration:z.number(),offset:z.number(),hasVideo:z.boolean(),hasAudio:z.boolean(),audioTracks:z.array(z.object({id:z.string(),label:z.string(),language:z.string()})),selectedAudioTrackId:z.string().nullable(),mode:z.enum(['direct','remux','audio','video']) })
 const hintsSchema = z.object({ proxyHeaders: z.object({ request:z.record(z.string(),z.string()).optional() }).optional() })
-export function useDesktopPlayer({ videoRef, source, hints, savedPosition, watched, onProgressCommit, onEnded, autoPlay = true }: {
-  autoPlay?:boolean; videoRef:RefObject<HTMLVideoElement | null>; source?:string; hints:unknown; savedPosition:number; watched:boolean; onEnded?:()=>void; onProgressCommit:(position:number,duration:number)=>void
+export function useDesktopPlayer({ videoRef, source, hints, savedPosition, watched, onProgressCommit, onEnded, autoPlay = true, providerStream }: {
+  providerStream?:unknown; autoPlay?:boolean; videoRef:RefObject<HTMLVideoElement | null>; source?:string; hints:unknown; savedPosition:number; watched:boolean; onEnded?:()=>void; onProgressCommit:(position:number,duration:number)=>void
 }) {
   const conversionEnabled = useDeviceStore(state => state.conversionEnabled)
+  const detectPlaceholderClips = useDeviceStore(state => state.detectPlaceholderClips)
   const [state,setState]=useState<PlayerState>(initialPlayerState)
   const stateRef=useRef(state)
   const position=useRef(watched?0:savedPosition)
@@ -84,6 +86,8 @@ export function useDesktopPlayer({ videoRef, source, hints, savedPosition, watch
     void desktop.media('start',{id,url:source,headers:JSON.parse(headers),position:position.current,audio:audio.current,speed:speed.current,forceVideo:conversionEnabled && forceVideo.current,conversionEnabled}).then(async value=>{
       const result=sessionSchema.parse(value)
       if(cancelled){await desktop.media('stop',id);return}
+      const placeholder = detectPlaceholderClips ? placeholderReason(providerStream, result.duration) : null
+      if (placeholder) { await desktop.media('stop', id); throw new Error(placeholder) }
       job.current=id;offset=result.offset;duration=result.duration
       session.current={offset,direct:result.mode==='direct'}
       const ready=()=>{
@@ -111,7 +115,7 @@ export function useDesktopPlayer({ videoRef, source, hints, savedPosition, watch
       if(id){void desktop.media('stop',id).catch(()=>{});if(job.current===id){job.current=null;session.current=null}}
       if(duration)commit.current(position.current,duration)
     }
-  },[source,headers,generation,videoRef,update,conversionEnabled])
+  },[detectPlaceholderClips,providerStream,source,headers,generation,videoRef,update,conversionEnabled])
   const pause=useCallback((_commit=false)=>{
     void _commit
     playing.current=false

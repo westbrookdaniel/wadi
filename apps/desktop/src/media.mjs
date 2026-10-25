@@ -121,7 +121,16 @@ export async function createMediaService({ directory, binaries }) {
     const controller = new AbortController(); probes.set(input.id, controller);
     let stdout;
     try { ({stdout}=await execute(ffprobe,[...networkArgs(input),'-v','error','-show_streams','-show_format','-of','json',input.url],{signal:controller.signal,timeout:30000,maxBuffer:2*1024*1024,windowsHide:true})); }
-    catch { throw new Error('Could not inspect this stream. Check the provider or choose another stream.'); }
+    catch (error) {
+      const detail = String(error.stderr ?? error.message ?? '');
+      const status = detail.match(/(?:HTTP(?: error)?|Server returned)\s*([45](?:\d|x){2})/i)?.[1];
+      const reason = status ? 'The provider returned HTTP '+status+(status==='404'?' (video link not found).':'.')
+        : /timed? ?out|ETIMEDOUT/i.test(detail) ? 'The provider took too long to respond.'
+        : /resolve|ENOTFOUND/i.test(detail) ? 'The provider address could not be reached.'
+        : /refused|reset|unreachable|network|I\/O error/i.test(detail) ? 'The network connection to the provider failed.'
+        : 'The provider did not return a readable video.';
+      throw new Error(reason+' Choose another source.');
+    }
     finally { probes.delete(input.id); }
     const data=JSON.parse(stdout);
     if(probeCache.size>=8)probeCache.clear();probeCache.set(key,data);return data;

@@ -259,6 +259,8 @@ export function MediaPlayerPage({
   const endedRef = useRef<(() => void) | null>(null)
   const onEnded = useCallback(() => endedRef.current?.(), [])
   const webPlayer = useMediabunnyPlayer({
+    sourceIdentity: streamUrl,
+    providerStream: activeStream,
     canvasRef,
     url: resume.ready ? proxiedStreamUrl : undefined,
     authToken: null,
@@ -272,7 +274,7 @@ export function MediaPlayerPage({
     onEnded,
   })
 
-  const desktopPlayer = useDesktopPlayer({ videoRef, source: desktop && resume.ready ? streamUrl : undefined, hints: activeStream.behaviorHints, savedPosition: sourceResume && sourceResume.url === streamUrl ? sourceResume.position : resume.savedPosition, watched: sourceResume && sourceResume.url === streamUrl ? false : resume.watched, autoPlay: sourceResume && sourceResume.url === streamUrl ? sourceResume.playing : true, onProgressCommit: saveProgress, onEnded })
+  const desktopPlayer = useDesktopPlayer({ providerStream: activeStream, videoRef, source: desktop && resume.ready ? streamUrl : undefined, hints: activeStream.behaviorHints, savedPosition: sourceResume && sourceResume.url === streamUrl ? sourceResume.position : resume.savedPosition, watched: sourceResume && sourceResume.url === streamUrl ? false : resume.watched, autoPlay: sourceResume && sourceResume.url === streamUrl ? sourceResume.playing : true, onProgressCommit: saveProgress, onEnded })
   const player = desktop ? desktopPlayer : webPlayer
   const automaticAudioRef = useRef<string | null>(null)
   const manualSubtitleRef = useRef(false)
@@ -642,6 +644,7 @@ export function MediaPlayerPage({
             aria-label={`Playing ${media.name}`}
           />}
 
+          {recovery.failures.length && player.state.status !== 'ready' && !sourceSheetOpen ? <div role="status" className="absolute left-4 right-4 top-20 z-[7] rounded bg-black/90 p-3 text-sm">{recovery.failures.map((failure, index) => <p key={index}>{failure.source}: {failure.reason}</p>)}</div> : null}
           {(player.state.status === 'loading' || player.state.status === 'idle') && !player.state.error ? (
             <div className="player-loading pointer-events-none absolute inset-0 z-[4] grid place-content-center justify-items-center gap-6 bg-black text-center" role="status" aria-label="Loading stream">
               <p className="text-sm text-white/70">{recovery.notice ?? (!resume.ready ? 'Loading your watch position…' : desktop ? 'Preparing playback…' : 'Opening source…')}</p>
@@ -774,7 +777,7 @@ export function MediaPlayerPage({
             </div>
           ) : null}
 
-          <SourceControls open={sourceSheetOpen} onOpenChange={setSourceSheetOpen} target={activeTarget}
+          <SourceControls playbackFailures={recovery.failures} open={sourceSheetOpen} onOpenChange={setSourceSheetOpen} target={activeTarget}
             qualityStreams={eligibleSources}
             streams={currentSources.data ?? []} loading={currentSources.isFetching} error={Boolean(currentSources.error)} failures={currentSources.failures} onRetry={() => void currentSources.refetch()}
             activeStream={describedStream} quality={quality} onQuality={chooseQuality}

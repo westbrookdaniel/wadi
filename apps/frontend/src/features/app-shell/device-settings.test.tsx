@@ -1,10 +1,11 @@
+import { useDeviceStore } from '@/store/device-store'
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, expect, it, vi } from 'vitest'
 import type { DesktopBridge } from '@/lib/desktop'
 import { DeviceSettings } from './device-settings'
 
-afterEach(() => { cleanup(); delete window.wadiDesktop })
+afterEach(() => { cleanup(); useDeviceStore.setState({ detectPlaceholderClips: true }); delete window.wadiDesktop })
 
 function installDesktop(initial = false) {
   let saved = initial
@@ -74,4 +75,28 @@ it('keeps the saved value and allows retry when saving fails', async () => {
   expect(checkbox).toBeEnabled()
   await user.click(checkbox)
   await waitFor(() => expect(checkbox).toBeChecked())
+})
+
+it.each(['web', 'desktop'])('persists the default-on placeholder setting on %s', async platform => {
+  if (platform === 'desktop') installDesktop()
+  expect(useDeviceStore.getInitialState().detectPlaceholderClips).toBe(true)
+  const user = userEvent.setup()
+  const view = render(<DeviceSettings />)
+  const checkbox = screen.getByRole('checkbox', { name: 'Detect provider placeholder clips' })
+  expect(checkbox).toBeChecked()
+  await user.click(checkbox)
+  expect(checkbox).not.toBeChecked()
+  expect(JSON.parse(localStorage.getItem('wadi.device')!).state.detectPlaceholderClips).toBe(false)
+  view.unmount()
+  await useDeviceStore.persist.rehydrate()
+  render(<DeviceSettings />)
+  expect(screen.getByRole('checkbox', { name: 'Detect provider placeholder clips' })).not.toBeChecked()
+  await user.click(screen.getByRole('checkbox', { name: 'Detect provider placeholder clips' }))
+  expect(useDeviceStore.getState().detectPlaceholderClips).toBe(true)
+})
+
+it('defaults placeholder detection on for saved device settings without the new field', async () => {
+  localStorage.setItem('wadi.device', JSON.stringify({ state: { theme: 'dark' }, version: 0 }))
+  await useDeviceStore.persist.rehydrate()
+  expect(useDeviceStore.getState().detectPlaceholderClips).toBe(true)
 })

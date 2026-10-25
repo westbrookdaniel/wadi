@@ -127,3 +127,17 @@ test('native conversion emits the chosen English/Japanese/default tone and retai
     await rm(directory,{recursive:true,force:true});
   }
 });
+
+for (const status of [404, 403, 503]) test('reports provider HTTP '+status+' without exposing signed URLs', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'wadi-provider-error-'));
+  const server = createServer((_req, res) => { res.writeHead(status); res.end('unavailable'); });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const service = await createMediaService({ directory: join(directory, 'cache'), binaries });
+  try {
+    await assert.rejects(service.command('start', { id: randomUUID(), url: 'http://127.0.0.1:'+server.address().port+'/movie?token=secret' }), error => {
+      assert.match(error.message, new RegExp('HTTP '+(status === 503 ? '5XX' : status)));
+      assert.doesNotMatch(error.message, /secret|127\.0\.0\.1/);
+      return true;
+    });
+  } finally { await service.close(); await new Promise(resolve => server.close(resolve)); await rm(directory, { recursive: true, force: true }); }
+});

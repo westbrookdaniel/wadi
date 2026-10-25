@@ -1,3 +1,4 @@
+import { useDeviceStore } from '@/store/device-store'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { z } from 'zod'
@@ -14,7 +15,7 @@ vi.mock('hls.js', () => ({ default: class {
   destroy() {}
 } }))
 
-afterEach(() => { delete window.wadiDesktop; vi.restoreAllMocks() })
+afterEach(() => { useDeviceStore.setState({ detectPlaceholderClips: true }); delete window.wadiDesktop; vi.restoreAllMocks() })
 
 it('applies a restored audio preference before the initial source is ready and resets it for a different source', async () => {
   const video = document.createElement('video')
@@ -161,4 +162,40 @@ it('honors pause, resume and a newer seek while an earlier conversion is still l
   rerender({ source: 'https://example.com/other-movie.mkv' })
   expect(result.current.state).toMatchObject({ status: 'loading', duration: 0, hasAudio: false, audioTracks: [] })
   unmount()
+})
+
+it.each([true, false])('desktop placeholder detection enabled=%s', async enabled => {
+  useDeviceStore.setState({ detectPlaceholderClips: enabled })
+  const video = document.createElement('video')
+  vi.spyOn(video, 'play').mockResolvedValue()
+  vi.spyOn(video, 'pause').mockImplementation(() => {})
+  vi.spyOn(video, 'load').mockImplementation(() => {})
+  const media = vi.fn<DesktopBridge['media']>(async (action, payload) => {
+    if (action !== 'start') return { error: null }
+    const input = z.object({ id: z.string(), audio: z.string().nullable() }).parse(payload)
+    return { id: input.id, url: 'http://127.0.0.1/session/index.m3u8', offset: 60, duration: 8, mode: 'audio', hasVideo: true, hasAudio: true, audioTracks: [], selectedAudioTrackId: input.audio }
+  })
+  window.wadiDesktop = {
+    getStartFullscreen: async () => false, setStartFullscreen: async value => value, onStartFullscreenChanged: () => () => {}, appVersion: async () => '0.1.0', updateState: async () => ({ kind: 'idle' }), checkUpdates: async () => ({ kind: 'idle' }), downloadUpdate: async () => {}, onUpdate: () => () => {},
+    media, onOpenSettings: () => () => {}, openPage: async () => {}, session: async () => true,
+    signIn: async () => true, request: async () => ({ status: 200, body: null }), openExternal: async () => {},
+  }
+  const videoRef = { current: video }
+  const commit = vi.fn(), ended = vi.fn()
+  const providerStream = { name: 'Comet [TB⬇️]', description: '1 GB' }
+  const { result, unmount } = renderHook(() => useDesktopPlayer({ videoRef, source: 'https://example.test/movie', providerStream, hints: {}, savedPosition: 0, watched: false, onProgressCommit: commit, onEnded: ended }))
+  if (!enabled) {
+    await waitFor(() => expect(result.current.state.status).toBe('ready'))
+    expect(result.current.state.error).toBeNull()
+    expect(video.play).toHaveBeenCalled()
+    unmount()
+    return
+  }
+  await waitFor(() => expect(result.current.state.status).toBe('error'))
+  expect(result.current.state.error).toContain('not cached yet')
+  expect(video.play).not.toHaveBeenCalled()
+  expect(media).toHaveBeenCalledWith('stop', expect.any(String))
+  expect(ended).not.toHaveBeenCalled()
+  unmount()
+  expect(commit).not.toHaveBeenCalled()
 })

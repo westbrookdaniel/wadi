@@ -19,6 +19,7 @@ export function DeviceSettings() {
       </SettingsSelect>
     </div>
 
+    <label className="flex items-start justify-between gap-6"><span><span className="block text-sm font-medium">Detect provider placeholder clips</span><span id="placeholder-clips-description" className="mt-1 block text-sm text-muted-foreground">Rejects very short provider notices instead of playing them as the video. Turn this off if a valid short video is blocked. Applies on this device.</span></span><input type="checkbox" aria-label="Detect provider placeholder clips" aria-describedby="placeholder-clips-description" className="mt-1 size-5 shrink-0 accent-primary" checked={device.detectPlaceholderClips} onChange={event => device.setDetectPlaceholderClips(event.target.checked)} /></label>
     {desktop && !device.tvMode ? <FullscreenStartupSetting desktop={desktop} /> : null}
     {desktop ? <div className="grid gap-2">
       <label htmlFor="conversion" className="text-sm font-medium">Audio and video conversion</label>

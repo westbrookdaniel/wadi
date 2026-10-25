@@ -1,3 +1,5 @@
+import { useDeviceStore } from '@/store/device-store'
+import { placeholderReason } from '../provider-status'
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ALL_FORMATS,
@@ -24,7 +26,11 @@ export function useMediabunnyPlayer({
   onProgressCommit,
   onEnded,
   autoPlay,
+  providerStream,
+  sourceIdentity,
 }: {
+  sourceIdentity?: string
+  providerStream?: unknown
   autoPlay?: boolean
   canvasRef: RefObject<HTMLCanvasElement | null>
   url?: string
@@ -37,6 +43,7 @@ export function useMediabunnyPlayer({
   onEnded?: () => void
   onProgressCommit: (position: number, duration: number) => void
 }) {
+  const detectPlaceholderClips = useDeviceStore(state => state.detectPlaceholderClips)
   const [state, setState] = useState<PlayerState>(initialPlayerState)
   const stateRef = useRef(initialPlayerState)
   const inputRef = useRef<Input | null>(null)
@@ -407,7 +414,7 @@ export function useMediabunnyPlayer({
 
     const init = async () => {
       dispose(false)
-      stateRef.current = { ...initialPlayerState, status: 'loading', sourceUrl: url }
+      stateRef.current = { ...initialPlayerState, status: 'loading', sourceUrl: sourceIdentity ?? url }
       setState(stateRef.current)
 
       try {
@@ -427,6 +434,8 @@ export function useMediabunnyPlayer({
           input.getAudioTracks(),
         ])
         if (canceled) return
+        const placeholder = detectPlaceholderClips ? placeholderReason(providerStream, duration) : null
+        if (placeholder) throw new Error(placeholder)
         let videoTrack = videoTrackResult
         const audioTracks = audioTracksResult.filter((track): track is InputAudioTrack => Boolean(track))
         let audioTrack: InputAudioTrack | null =
@@ -533,7 +542,7 @@ export function useMediabunnyPlayer({
         updateState({
           ...initialPlayerState,
           status: 'error',
-          sourceUrl: url,
+          sourceUrl: sourceIdentity ?? url,
           error: error instanceof Error ? error.message : String(error),
         })
       }
@@ -546,6 +555,9 @@ export function useMediabunnyPlayer({
       dispose(true)
     }
   }, [
+    detectPlaceholderClips,
+    providerStream,
+    sourceIdentity,
     authToken,
     canvasRef,
     dispose,
