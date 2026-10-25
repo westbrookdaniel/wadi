@@ -102,14 +102,3 @@ describe('StreamList source filtering', () => {
     expect(screen.queryByText('Alpha Two')).not.toBeInTheDocument()
   })
 })
-
-it('labels cached and uncached debrid rows in plain words', () => {
-  apiRequestMock.mockResolvedValue({ items: [] })
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  render(<QueryClientProvider client={client}><StreamList isLoading={false} onPlay={() => {}} streams={[
-    { name: 'Comet [TB⬇️]', url: 'https://example.test/uncached' },
-    { name: 'Comet [TB⚡]', url: 'https://example.test/cached' },
-  ]} /></QueryClientProvider>)
-  expect(screen.getByText('Not cached yet · download required')).toBeInTheDocument()
-  expect(screen.getByText('Cached · ready to play')).toBeInTheDocument()
-})

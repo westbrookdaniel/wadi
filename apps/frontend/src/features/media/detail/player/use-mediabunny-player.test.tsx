@@ -1,3 +1,4 @@
+import { useDeviceStore } from '@/store/device-store'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { useMediabunnyPlayer } from './use-mediabunny-player'
@@ -13,7 +14,7 @@ class AudioContextFixture {
   constructor() { AudioContextFixture.instances.push(this) }
   createGain() { return { connect() {}, gain: { value: 1, setValueAtTime() {} } } }
 }
-afterEach(() => { vi.unstubAllGlobals(); fixture.duration = 120; fixture.inputs = 0; fixture.sinks = []; AudioContextFixture.instances = [] })
+afterEach(() => { useDeviceStore.setState({ detectPlaceholderClips: true }); vi.unstubAllGlobals(); fixture.duration = 120; fixture.inputs = 0; fixture.sinks = []; AudioContextFixture.instances = [] })
 function renderPlayer() {
   vi.stubGlobal('AudioContext', AudioContextFixture)
   vi.stubGlobal('requestAnimationFrame', () => 1); vi.stubGlobal('cancelAnimationFrame', () => {})
@@ -80,12 +81,21 @@ it('duplicate selection during resume cannot retain stale pause intent after exp
   expect(fixture.inputs).toBe(1)
 })
 
-it('rejects a short provider notice before playback or watch progress', async () => {
+it.each([true, false])('web placeholder detection enabled=%s', async enabled => {
+  useDeviceStore.setState({ detectPlaceholderClips: enabled })
+  vi.stubGlobal('AudioContext', AudioContextFixture)
   fixture.duration = 8
   vi.stubGlobal('requestAnimationFrame', () => 1); vi.stubGlobal('cancelAnimationFrame', () => {})
   const commit = vi.fn(), ended = vi.fn(), canvasRef = { current: null }
   const providerStream = { name: 'Comet [TB⬇️]' }
   const view = renderHook(() => useMediabunnyPlayer({ providerStream, canvasRef, url: 'https://example.test/proxy', sourceIdentity: 'https://provider.test/movie', authToken: null, savedPosition: 0, watched: false, preferredAudioLanguage: null, selectedAudioTrackId: null, initialPlaybackSpeed: 1, onProgressCommit: commit, onEnded: ended }))
+  if (!enabled) {
+    await waitFor(() => expect(view.result.current.state.status).toBe('ready'))
+    expect(view.result.current.state.error).toBeNull()
+    expect(fixture.sinks).toEqual(['1'])
+    view.unmount()
+    return
+  }
   await waitFor(() => expect(view.result.current.state.status).toBe('error'))
   expect(view.result.current.state.sourceUrl).toBe('https://provider.test/movie')
   expect(view.result.current.state.error).toContain('not cached yet')

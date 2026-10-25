@@ -1,3 +1,4 @@
+import { useDeviceStore } from '@/store/device-store'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { z } from 'zod'
@@ -14,7 +15,7 @@ vi.mock('hls.js', () => ({ default: class {
   destroy() {}
 } }))
 
-afterEach(() => { delete window.wadiDesktop; vi.restoreAllMocks() })
+afterEach(() => { useDeviceStore.setState({ detectPlaceholderClips: true }); delete window.wadiDesktop; vi.restoreAllMocks() })
 
 it('applies a restored audio preference before the initial source is ready and resets it for a different source', async () => {
   const video = document.createElement('video')
@@ -163,7 +164,8 @@ it('honors pause, resume and a newer seek while an earlier conversion is still l
   unmount()
 })
 
-it('rejects a provider notice before playing or committing progress', async () => {
+it.each([true, false])('desktop placeholder detection enabled=%s', async enabled => {
+  useDeviceStore.setState({ detectPlaceholderClips: enabled })
   const video = document.createElement('video')
   vi.spyOn(video, 'play').mockResolvedValue()
   vi.spyOn(video, 'pause').mockImplementation(() => {})
@@ -182,6 +184,13 @@ it('rejects a provider notice before playing or committing progress', async () =
   const commit = vi.fn(), ended = vi.fn()
   const providerStream = { name: 'Comet [TB⬇️]', description: '1 GB' }
   const { result, unmount } = renderHook(() => useDesktopPlayer({ videoRef, source: 'https://example.test/movie', providerStream, hints: {}, savedPosition: 0, watched: false, onProgressCommit: commit, onEnded: ended }))
+  if (!enabled) {
+    await waitFor(() => expect(result.current.state.status).toBe('ready'))
+    expect(result.current.state.error).toBeNull()
+    expect(video.play).toHaveBeenCalled()
+    unmount()
+    return
+  }
   await waitFor(() => expect(result.current.state.status).toBe('error'))
   expect(result.current.state.error).toContain('not cached yet')
   expect(video.play).not.toHaveBeenCalled()

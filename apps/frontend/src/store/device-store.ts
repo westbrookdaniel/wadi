@@ -7,6 +7,8 @@ export const useDeviceStore = create(persist<{
   setAskForProfile: (enabled: boolean) => void
   theme: 'dark' | 'light' | 'system'
   setTheme: (theme: 'dark' | 'light' | 'system') => void
+  detectPlaceholderClips: boolean
+  setDetectPlaceholderClips: (enabled: boolean) => void
   conversionEnabled: boolean
   setConversionEnabled: (enabled: boolean) => void
   tvMode: boolean
@@ -16,6 +18,8 @@ export const useDeviceStore = create(persist<{
   setAskForProfile: (askForProfile) => set({ askForProfile }),
   theme: 'system',
   setTheme: (theme) => set({ theme }),
+  detectPlaceholderClips: true,
+  setDetectPlaceholderClips: (detectPlaceholderClips) => set({ detectPlaceholderClips }),
   conversionEnabled: true,
   setConversionEnabled: (conversionEnabled) => set({ conversionEnabled }),
   tvMode: false,

@@ -1,3 +1,4 @@
+import { useDeviceStore } from '@/store/device-store'
 import { placeholderReason } from '../provider-status'
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -42,6 +43,7 @@ export function useMediabunnyPlayer({
   onEnded?: () => void
   onProgressCommit: (position: number, duration: number) => void
 }) {
+  const detectPlaceholderClips = useDeviceStore(state => state.detectPlaceholderClips)
   const [state, setState] = useState<PlayerState>(initialPlayerState)
   const stateRef = useRef(initialPlayerState)
   const inputRef = useRef<Input | null>(null)
@@ -432,7 +434,7 @@ export function useMediabunnyPlayer({
           input.getAudioTracks(),
         ])
         if (canceled) return
-        const placeholder = placeholderReason(providerStream, duration)
+        const placeholder = detectPlaceholderClips ? placeholderReason(providerStream, duration) : null
         if (placeholder) throw new Error(placeholder)
         let videoTrack = videoTrackResult
         const audioTracks = audioTracksResult.filter((track): track is InputAudioTrack => Boolean(track))
@@ -553,6 +555,7 @@ export function useMediabunnyPlayer({
       dispose(true)
     }
   }, [
+    detectPlaceholderClips,
     providerStream,
     sourceIdentity,
     authToken,
